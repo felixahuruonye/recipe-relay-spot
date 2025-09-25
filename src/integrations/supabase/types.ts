@@ -194,6 +194,39 @@ export type Database = {
         }
         Relationships: []
       }
+      challenges: {
+        Row: {
+          description: string
+          ends_at: string
+          entries_count: number | null
+          entry_fee_ngn: number | null
+          id: string
+          starts_at: string
+          title: string
+          winner_id: string | null
+        }
+        Insert: {
+          description: string
+          ends_at: string
+          entries_count?: number | null
+          entry_fee_ngn?: number | null
+          id?: string
+          starts_at: string
+          title: string
+          winner_id?: string | null
+        }
+        Update: {
+          description?: string
+          ends_at?: string
+          entries_count?: number | null
+          entry_fee_ngn?: number | null
+          id?: string
+          starts_at?: string
+          title?: string
+          winner_id?: string | null
+        }
+        Relationships: []
+      }
       chat_responses: {
         Row: {
           answer: string
@@ -223,6 +256,41 @@ export type Database = {
           user_id?: string | null
         }
         Relationships: []
+      }
+      comments: {
+        Row: {
+          body: string
+          created_at: string
+          id: string
+          post_id: string
+          status: string
+          user_id: string
+        }
+        Insert: {
+          body: string
+          created_at?: string
+          id?: string
+          post_id: string
+          status?: string
+          user_id: string
+        }
+        Update: {
+          body?: string
+          created_at?: string
+          id?: string
+          post_id?: string
+          status?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "comments_post_id_fkey"
+            columns: ["post_id"]
+            isOneToOne: false
+            referencedRelation: "posts"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       crawled_pages: {
         Row: {
@@ -359,6 +427,39 @@ export type Database = {
         }
         Relationships: []
       }
+      messages: {
+        Row: {
+          body: string
+          channel: string
+          created_at: string
+          delivered: boolean | null
+          from_user_id: string
+          id: string
+          media_url: string | null
+          to_user_id: string | null
+        }
+        Insert: {
+          body: string
+          channel?: string
+          created_at?: string
+          delivered?: boolean | null
+          from_user_id: string
+          id?: string
+          media_url?: string | null
+          to_user_id?: string | null
+        }
+        Update: {
+          body?: string
+          channel?: string
+          created_at?: string
+          delivered?: boolean | null
+          from_user_id?: string
+          id?: string
+          media_url?: string | null
+          to_user_id?: string | null
+        }
+        Relationships: []
+      }
       music_offers: {
         Row: {
           approved_at: string | null
@@ -407,6 +508,57 @@ export type Database = {
         }
         Relationships: []
       }
+      orders: {
+        Row: {
+          amount_ngn: number
+          buyer_user_id: string
+          created_at: string
+          id: string
+          product_id: string
+          seller_user_id: string
+          shipping_address: string | null
+          status: string
+          txn_id: string | null
+        }
+        Insert: {
+          amount_ngn: number
+          buyer_user_id: string
+          created_at?: string
+          id?: string
+          product_id: string
+          seller_user_id: string
+          shipping_address?: string | null
+          status?: string
+          txn_id?: string | null
+        }
+        Update: {
+          amount_ngn?: number
+          buyer_user_id?: string
+          created_at?: string
+          id?: string
+          product_id?: string
+          seller_user_id?: string
+          shipping_address?: string | null
+          status?: string
+          txn_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "orders_product_id_fkey"
+            columns: ["product_id"]
+            isOneToOne: false
+            referencedRelation: "products"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "orders_txn_id_fkey"
+            columns: ["txn_id"]
+            isOneToOne: false
+            referencedRelation: "transactions"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       payments: {
         Row: {
           amount: number
@@ -443,6 +595,102 @@ export type Database = {
         }
         Relationships: []
       }
+      posts: {
+        Row: {
+          body: string
+          boost_until: string | null
+          boosted: boolean | null
+          category: string
+          comments_count: number | null
+          created_at: string
+          featured_rank: number | null
+          id: string
+          likes_count: number | null
+          media_urls: string[] | null
+          reports_count: number | null
+          status: string
+          title: string
+          user_id: string
+        }
+        Insert: {
+          body: string
+          boost_until?: string | null
+          boosted?: boolean | null
+          category?: string
+          comments_count?: number | null
+          created_at?: string
+          featured_rank?: number | null
+          id?: string
+          likes_count?: number | null
+          media_urls?: string[] | null
+          reports_count?: number | null
+          status?: string
+          title: string
+          user_id: string
+        }
+        Update: {
+          body?: string
+          boost_until?: string | null
+          boosted?: boolean | null
+          category?: string
+          comments_count?: number | null
+          created_at?: string
+          featured_rank?: number | null
+          id?: string
+          likes_count?: number | null
+          media_urls?: string[] | null
+          reports_count?: number | null
+          status?: string
+          title?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      products: {
+        Row: {
+          created_at: string
+          delivery_options: string | null
+          description: string
+          featured: boolean | null
+          id: string
+          images: string[] | null
+          price_ngn: number
+          seller_contact: string | null
+          seller_user_id: string
+          status: string
+          stock: number | null
+          title: string
+        }
+        Insert: {
+          created_at?: string
+          delivery_options?: string | null
+          description: string
+          featured?: boolean | null
+          id?: string
+          images?: string[] | null
+          price_ngn: number
+          seller_contact?: string | null
+          seller_user_id: string
+          status?: string
+          stock?: number | null
+          title: string
+        }
+        Update: {
+          created_at?: string
+          delivery_options?: string | null
+          description?: string
+          featured?: boolean | null
+          id?: string
+          images?: string[] | null
+          price_ngn?: number
+          seller_contact?: string | null
+          seller_user_id?: string
+          status?: string
+          stock?: number | null
+          title?: string
+        }
+        Relationships: []
+      }
       referrals: {
         Row: {
           completed_at: string | null
@@ -476,6 +724,39 @@ export type Database = {
           referrer_id?: string | null
           reward_amount?: number | null
           status?: string | null
+        }
+        Relationships: []
+      }
+      reports: {
+        Row: {
+          created_at: string
+          handled_by: string | null
+          id: string
+          outcome: string | null
+          reason: string
+          reporter_user_id: string
+          target_id: string
+          target_type: string
+        }
+        Insert: {
+          created_at?: string
+          handled_by?: string | null
+          id?: string
+          outcome?: string | null
+          reason: string
+          reporter_user_id: string
+          target_id: string
+          target_type: string
+        }
+        Update: {
+          created_at?: string
+          handled_by?: string | null
+          id?: string
+          outcome?: string | null
+          reason?: string
+          reporter_user_id?: string
+          target_id?: string
+          target_type?: string
         }
         Relationships: []
       }
@@ -683,6 +964,42 @@ export type Database = {
           message_type?: string | null
           processed?: boolean | null
           user_id?: string | null
+        }
+        Relationships: []
+      }
+      transactions: {
+        Row: {
+          amount_ngn: number
+          created_at: string
+          id: string
+          metadata: Json | null
+          paystack_ref: string | null
+          status: string
+          type: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          amount_ngn: number
+          created_at?: string
+          id?: string
+          metadata?: Json | null
+          paystack_ref?: string | null
+          status?: string
+          type: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          amount_ngn?: number
+          created_at?: string
+          id?: string
+          metadata?: Json | null
+          paystack_ref?: string | null
+          status?: string
+          type?: string
+          updated_at?: string
+          user_id?: string
         }
         Relationships: []
       }
@@ -952,12 +1269,14 @@ export type Database = {
       }
       users: {
         Row: {
+          analytics_last_seen: string | null
           avatar_url: string | null
           country: string | null
           country_code: string | null
           created_at: string
           currency_code: string | null
           currency_symbol: string | null
+          device_id: string | null
           email: string
           full_name: string
           gender: string | null
@@ -971,15 +1290,21 @@ export type Database = {
           telegram_chat_id: string | null
           updated_at: string
           username: string | null
+          vip: boolean | null
+          vip_expires_at: string | null
+          vip_started_at: string | null
+          wallet_balance: number | null
           welcome_bonus: number | null
         }
         Insert: {
+          analytics_last_seen?: string | null
           avatar_url?: string | null
           country?: string | null
           country_code?: string | null
           created_at?: string
           currency_code?: string | null
           currency_symbol?: string | null
+          device_id?: string | null
           email: string
           full_name: string
           gender?: string | null
@@ -993,15 +1318,21 @@ export type Database = {
           telegram_chat_id?: string | null
           updated_at?: string
           username?: string | null
+          vip?: boolean | null
+          vip_expires_at?: string | null
+          vip_started_at?: string | null
+          wallet_balance?: number | null
           welcome_bonus?: number | null
         }
         Update: {
+          analytics_last_seen?: string | null
           avatar_url?: string | null
           country?: string | null
           country_code?: string | null
           created_at?: string
           currency_code?: string | null
           currency_symbol?: string | null
+          device_id?: string | null
           email?: string
           full_name?: string
           gender?: string | null
@@ -1015,6 +1346,10 @@ export type Database = {
           telegram_chat_id?: string | null
           updated_at?: string
           username?: string | null
+          vip?: boolean | null
+          vip_expires_at?: string | null
+          vip_started_at?: string | null
+          wallet_balance?: number | null
           welcome_bonus?: number | null
         }
         Relationships: []
