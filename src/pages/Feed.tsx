@@ -21,11 +21,6 @@ interface Post {
   comments_count: number;
   likes_count: number;
   user_id: string;
-  users?: {
-    username: string;
-    avatar_url: string;
-    vip: boolean;
-  };
 }
 
 const Feed = () => {
@@ -40,26 +35,21 @@ const Feed = () => {
 
   const fetchPosts = async () => {
     try {
-      const { data, error } = await supabase
+      // Simple posts query without user joins for now
+      const { data: postsData, error: postsError } = await supabase
         .from('posts')
-        .select(`
-          *,
-          users (
-            username,
-            avatar_url,
-            vip
-          )
-        `)
+        .select('*')
         .eq('status', 'approved')
         .order('created_at', { ascending: false });
 
-      if (error) throw error;
-      setPosts(data || []);
+      if (postsError) throw postsError;
+      
+      setPosts(postsData || []);
     } catch (error) {
       console.error('Error fetching posts:', error);
       toast({
         title: "Error",
-        description: "Failed to load posts",
+        description: "Failed to load posts. Please try again.",
         variant: "destructive"
       });
     } finally {
@@ -109,17 +99,13 @@ const Feed = () => {
               <div className="flex items-center justify-between">
                 <div className="flex items-center space-x-3">
                   <Avatar className="w-10 h-10">
-                    <AvatarImage src={post.users?.avatar_url} />
                     <AvatarFallback>
-                      {post.users?.username?.charAt(0).toUpperCase()}
+                      U
                     </AvatarFallback>
                   </Avatar>
                   <div>
                     <div className="flex items-center space-x-2">
-                      <span className="font-semibold">{post.users?.username}</span>
-                      {post.users?.vip && (
-                        <Badge variant="secondary" className="text-xs">VIP</Badge>
-                      )}
+                      <span className="font-semibold">User</span>
                     </div>
                     <span className="text-xs text-muted-foreground">
                       {new Date(post.created_at).toLocaleDateString()}
