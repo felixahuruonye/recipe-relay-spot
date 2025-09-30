@@ -257,6 +257,111 @@ export type Database = {
         }
         Relationships: []
       }
+      comment_reactions: {
+        Row: {
+          comment_id: string
+          created_at: string
+          id: string
+          user_id: string
+        }
+        Insert: {
+          comment_id: string
+          created_at?: string
+          id?: string
+          user_id: string
+        }
+        Update: {
+          comment_id?: string
+          created_at?: string
+          id?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "comment_reactions_comment_id_fkey"
+            columns: ["comment_id"]
+            isOneToOne: false
+            referencedRelation: "post_comments"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      comment_replies: {
+        Row: {
+          comment_id: string
+          content: string
+          created_at: string
+          id: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          comment_id: string
+          content: string
+          created_at?: string
+          id?: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          comment_id?: string
+          content?: string
+          created_at?: string
+          id?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "comment_replies_comment_id_fkey"
+            columns: ["comment_id"]
+            isOneToOne: false
+            referencedRelation: "post_comments"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      comment_reports: {
+        Row: {
+          admin_action: string | null
+          admin_notes: string | null
+          comment_id: string
+          created_at: string
+          id: string
+          reason: string
+          reporter_user_id: string
+          status: string | null
+        }
+        Insert: {
+          admin_action?: string | null
+          admin_notes?: string | null
+          comment_id: string
+          created_at?: string
+          id?: string
+          reason: string
+          reporter_user_id: string
+          status?: string | null
+        }
+        Update: {
+          admin_action?: string | null
+          admin_notes?: string | null
+          comment_id?: string
+          created_at?: string
+          id?: string
+          reason?: string
+          reporter_user_id?: string
+          status?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "comment_reports_comment_id_fkey"
+            columns: ["comment_id"]
+            isOneToOne: false
+            referencedRelation: "post_comments"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       comments: {
         Row: {
           body: string
@@ -699,6 +804,47 @@ export type Database = {
         }
         Relationships: []
       }
+      post_comments: {
+        Row: {
+          content: string
+          created_at: string
+          id: string
+          is_edited: boolean | null
+          is_hidden: boolean | null
+          post_id: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          content: string
+          created_at?: string
+          id?: string
+          is_edited?: boolean | null
+          is_hidden?: boolean | null
+          post_id: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          content?: string
+          created_at?: string
+          id?: string
+          is_edited?: boolean | null
+          is_hidden?: boolean | null
+          post_id?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "post_comments_post_id_fkey"
+            columns: ["post_id"]
+            isOneToOne: false
+            referencedRelation: "posts"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       post_likes: {
         Row: {
           created_at: string
@@ -721,6 +867,47 @@ export type Database = {
         Relationships: [
           {
             foreignKeyName: "post_likes_post_id_fkey"
+            columns: ["post_id"]
+            isOneToOne: false
+            referencedRelation: "posts"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      post_reports: {
+        Row: {
+          admin_action: string | null
+          admin_notes: string | null
+          created_at: string
+          id: string
+          post_id: string
+          reason: string
+          reporter_user_id: string
+          status: string | null
+        }
+        Insert: {
+          admin_action?: string | null
+          admin_notes?: string | null
+          created_at?: string
+          id?: string
+          post_id: string
+          reason: string
+          reporter_user_id: string
+          status?: string | null
+        }
+        Update: {
+          admin_action?: string | null
+          admin_notes?: string | null
+          created_at?: string
+          id?: string
+          post_id?: string
+          reason?: string
+          reporter_user_id?: string
+          status?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "post_reports_post_id_fkey"
             columns: ["post_id"]
             isOneToOne: false
             referencedRelation: "posts"
@@ -766,6 +953,35 @@ export type Database = {
             columns: ["target_group_id"]
             isOneToOne: false
             referencedRelation: "groups"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      post_views: {
+        Row: {
+          id: string
+          post_id: string
+          user_id: string
+          viewed_at: string
+        }
+        Insert: {
+          id?: string
+          post_id: string
+          user_id: string
+          viewed_at?: string
+        }
+        Update: {
+          id?: string
+          post_id?: string
+          user_id?: string
+          viewed_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "post_views_post_id_fkey"
+            columns: ["post_id"]
+            isOneToOne: false
+            referencedRelation: "posts"
             referencedColumns: ["id"]
           },
         ]
@@ -1502,6 +1718,63 @@ export type Database = {
           session_token?: string
           user_agent?: string | null
           user_id?: string | null
+        }
+        Relationships: []
+      }
+      user_storylines: {
+        Row: {
+          created_at: string
+          expires_at: string
+          id: string
+          media_url: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          expires_at?: string
+          id?: string
+          media_url: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          expires_at?: string
+          id?: string
+          media_url?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      user_suspensions: {
+        Row: {
+          expires_at: string | null
+          id: string
+          is_active: boolean | null
+          reason: string
+          suspended_at: string
+          suspended_by: string | null
+          suspension_type: string
+          user_id: string
+        }
+        Insert: {
+          expires_at?: string | null
+          id?: string
+          is_active?: boolean | null
+          reason: string
+          suspended_at?: string
+          suspended_by?: string | null
+          suspension_type: string
+          user_id: string
+        }
+        Update: {
+          expires_at?: string | null
+          id?: string
+          is_active?: boolean | null
+          reason?: string
+          suspended_at?: string
+          suspended_by?: string | null
+          suspension_type?: string
+          user_id?: string
         }
         Relationships: []
       }

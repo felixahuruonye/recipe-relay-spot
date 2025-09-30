@@ -5,10 +5,17 @@ import { Card, CardContent, CardHeader } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Badge } from '@/components/ui/badge';
-import { Heart, MessageCircle, Share, MoreHorizontal, Star } from 'lucide-react';
+import { Heart, MessageCircle, Star, Home, History, X } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
+import { useNavigate } from 'react-router-dom';
 import CreatePost from '@/components/Posts/CreatePost';
 import ProfileSetup from '@/components/Profile/ProfileSetup';
+import { SearchBar } from '@/components/Feed/SearchBar';
+import { CommentSection } from '@/components/Feed/CommentSection';
+import { VideoPlayer } from '@/components/Feed/VideoPlayer';
+import { ShareMenu } from '@/components/Feed/ShareMenu';
+import { PostMenu } from '@/components/Feed/PostMenu';
+import { Dialog, DialogContent } from '@/components/ui/dialog';
 
 interface Post {
   id: string;
@@ -42,12 +49,16 @@ interface PostLike {
 
 const Feed = () => {
   const { user } = useAuth();
+  const navigate = useNavigate();
   const [posts, setPosts] = useState<Post[]>([]);
   const [users, setUsers] = useState<{ [key: string]: UserProfile }>({});
   const [userProfile, setUserProfile] = useState<UserProfile | null>(null);
   const [postLikes, setPostLikes] = useState<{ [key: string]: PostLike[] }>({});
   const [loading, setLoading] = useState(true);
   const [needsProfileSetup, setNeedsProfileSetup] = useState(false);
+  const [showOldPosts, setShowOldPosts] = useState(false);
+  const [expandedComments, setExpandedComments] = useState<{ [key: string]: boolean }>({});
+  const [fullscreenMedia, setFullscreenMedia] = useState<string | null>(null);
   const { toast } = useToast();
 
   useEffect(() => {
@@ -91,11 +102,36 @@ const Feed = () => {
 
   const fetchPosts = async () => {
     try {
-      // Fetch posts with ratings and boosted posts first
-      const { data: postsData, error: postsError } = await supabase
+      let query = supabase
         .from('posts')
         .select('*')
-        .eq('status', 'approved')
+        .eq('status', 'approved');
+
+      if (showOldPosts && user) {
+        // Get posts the user has already viewed
+        const { data: viewedPostIds } = await supabase
+          .from('post_views')
+          .select('post_id')
+          .eq('user_id', user.id);
+
+        const viewedIds = viewedPostIds?.map(v => v.post_id) || [];
+        if (viewedIds.length > 0) {
+          query = query.in('id', viewedIds);
+        }
+      } else if (user) {
+        // Get posts the user hasn't viewed yet
+        const { data: viewedPostIds } = await supabase
+          .from('post_views')
+          .select('post_id')
+          .eq('user_id', user.id);
+
+        const viewedIds = viewedPostIds?.map(v => v.post_id) || [];
+        if (viewedIds.length > 0) {
+          query = query.not('id', 'in', `(${viewedIds.join(',')})`);
+        }
+      }
+
+      const { data: postsData, error: postsError } = await query
         .order('boosted', { ascending: false })
         .order('rating', { ascending: false })
         .order('created_at', { ascending: false })
@@ -278,6 +314,45 @@ const Feed = () => {
     return postLikesList.map(like => users[like.user_id]?.username || 'Unknown').filter(Boolean);
   };
 
+  const trackPostView = async (postId: string) => {
+    if (!user) return;
+
+    // Insert view if it doesn't exist
+    await supabase.from('post_views').insert({
+      post_id: postId,
+      user_id: user.id,
+    }).select().single();
+
+    // Update view count
+    const { data: post } = await supabase
+      .from('posts')
+      .select('view_count')
+      .eq('id', postId)
+      .single();
+
+    if (post) {
+      await supabase
+        .from('posts')
+        .update({ view_count: (post.view_count || 0) + 1 })
+        .eq('id', postId);
+    }
+  };
+
+  const handleProfileClick = (userId: string) => {
+    navigate(`/profile/${userId}`);
+  };
+
+  const toggleComments = (postId: string) => {
+    setExpandedComments(prev => ({ ...prev, [postId]: !prev[postId] }));
+  };
+
+  useEffect(() => {
+    // Track views for visible posts
+    posts.forEach(post => {
+      trackPostView(post.id);
+    });
+  }, [posts]);
+
   if (needsProfileSetup) {
     return <ProfileSetup onComplete={() => {
       setNeedsProfileSetup(false);
@@ -316,18 +391,38 @@ const Feed = () => {
           <h1 className="text-2xl font-bold text-primary">SaveMore Community</h1>
           <p className="text-muted-foreground">Share your food experiences</p>
         </div>
+        
+        <SearchBar />
         <CreatePost onPostCreated={fetchPosts} />
       </div>
 
-      {/* View Last Posts Banner */}
-      <Card className="bg-gradient-to-r from-primary/10 to-secondary/10">
-        <CardContent className="p-4 text-center">
-          <p className="text-sm font-medium">See posts you may have missed</p>
-          <Button variant="outline" size="sm" className="mt-2">
-            VIEW LAST POSTS
-          </Button>
-        </CardContent>
-      </Card>
+      {/* View Toggle */}
+      <div className="flex gap-2">
+        <Button
+          variant={!showOldPosts ? 'default' : 'outline'}
+          size="sm"
+          onClick={() => {
+            setShowOldPosts(false);
+            fetchPosts();
+          }}
+          className="flex-1"
+        >
+          <Home className="h-4 w-4 mr-2" />
+          New Posts
+        </Button>
+        <Button
+          variant={showOldPosts ? 'default' : 'outline'}
+          size="sm"
+          onClick={() => {
+            setShowOldPosts(true);
+            fetchPosts();
+          }}
+          className="flex-1"
+        >
+          <History className="h-4 w-4 mr-2" />
+          View Last Posts
+        </Button>
+      </div>
 
       {/* Posts */}
       <div className="space-y-4">
@@ -337,17 +432,20 @@ const Feed = () => {
           const currentUserLiked = isPostLiked(post.id);
           
           return (
-            <Card key={post.id} className="overflow-hidden">
+            <Card key={post.id} id={`post-${post.id}`} className="overflow-hidden">
               <CardHeader>
                 <div className="flex items-center justify-between">
-                  <div className="flex items-center space-x-3">
+                  <button
+                    onClick={() => handleProfileClick(post.user_id)}
+                    className="flex items-center space-x-3 hover:opacity-80 transition-opacity"
+                  >
                     <Avatar className="w-10 h-10">
                       <AvatarImage src={postUser?.avatar_url} />
                       <AvatarFallback>
                         {postUser?.username?.charAt(0).toUpperCase() || 'U'}
                       </AvatarFallback>
                     </Avatar>
-                    <div>
+                    <div className="text-left">
                       <div className="flex items-center space-x-2">
                         <span className="font-semibold">{postUser?.username || 'Anonymous'}</span>
                         {postUser?.vip && (
@@ -361,7 +459,7 @@ const Feed = () => {
                         {new Date(post.created_at).toLocaleDateString()}
                       </span>
                     </div>
-                  </div>
+                  </button>
                   <div className="flex items-center space-x-2">
                     {post.boosted && (
                       <Badge variant="outline" className="text-xs">Boosted</Badge>
@@ -369,9 +467,11 @@ const Feed = () => {
                     {post.rating > 0 && (
                       <Badge variant="outline" className="text-xs">★ {post.rating}</Badge>
                     )}
-                    <Button variant="ghost" size="sm">
-                      <MoreHorizontal className="w-4 h-4" />
-                    </Button>
+                    <PostMenu 
+                      postId={post.id} 
+                      postOwnerId={post.user_id}
+                      onPostDeleted={fetchPosts}
+                    />
                   </div>
                 </div>
                 <div>
@@ -386,25 +486,23 @@ const Feed = () => {
                 {/* Media */}
                 {post.media_urls && post.media_urls.length > 0 && (
                   <div className="mb-4 space-y-2">
-                    {post.media_urls.map((url, index) => (
-                      <div key={index}>
-                        {url.includes('video') ? (
-                          <video 
-                            src={url}
-                            controls
-                            autoPlay
-                            muted
-                            className="w-full rounded-lg max-h-96 object-cover"
-                          />
-                        ) : (
-                          <img 
-                            src={url} 
-                            alt={`Post media ${index + 1}`}
-                            className="w-full rounded-lg max-h-96 object-cover"
-                          />
-                        )}
-                      </div>
-                    ))}
+                    {post.media_urls.map((url, index) => {
+                      const isVideo = url.match(/\.(mp4|webm|ogg)$/i) || url.includes('video');
+                      
+                      return (
+                        <div key={index} onClick={() => !isVideo && setFullscreenMedia(url)}>
+                          {isVideo ? (
+                            <VideoPlayer src={url} autoPlay />
+                          ) : (
+                            <img 
+                              src={url} 
+                              alt={`Post media ${index + 1}`}
+                              className="w-full rounded-lg max-h-96 object-cover cursor-pointer hover:opacity-90 transition-opacity"
+                            />
+                          )}
+                        </div>
+                      );
+                    })}
                   </div>
                 )}
 
@@ -430,15 +528,25 @@ const Feed = () => {
                         <Heart className={`w-4 h-4 mr-1 ${currentUserLiked ? 'fill-current' : ''}`} />
                         <span className="text-xs">{post.likes_count}</span>
                       </Button>
-                      <Button variant="ghost" size="sm" className="p-0">
+                      <Button 
+                        variant="ghost" 
+                        size="sm" 
+                        className="p-0"
+                        onClick={() => toggleComments(post.id)}
+                      >
                         <MessageCircle className="w-4 h-4 mr-1" />
                         <span className="text-xs">{post.comments_count}</span>
                       </Button>
                     </div>
-                    <Button variant="ghost" size="sm" className="p-0">
-                      <Share className="w-4 h-4" />
-                    </Button>
+                    <ShareMenu postId={post.id} postTitle={post.title} />
                   </div>
+
+                  {/* Comments Section */}
+                  {expandedComments[post.id] && (
+                    <div className="mt-4 pt-4 border-t">
+                      <CommentSection postId={post.id} />
+                    </div>
+                  )}
                 </div>
               </CardContent>
             </Card>
@@ -448,9 +556,30 @@ const Feed = () => {
 
       {posts.length === 0 && (
         <div className="text-center py-12">
-          <p className="text-muted-foreground">No posts yet. Be the first to share!</p>
+          <p className="text-muted-foreground">
+            {showOldPosts ? 'No viewed posts yet.' : 'No new posts yet. Be the first to share!'}
+          </p>
         </div>
       )}
+
+      {/* Fullscreen Media Dialog */}
+      <Dialog open={!!fullscreenMedia} onOpenChange={() => setFullscreenMedia(null)}>
+        <DialogContent className="max-w-screen max-h-screen p-0 bg-black">
+          <button
+            onClick={() => setFullscreenMedia(null)}
+            className="absolute top-4 right-4 z-50 p-2 rounded-full bg-black/50 text-white hover:bg-black/70"
+          >
+            <X className="h-6 w-6" />
+          </button>
+          {fullscreenMedia && (
+            <img
+              src={fullscreenMedia}
+              alt="Fullscreen"
+              className="w-full h-full object-contain"
+            />
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };
