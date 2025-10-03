@@ -457,6 +457,27 @@ export type Database = {
         }
         Relationships: []
       }
+      followers: {
+        Row: {
+          created_at: string
+          follower_id: string
+          following_id: string
+          id: string
+        }
+        Insert: {
+          created_at?: string
+          follower_id: string
+          following_id: string
+          id?: string
+        }
+        Update: {
+          created_at?: string
+          follower_id?: string
+          following_id?: string
+          id?: string
+        }
+        Relationships: []
+      }
       group_members: {
         Row: {
           group_id: string
@@ -525,6 +546,27 @@ export type Database = {
           member_count?: number | null
           name?: string
           owner_id?: string
+        }
+        Relationships: []
+      }
+      hidden_posts: {
+        Row: {
+          created_at: string
+          id: string
+          post_id: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          post_id: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          post_id?: string
+          user_id?: string
         }
         Relationships: []
       }
@@ -1040,6 +1082,39 @@ export type Database = {
           title?: string
           user_id?: string
           view_count?: number | null
+        }
+        Relationships: []
+      }
+      private_messages: {
+        Row: {
+          created_at: string
+          from_user_id: string
+          id: string
+          is_deleted: boolean | null
+          media_url: string | null
+          message: string
+          read_at: string | null
+          to_user_id: string
+        }
+        Insert: {
+          created_at?: string
+          from_user_id: string
+          id?: string
+          is_deleted?: boolean | null
+          media_url?: string | null
+          message: string
+          read_at?: string | null
+          to_user_id: string
+        }
+        Update: {
+          created_at?: string
+          from_user_id?: string
+          id?: string
+          is_deleted?: boolean | null
+          media_url?: string | null
+          message?: string
+          read_at?: string | null
+          to_user_id?: string
         }
         Relationships: []
       }
@@ -1641,11 +1716,15 @@ export type Database = {
           bio: string | null
           created_at: string
           device_id: string | null
+          follower_count: number | null
+          following_count: number | null
           full_name: string | null
           id: string
           is_online: boolean | null
           last_seen: string | null
+          post_count: number | null
           star_balance: number | null
+          total_reactions: number | null
           updated_at: string
           username: string
           vip: boolean | null
@@ -1659,11 +1738,15 @@ export type Database = {
           bio?: string | null
           created_at?: string
           device_id?: string | null
+          follower_count?: number | null
+          following_count?: number | null
           full_name?: string | null
           id: string
           is_online?: boolean | null
           last_seen?: string | null
+          post_count?: number | null
           star_balance?: number | null
+          total_reactions?: number | null
           updated_at?: string
           username: string
           vip?: boolean | null
@@ -1677,11 +1760,15 @@ export type Database = {
           bio?: string | null
           created_at?: string
           device_id?: string | null
+          follower_count?: number | null
+          following_count?: number | null
           full_name?: string | null
           id?: string
           is_online?: boolean | null
           last_seen?: string | null
+          post_count?: number | null
           star_balance?: number | null
+          total_reactions?: number | null
           updated_at?: string
           username?: string
           vip?: boolean | null
