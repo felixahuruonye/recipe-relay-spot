@@ -6,8 +6,13 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Crown, Star, ShoppingBag, Settings, LogOut, Edit } from 'lucide-react';
+import { Crown, Star, ShoppingBag, Settings, LogOut, Edit, Heart, MessageCircle } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
+import { useParams } from 'react-router-dom';
+import { VideoPlayer } from '@/components/Feed/VideoPlayer';
+import { CommentSection } from '@/components/Feed/CommentSection';
+import { ShareMenu } from '@/components/Feed/ShareMenu';
+import { PostMenu } from '@/components/Feed/PostMenu';
 
 interface UserProfile {
   id: string;
@@ -24,26 +29,31 @@ interface UserProfile {
 
 const Profile = () => {
   const { user, signOut } = useAuth();
+  const { userId } = useParams();
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [loading, setLoading] = useState(true);
   const [userPosts, setUserPosts] = useState([]);
+  const [postLikes, setPostLikes] = useState<{ [key: string]: any[] }>({});
+  const [expandedComments, setExpandedComments] = useState<{ [key: string]: boolean }>({});
   const { toast } = useToast();
 
+  const profileId = userId || user?.id;
+
   useEffect(() => {
-    if (user) {
+    if (profileId) {
       fetchProfile();
       fetchUserPosts();
     }
-  }, [user]);
+  }, [profileId]);
 
   const fetchProfile = async () => {
-    if (!user) return;
+    if (!profileId) return;
 
     try {
       const { data, error } = await supabase
         .from('user_profiles')
         .select('*')
-        .eq('id', user.id)
+        .eq('id', profileId)
         .single();
 
       if (error) throw error;
@@ -61,20 +71,63 @@ const Profile = () => {
   };
 
   const fetchUserPosts = async () => {
-    if (!user) return;
+    if (!profileId) return;
 
     try {
-      const { data, error } = await supabase
+      const { data: postsData, error } = await supabase
         .from('posts')
         .select('*')
-        .eq('user_id', user.id)
+        .eq('user_id', profileId)
+        .eq('status', 'approved')
         .order('created_at', { ascending: false });
 
       if (error) throw error;
-      setUserPosts(data || []);
+
+      if (postsData && postsData.length > 0) {
+        const { data: likesData } = await supabase
+          .from('post_likes')
+          .select('*')
+          .in('post_id', postsData.map(p => p.id));
+
+        const likesLookup: { [key: string]: any[] } = {};
+        likesData?.forEach(like => {
+          if (!likesLookup[like.post_id]) {
+            likesLookup[like.post_id] = [];
+          }
+          likesLookup[like.post_id].push(like);
+        });
+
+        setPostLikes(likesLookup);
+      }
+
+      setUserPosts(postsData || []);
     } catch (error) {
       console.error('Error fetching posts:', error);
     }
+  };
+
+  const handleLike = async (postId: string) => {
+    if (!user) return;
+
+    const postLikesList = postLikes[postId] || [];
+    const existingLike = postLikesList.find(like => like.user_id === user.id);
+
+    try {
+      if (existingLike) {
+        await supabase.from('post_likes').delete().eq('id', existingLike.id);
+      } else {
+        await supabase.from('post_likes').insert({ post_id: postId, user_id: user.id });
+      }
+      fetchUserPosts();
+    } catch (error) {
+      console.error('Error toggling like:', error);
+    }
+  };
+
+  const isPostLiked = (postId: string): boolean => {
+    if (!user) return false;
+    const postLikesList = postLikes[postId] || [];
+    return postLikesList.some(like => like.user_id === user.id);
   };
 
   const handleVipUpgrade = () => {
@@ -225,35 +278,90 @@ const Profile = () => {
         </TabsList>
 
         <TabsContent value="posts">
-          <Card>
-            <CardHeader>
-              <CardTitle>My Posts ({userPosts.length})</CardTitle>
-            </CardHeader>
-            <CardContent>
-              {userPosts.length > 0 ? (
-                <div className="space-y-4">
-                  {userPosts.map((post: any) => (
-                    <div key={post.id} className="border rounded-lg p-4">
-                      <div className="flex justify-between items-start">
+          <div className="space-y-4">
+            {userPosts.length > 0 ? (
+              userPosts.map((post: any) => {
+                const currentUserLiked = isPostLiked(post.id);
+                const likesCount = postLikes[post.id]?.length || 0;
+
+                return (
+                  <Card key={post.id} className="overflow-hidden">
+                    <CardHeader>
+                      <div className="flex items-center justify-between">
                         <div>
-                          <h4 className="font-semibold">{post.title}</h4>
-                          <p className="text-sm text-muted-foreground">{post.category}</p>
-                          <p className="text-xs text-muted-foreground">
-                            {new Date(post.created_at).toLocaleDateString()}
-                          </p>
+                          <h3 className="font-semibold mb-2">{post.title}</h3>
+                          <Badge variant="outline" className="text-xs">{post.category}</Badge>
                         </div>
-                        <Badge variant={post.status === 'approved' ? 'default' : 'secondary'}>
-                          {post.status}
-                        </Badge>
+                        <PostMenu 
+                          postId={post.id} 
+                          postOwnerId={post.user_id}
+                          onPostDeleted={fetchUserPosts}
+                        />
                       </div>
-                    </div>
-                  ))}
-                </div>
-              ) : (
-                <p className="text-muted-foreground">No posts yet</p>
-              )}
-            </CardContent>
-          </Card>
+                    </CardHeader>
+                    
+                    <CardContent className="space-y-4">
+                      <p className="text-sm whitespace-pre-line">{post.body}</p>
+                      
+                      {post.media_urls && post.media_urls.length > 0 && (
+                        <div className="space-y-2">
+                          {post.media_urls.map((url: string, index: number) => {
+                            const isVideo = url.match(/\.(mp4|webm|ogg)$/i) || url.includes('video');
+                            return isVideo ? (
+                              <VideoPlayer key={index} src={url} />
+                            ) : (
+                              <img 
+                                key={index}
+                                src={url} 
+                                alt={`Post media ${index + 1}`}
+                                className="w-full rounded-lg max-h-96 object-cover"
+                              />
+                            );
+                          })}
+                        </div>
+                      )}
+
+                      <div className="flex items-center justify-between pt-4 border-t">
+                        <div className="flex items-center space-x-4">
+                          <button
+                            onClick={() => handleLike(post.id)}
+                            className={`flex items-center space-x-2 ${
+                              currentUserLiked ? 'text-red-500' : 'text-muted-foreground'
+                            } hover:text-red-500 transition-colors`}
+                          >
+                            <Heart className={`h-5 w-5 ${currentUserLiked ? 'fill-current' : ''}`} />
+                            <span className="text-sm font-medium">{likesCount}</span>
+                          </button>
+
+                          <button
+                            onClick={() => setExpandedComments(prev => ({ ...prev, [post.id]: !prev[post.id] }))}
+                            className="flex items-center space-x-2 text-muted-foreground hover:text-foreground transition-colors"
+                          >
+                            <MessageCircle className="h-5 w-5" />
+                            <span className="text-sm">{post.comments_count || 0}</span>
+                          </button>
+                        </div>
+
+                        <ShareMenu postId={post.id} postTitle={post.title} />
+                      </div>
+
+                      {expandedComments[post.id] && (
+                        <div className="pt-4 border-t">
+                          <CommentSection postId={post.id} />
+                        </div>
+                      )}
+                    </CardContent>
+                  </Card>
+                );
+              })
+            ) : (
+              <Card>
+                <CardContent className="py-8 text-center">
+                  <p className="text-muted-foreground">No posts yet</p>
+                </CardContent>
+              </Card>
+            )}
+          </div>
         </TabsContent>
 
         <TabsContent value="groups">
