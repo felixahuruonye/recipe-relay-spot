@@ -198,66 +198,6 @@ const CreatePost: React.FC<CreatePostProps> = ({ onPostCreated }) => {
       setLoading(false);
     }
   };
-    e.preventDefault();
-    if (!user || !title.trim() || !body.trim() || !category) return;
-
-    setLoading(true);
-
-    try {
-      // Upload media files
-      const mediaUrls = await uploadMedia();
-
-      // Check if user has VIP status
-      const { data: profile } = await supabase
-        .from('user_profiles')
-        .select('vip')
-        .eq('id', user.id)
-        .single();
-
-      // Create post
-      const { error } = await supabase
-        .from('posts')
-        .insert({
-          user_id: user.id,
-          title: title.trim(),
-          body: body.trim(),
-          category: category,
-          media_urls: mediaUrls,
-          status: profile?.vip ? 'approved' : 'pending'
-        });
-
-      if (error) throw error;
-
-      toast({
-        title: "Post created!",
-        description: profile?.vip 
-          ? "Your post is now live in the community" 
-          : "Your post is pending approval and will be live soon"
-      });
-
-      // Reset form
-      setTitle('');
-      setBody('');
-      setCategory('');
-      setMediaFiles([]);
-      mediaPreviews.forEach(url => URL.revokeObjectURL(url));
-      setMediaPreviews([]);
-      setOpen(false);
-      
-      if (onPostCreated) {
-        onPostCreated();
-      }
-    } catch (error) {
-      console.error('Post creation error:', error);
-      toast({
-        title: "Error",
-        description: "Failed to create post. Please try again.",
-        variant: "destructive"
-      });
-    } finally {
-      setLoading(false);
-    }
-  };
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>
