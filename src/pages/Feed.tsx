@@ -64,6 +64,11 @@ const Feed = () => {
   const [fullscreenMedia, setFullscreenMedia] = useState<string | null>(null);
   const [storylineUser, setStorylineUser] = useState<string | null>(null);
   const [userStories, setUserStories] = useState<{ [key: string]: number }>({});
+  const [stories, setStories] = useState<any[]>([]);
+  const [selectedStoryUserId, setSelectedStoryUserId] = useState<string | null>(null);
+  const [showStoryViewer, setShowStoryViewer] = useState(false);
+  const [showCreateStory, setShowCreateStory] = useState(false);
+  const [currentUserProfile, setCurrentUserProfile] = useState<any>(null);
   const { toast } = useToast();
 
   useEffect(() => {
@@ -75,9 +80,53 @@ const Feed = () => {
   useEffect(() => {
     if (userProfile) {
       fetchPosts();
+      loadUserStories();
+      loadCurrentUserProfile();
       setupRealtimeSubscription();
     }
   }, [userProfile]);
+
+  const loadCurrentUserProfile = async () => {
+    if (!user) return;
+    const { data } = await supabase
+      .from('user_profiles')
+      .select('username, avatar_url')
+      .eq('id', user.id)
+      .single();
+    setCurrentUserProfile(data);
+  };
+
+  const loadUserStories = async () => {
+    const { data } = await supabase
+      .from('user_storylines')
+      .select('*')
+      .gt('expires_at', new Date().toISOString())
+      .order('created_at', { ascending: false });
+
+    if (data) {
+      const userStoryMap = new Map();
+      data.forEach(story => {
+        if (!userStoryMap.has(story.user_id)) {
+          userStoryMap.set(story.user_id, story);
+        }
+      });
+
+      const userIds = Array.from(userStoryMap.keys());
+      const { data: profiles } = await supabase
+        .from('user_profiles')
+        .select('id, username, avatar_url')
+        .in('id', userIds);
+
+      const profileMap = new Map(profiles?.map(p => [p.id, p]));
+
+      const storiesWithProfiles = Array.from(userStoryMap.values()).map(story => ({
+        ...story,
+        user_profile: profileMap.get(story.user_id)
+      }));
+
+      setStories(storiesWithProfiles);
+    }
+  };
 
   useEffect(() => {
     if (posts.length > 0) {
@@ -688,6 +737,28 @@ const Feed = () => {
           userId={storylineUser}
           open={!!storylineUser}
           onClose={() => setStorylineUser(null)}
+        />
+      )}
+
+      {/* New Storyline Viewer for Cards */}
+      {selectedStoryUserId && (
+        <StorylineViewer
+          userId={selectedStoryUserId}
+          open={showStoryViewer}
+          onClose={() => {
+            setShowStoryViewer(false);
+            setSelectedStoryUserId(null);
+          }}
+        />
+      )}
+
+      {/* Create Story Dialog */}
+      {showCreateStory && (
+        <CreateStoryline 
+          onCreated={() => {
+            setShowCreateStory(false);
+            loadUserStories();
+          }}
         />
       )}
     </div>

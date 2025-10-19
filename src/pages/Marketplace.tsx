@@ -114,50 +114,6 @@ const Marketplace = () => {
     return () => { supabase.removeChannel(channel); };
   };
 
-  /* Placeholder data backup
-  const fetchProductsPlaceholder = async () => {
-    const placeholderProducts: Product[] = [
-      {
-        id: 'product-1',
-        title: 'Fresh Vegetables Bundle',
-        description: 'Farm fresh vegetables delivered to your door',
-        price_ngn: 2500,
-        images: [],
-        seller_user_id: '',
-        seller_contact: '+234 xxx xxxx',
-        stock: 10,
-        featured: true,
-        delivery_options: 'Same day delivery',
-        created_at: new Date().toISOString(),
-        user_profiles: {
-          username: 'FarmFresh',
-          avatar_url: '',
-          vip: true
-        }
-      },
-      {
-        id: 'product-2',
-        title: 'Organic Rice (50kg)',
-        description: 'Premium quality organic rice, perfect for families',
-        price_ngn: 15000,
-        images: [],
-        seller_user_id: '',
-        seller_contact: '+234 xxx xxxx',
-        stock: 5,
-        featured: false,
-        delivery_options: 'Pickup available',
-        created_at: new Date().toISOString(),
-        user_profiles: {
-          username: 'GrainMart',
-          avatar_url: '',
-          vip: false
-        }
-      }
-    ];
-    setProducts(placeholderProducts);
-    setLoading(false);
-  };
-
   const fetchMyProducts = async () => {
     if (!user) return;
 
