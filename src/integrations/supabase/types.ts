@@ -513,6 +513,41 @@ export type Database = {
           },
         ]
       }
+      group_messages: {
+        Row: {
+          created_at: string
+          group_id: string
+          id: string
+          media_url: string | null
+          message: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          group_id: string
+          id?: string
+          media_url?: string | null
+          message: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          group_id?: string
+          id?: string
+          media_url?: string | null
+          message?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "group_messages_group_id_fkey"
+            columns: ["group_id"]
+            isOneToOne: false
+            referencedRelation: "groups"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       groups: {
         Row: {
           avatar_url: string | null
@@ -1232,6 +1267,70 @@ export type Database = {
         }
         Relationships: []
       }
+      storyline_comments: {
+        Row: {
+          comment: string
+          created_at: string
+          id: string
+          storyline_id: string
+          user_id: string
+        }
+        Insert: {
+          comment: string
+          created_at?: string
+          id?: string
+          storyline_id: string
+          user_id: string
+        }
+        Update: {
+          comment?: string
+          created_at?: string
+          id?: string
+          storyline_id?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "storyline_comments_storyline_id_fkey"
+            columns: ["storyline_id"]
+            isOneToOne: false
+            referencedRelation: "user_storylines"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      storyline_reactions: {
+        Row: {
+          created_at: string
+          id: string
+          reaction_type: string
+          storyline_id: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          reaction_type?: string
+          storyline_id: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          reaction_type?: string
+          storyline_id?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "storyline_reactions_storyline_id_fkey"
+            columns: ["storyline_id"]
+            isOneToOne: false
+            referencedRelation: "user_storylines"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       system_errors: {
         Row: {
           created_at: string | null
@@ -1813,21 +1912,30 @@ export type Database = {
           created_at: string
           expires_at: string
           id: string
+          media_type: string | null
           media_url: string
+          music_url: string | null
+          preview_url: string | null
           user_id: string
         }
         Insert: {
           created_at?: string
           expires_at?: string
           id?: string
+          media_type?: string | null
           media_url: string
+          music_url?: string | null
+          preview_url?: string | null
           user_id: string
         }
         Update: {
           created_at?: string
           expires_at?: string
           id?: string
+          media_type?: string | null
           media_url?: string
+          music_url?: string | null
+          preview_url?: string | null
           user_id?: string
         }
         Relationships: []

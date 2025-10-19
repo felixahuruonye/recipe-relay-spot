@@ -20,6 +20,9 @@ export const CreateStoryline: React.FC<CreateStorylineProps> = ({ onCreated }) =
   const [mediaFile, setMediaFile] = useState<File | null>(null);
   const [mediaPreview, setMediaPreview] = useState<string>('');
   const [caption, setCaption] = useState('');
+  const [previewFile, setPreviewFile] = useState<File | null>(null);
+  const [previewPreview, setPreviewPreview] = useState<string>('');
+  const [musicFile, setMusicFile] = useState<File | null>(null);
 
   const handleMediaChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -39,6 +42,39 @@ export const CreateStoryline: React.FC<CreateStorylineProps> = ({ onCreated }) =
     setMediaPreview(URL.createObjectURL(file));
   };
 
+  const handlePreviewChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    if (file.size > 5 * 1024 * 1024) {
+      toast({
+        title: 'File too large',
+        description: 'Preview image must be less than 5MB',
+        variant: 'destructive'
+      });
+      return;
+    }
+
+    setPreviewFile(file);
+    setPreviewPreview(URL.createObjectURL(file));
+  };
+
+  const handleMusicChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    if (file.size > 10 * 1024 * 1024) {
+      toast({
+        title: 'File too large',
+        description: 'Music file must be less than 10MB',
+        variant: 'destructive'
+      });
+      return;
+    }
+
+    setMusicFile(file);
+  };
+
   const handleSubmit = async () => {
     if (!user || !mediaFile) return;
 
@@ -46,7 +82,7 @@ export const CreateStoryline: React.FC<CreateStorylineProps> = ({ onCreated }) =
     try {
       // Upload media
       const fileExt = mediaFile.name.split('.').pop();
-      const fileName = `${user.id}/${Date.now()}.${fileExt}`;
+      const fileName = `${user.id}/stories/${Date.now()}.${fileExt}`;
 
       const { error: uploadError } = await supabase.storage
         .from('post-media')
@@ -58,12 +94,51 @@ export const CreateStoryline: React.FC<CreateStorylineProps> = ({ onCreated }) =
         .from('post-media')
         .getPublicUrl(fileName);
 
+      // Upload preview if provided
+      let previewUrl = null;
+      if (previewFile) {
+        const previewExt = previewFile.name.split('.').pop();
+        const previewFileName = `${user.id}/stories/preview-${Date.now()}.${previewExt}`;
+
+        const { error: previewError } = await supabase.storage
+          .from('post-media')
+          .upload(previewFileName, previewFile);
+
+        if (!previewError) {
+          const { data: { publicUrl: previewPublicUrl } } = supabase.storage
+            .from('post-media')
+            .getPublicUrl(previewFileName);
+          previewUrl = previewPublicUrl;
+        }
+      }
+
+      // Upload music if provided
+      let musicUrl = null;
+      if (musicFile) {
+        const musicExt = musicFile.name.split('.').pop();
+        const musicFileName = `${user.id}/stories/music-${Date.now()}.${musicExt}`;
+
+        const { error: musicError } = await supabase.storage
+          .from('post-media')
+          .upload(musicFileName, musicFile);
+
+        if (!musicError) {
+          const { data: { publicUrl: musicPublicUrl } } = supabase.storage
+            .from('post-media')
+            .getPublicUrl(musicFileName);
+          musicUrl = musicPublicUrl;
+        }
+      }
+
       // Create storyline
       const { error: insertError } = await supabase
         .from('user_storylines')
         .insert({
           user_id: user.id,
-          media_url: publicUrl
+          media_url: publicUrl,
+          preview_url: previewUrl || publicUrl,
+          music_url: musicUrl,
+          media_type: mediaFile.type.startsWith('video/') ? 'video' : 'image'
         });
 
       if (insertError) throw insertError;
@@ -73,6 +148,9 @@ export const CreateStoryline: React.FC<CreateStorylineProps> = ({ onCreated }) =
       setMediaFile(null);
       setMediaPreview('');
       setCaption('');
+      setPreviewFile(null);
+      setPreviewPreview('');
+      setMusicFile(null);
       if (onCreated) onCreated();
     } catch (error) {
       console.error('Error creating story:', error);
@@ -129,13 +207,48 @@ export const CreateStoryline: React.FC<CreateStorylineProps> = ({ onCreated }) =
               )}
             </div>
 
-            {/* Caption */}
-            <Textarea
-              value={caption}
-              onChange={(e) => setCaption(e.target.value)}
-              placeholder="Add a caption... (optional)"
-              rows={3}
-            />
+            {/* Preview Image */}
+            <div>
+              <label className="text-sm font-medium">Story Preview (Optional)</label>
+              <Input
+                type="file"
+                accept="image/*"
+                onChange={handlePreviewChange}
+                className="hidden"
+                id="preview-upload"
+              />
+              <label htmlFor="preview-upload">
+                <Button variant="outline" className="w-full" asChild>
+                  <span>
+                    <Upload className="h-4 w-4 mr-2" />
+                    {previewFile ? 'Preview Selected' : 'Set Preview Image'}
+                  </span>
+                </Button>
+              </label>
+              {previewPreview && (
+                <img src={previewPreview} alt="Preview" className="mt-2 w-full h-20 object-cover rounded" />
+              )}
+            </div>
+
+            {/* Music */}
+            <div>
+              <label className="text-sm font-medium">Add Music (Optional)</label>
+              <Input
+                type="file"
+                accept="audio/*"
+                onChange={handleMusicChange}
+                className="hidden"
+                id="music-upload"
+              />
+              <label htmlFor="music-upload">
+                <Button variant="outline" className="w-full" asChild>
+                  <span>
+                    <Upload className="h-4 w-4 mr-2" />
+                    {musicFile ? musicFile.name : 'Choose Music'}
+                  </span>
+                </Button>
+              </label>
+            </div>
 
             {/* Submit */}
             <Button

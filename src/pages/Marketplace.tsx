@@ -77,7 +77,45 @@ const Marketplace = () => {
   };
 
   const fetchProducts = async () => {
-    // Since products table doesn't exist yet, show placeholder data
+    const { data, error } = await supabase
+      .from('products')
+      .select('*')
+      .order('created_at', { ascending: false });
+
+    if (error) {
+      console.error('Error fetching products:', error);
+      setLoading(false);
+      return;
+    }
+
+    // Fetch user profiles
+    const userIds = [...new Set(data?.map(p => p.seller_user_id) || [])];
+    const { data: profiles } = await supabase
+      .from('user_profiles')
+      .select('id, username, avatar_url, vip')
+      .in('id', userIds);
+
+    const profileMap = new Map(profiles?.map(p => [p.id, p]));
+
+    const productsWithProfiles = (data || []).map(product => ({
+      ...product,
+      user_profiles: profileMap.get(product.seller_user_id)
+    }));
+
+    setProducts(productsWithProfiles);
+    setLoading(false);
+
+    // Setup realtime
+    const channel = supabase
+      .channel('products-updates')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'products' }, fetchProducts)
+      .subscribe();
+
+    return () => { supabase.removeChannel(channel); };
+  };
+
+  /* Placeholder data backup
+  const fetchProductsPlaceholder = async () => {
     const placeholderProducts: Product[] = [
       {
         id: 'product-1',

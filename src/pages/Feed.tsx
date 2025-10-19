@@ -8,6 +8,7 @@ import { Badge } from '@/components/ui/badge';
 import { Heart, MessageCircle, Star, Home, History, X, Plus } from 'lucide-react';
 import { StorylineViewer } from '@/components/Storyline/StorylineViewer';
 import { CreateStoryline } from '@/components/Storyline/CreateStoryline';
+import { StorylineCard } from '@/components/Storyline/StorylineCard';
 import { useToast } from '@/hooks/use-toast';
 import { useNavigate } from 'react-router-dom';
 import CreatePost from '@/components/Posts/CreatePost';

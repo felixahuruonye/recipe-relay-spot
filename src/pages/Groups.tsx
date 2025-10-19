@@ -10,6 +10,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from 
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Plus, Users, Lock, Globe, Search, Crown } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
+import { GroupChat } from '@/components/Groups/GroupChat';
 
 interface Group {
   id: string;
@@ -47,6 +48,7 @@ const Groups = () => {
   const [newGroupName, setNewGroupName] = useState('');
   const [newGroupDescription, setNewGroupDescription] = useState('');
   const [newGroupType, setNewGroupType] = useState<'public' | 'private'>('public');
+  const [selectedGroup, setSelectedGroup] = useState<Group | null>(null);
   const { toast } = useToast();
 
   useEffect(() => {
@@ -419,8 +421,8 @@ const Groups = () => {
                       </Badge>
                     </div>
                     
-                    <Button className="w-full" variant="outline">
-                      View Group
+                    <Button className="w-full" onClick={() => setSelectedGroup(group)}>
+                      Open Chat
                     </Button>
                   </CardContent>
                 </Card>
@@ -435,6 +437,16 @@ const Groups = () => {
           )}
         </TabsContent>
       </Tabs>
+
+      {selectedGroup && (
+        <div className="fixed inset-0 bg-background z-50">
+          <GroupChat
+            groupId={selectedGroup.id}
+            groupName={selectedGroup.name}
+            onBack={() => setSelectedGroup(null)}
+          />
+        </div>
+      )}
     </div>
   );
 };

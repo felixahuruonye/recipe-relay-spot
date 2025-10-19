@@ -17,6 +17,7 @@ interface Notification {
   notification_category: string;
   is_read: boolean;
   created_at: string;
+  action_data?: any;
 }
 
 const Notifications = () => {
@@ -61,7 +62,8 @@ const Notifications = () => {
         related_id: n.related_id,
         notification_category: n.notification_category,
         is_read: n.is_read_receipt || false,
-        created_at: n.created_at
+        created_at: n.created_at,
+        action_data: n.action_data
       }));
       setNotifications(mappedData);
     }
@@ -88,7 +90,8 @@ const Notifications = () => {
             related_id: payload.new.related_id,
             notification_category: payload.new.notification_category,
             is_read: payload.new.is_read_receipt || false,
-            created_at: payload.new.created_at
+            created_at: payload.new.created_at,
+            action_data: payload.new.action_data
           };
           setNotifications((prev) => [newNotification, ...prev]);
           toast({
@@ -118,11 +121,27 @@ const Notifications = () => {
   const handleNotificationClick = async (notification: Notification) => {
     await markAsRead(notification.id);
 
-    if (notification.notification_category === 'comment' && notification.related_id) {
+    if ((notification.notification_category === 'comment' || notification.notification_category === 'reaction') && notification.related_id) {
       navigate(`/?post=${notification.related_id}`);
-    } else if (notification.notification_category === 'reaction' && notification.related_id) {
-      navigate(`/?post=${notification.related_id}`);
+    } else if (notification.notification_category === 'admin' && notification.action_data) {
+      const data = notification.action_data as any;
+      if (data.type === 'vip') {
+        navigate('/profile');
+      }
     }
+  };
+
+  const renderNotificationIcon = (notification: Notification) => {
+    const { action_data } = notification;
+    if (action_data && typeof action_data === 'object' && 'avatar_url' in action_data) {
+      return (
+        <Avatar className="w-10 h-10">
+          <AvatarImage src={(action_data as any).avatar_url} />
+          <AvatarFallback>{(action_data as any).username?.[0]}</AvatarFallback>
+        </Avatar>
+      );
+    }
+    return getIcon(notification.notification_category);
   };
 
   const getIcon = (category: string) => {
@@ -179,7 +198,7 @@ const Notifications = () => {
                 >
                   <div className="flex items-start space-x-3">
                     <div className="flex-shrink-0 mt-1">
-                      {getIcon(notification.notification_category)}
+                      {renderNotificationIcon(notification)}
                     </div>
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center justify-between">
