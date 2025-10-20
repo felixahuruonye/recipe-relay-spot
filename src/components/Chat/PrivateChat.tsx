@@ -139,6 +139,27 @@ export const PrivateChat: React.FC<PrivateChatProps> = ({
     }
   };
 
+  const deleteMessage = async (messageId: string) => {
+    try {
+      const { error } = await supabase
+        .from('private_messages')
+        .delete()
+        .eq('id', messageId);
+
+      if (error) throw error;
+      
+      setMessages(prev => prev.filter(m => m.id !== messageId));
+      toast({ title: "Success", description: "Message deleted" });
+    } catch (error) {
+      console.error('Error deleting message:', error);
+      toast({
+        title: "Error",
+        description: "Failed to delete message",
+        variant: "destructive"
+      });
+    }
+  };
+
   const formatTime = (timestamp: string) => {
     return new Date(timestamp).toLocaleTimeString([], { 
       hour: '2-digit', 
@@ -178,23 +199,35 @@ export const PrivateChat: React.FC<PrivateChatProps> = ({
               return (
                 <div
                   key={message.id}
-                  className={`flex ${isFromMe ? 'justify-end' : 'justify-start'}`}
+                  className={`flex ${isFromMe ? 'justify-end' : 'justify-start'} group`}
                 >
                   <div
-                    className={`max-w-[70%] rounded-lg p-3 ${
+                    className={`max-w-[70%] rounded-lg p-3 relative ${
                       isFromMe
                         ? 'bg-primary text-primary-foreground'
                         : 'bg-muted'
                     }`}
                   >
                     <p className="text-sm">{message.message}</p>
-                    <p
-                      className={`text-xs mt-1 ${
-                        isFromMe ? 'text-primary-foreground/70' : 'text-muted-foreground'
-                      }`}
-                    >
-                      {formatTime(message.created_at)}
-                    </p>
+                    <div className="flex items-center justify-between mt-1 gap-2">
+                      <p
+                        className={`text-xs ${
+                          isFromMe ? 'text-primary-foreground/70' : 'text-muted-foreground'
+                        }`}
+                      >
+                        {formatTime(message.created_at)}
+                      </p>
+                      {isFromMe && (
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="h-5 px-2 opacity-0 group-hover:opacity-100 transition-opacity"
+                          onClick={() => deleteMessage(message.id)}
+                        >
+                          Delete
+                        </Button>
+                      )}
+                    </div>
                   </div>
                 </div>
               );

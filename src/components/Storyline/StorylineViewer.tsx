@@ -82,7 +82,7 @@ export const StorylineViewer: React.FC<StorylineViewerProps> = ({ userId, open, 
   const checkLikeStatus = async () => {
     if (!user || !stories[currentIndex]) return;
 
-    const { data } = await (supabase as any)
+    const { data } = await supabase
       .from('storyline_reactions')
       .select('id')
       .eq('storyline_id', stories[currentIndex].id)
@@ -95,7 +95,7 @@ export const StorylineViewer: React.FC<StorylineViewerProps> = ({ userId, open, 
   const loadLikeCount = async () => {
     if (!stories[currentIndex]) return;
 
-    const { count } = await (supabase as any)
+    const { count } = await supabase
       .from('storyline_reactions')
       .select('*', { count: 'exact', head: true })
       .eq('storyline_id', stories[currentIndex].id);
@@ -106,42 +106,51 @@ export const StorylineViewer: React.FC<StorylineViewerProps> = ({ userId, open, 
   const handleLike = async () => {
     if (!user || !stories[currentIndex]) return;
 
-    if (hasLiked) {
-      await (supabase as any)
-        .from('storyline_reactions')
-        .delete()
-        .eq('storyline_id', stories[currentIndex].id)
-        .eq('user_id', user.id);
-    } else {
-      await (supabase as any)
-        .from('storyline_reactions')
-        .insert({
-          storyline_id: stories[currentIndex].id,
-          user_id: user.id,
-          reaction_type: 'like'
-        });
+    try {
+      if (hasLiked) {
+        await supabase
+          .from('storyline_reactions')
+          .delete()
+          .eq('storyline_id', stories[currentIndex].id)
+          .eq('user_id', user.id);
+        setHasLiked(false);
+        setLikeCount(Math.max(0, likeCount - 1));
+      } else {
+        await supabase
+          .from('storyline_reactions')
+          .insert({
+            storyline_id: stories[currentIndex].id,
+            user_id: user.id
+          });
+        setHasLiked(true);
+        setLikeCount(likeCount + 1);
+      }
+    } catch (error) {
+      console.error('Error toggling like:', error);
+      toast({ title: 'Error', description: 'Failed to update reaction', variant: 'destructive' });
     }
-
-    setHasLiked(!hasLiked);
-    setLikeCount(hasLiked ? likeCount - 1 : likeCount + 1);
   };
 
   const handleComment = async () => {
     if (!user || !stories[currentIndex] || !comment.trim()) return;
 
-    const { error } = await (supabase as any)
-      .from('storyline_comments')
-      .insert({
-        storyline_id: stories[currentIndex].id,
-        user_id: user.id,
-        comment: comment.trim()
-      });
+    try {
+      // Send comment as a private message to story owner
+      const { error } = await supabase
+        .from('private_messages')
+        .insert({
+          from_user_id: user.id,
+          to_user_id: currentStory.user_id,
+          message: `💬 Story comment: ${comment.trim()}`
+        });
 
-    if (error) {
-      toast({ title: 'Error', description: 'Failed to add comment', variant: 'destructive' });
-    } else {
-      toast({ title: 'Success', description: 'Comment added!' });
+      if (error) throw error;
+      
+      toast({ title: 'Success', description: 'Comment sent to chat!' });
       setComment('');
+    } catch (error) {
+      console.error('Error sending comment:', error);
+      toast({ title: 'Error', description: 'Failed to send comment', variant: 'destructive' });
     }
   };
 

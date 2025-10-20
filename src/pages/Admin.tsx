@@ -33,15 +33,16 @@ const AdminPanel = () => {
     setLoading(true);
     try {
       const [usersRes, postsRes, tasksRes] = await Promise.all([
-        supabase.from('users').select('*').limit(50),
-        supabase.from('posts').select('*').limit(50),
-        supabase.from('tasks').select('*').limit(50)
+        supabase.from('user_profiles').select('*').order('created_at', { ascending: false }).limit(50),
+        supabase.from('posts').select('*, user_profiles(username, avatar_url)').order('created_at', { ascending: false }).limit(50),
+        supabase.from('tasks').select('*').order('created_at', { ascending: false }).limit(50)
       ]);
 
       if (usersRes.data) setUsers(usersRes.data);
       if (postsRes.data) setPosts(postsRes.data);
       if (tasksRes.data) setTasks(tasksRes.data);
     } catch (error) {
+      console.error('Load error:', error);
       toast({ title: "Error", description: "Failed to load data", variant: "destructive" });
     }
     setLoading(false);
@@ -293,7 +294,7 @@ const AdminPanel = () => {
                 <Table>
                   <TableHeader>
                     <TableRow>
-                      <TableHead>Email</TableHead>
+                      <TableHead>ID</TableHead>
                       <TableHead>Full Name</TableHead>
                       <TableHead>Username</TableHead>
                       <TableHead>Balance</TableHead>
@@ -303,9 +304,9 @@ const AdminPanel = () => {
                   </TableHeader>
                   <TableBody>
                     {users.map((user: any) => (
-                      <TableRow key={user.email}>
-                        <TableCell>{user.email}</TableCell>
-                        <TableCell>{user.full_name}</TableCell>
+                      <TableRow key={user.id}>
+                        <TableCell>{user.id}</TableCell>
+                        <TableCell>{user.full_name || 'N/A'}</TableCell>
                         <TableCell>{user.username}</TableCell>
                         <TableCell>₦{user.wallet_balance || 0}</TableCell>
                         <TableCell>

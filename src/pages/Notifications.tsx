@@ -149,6 +149,7 @@ const Notifications = () => {
       case 'comment':
         return <MessageCircle className="h-5 w-5 text-blue-500" />;
       case 'reaction':
+      case 'story_reaction':
         return <Heart className="h-5 w-5 text-red-500" />;
       case 'admin':
         return <AlertCircle className="h-5 w-5 text-yellow-500" />;
