@@ -7,8 +7,10 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Badge } from '@/components/ui/badge';
 import { useToast } from '@/hooks/use-toast';
-import { Trash2, Edit, RefreshCw, Lock } from 'lucide-react';
+import { Trash2, Edit, RefreshCw, Lock, Crown, Video } from 'lucide-react';
 import { ReportsTab } from '@/components/Admin/ReportsTab';
+import { VIPManager } from '@/components/Admin/VIPManager';
+import { StoryManagement } from '@/components/Admin/StoryManagement';
 
 const AdminPanel = () => {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
@@ -153,11 +155,12 @@ const AdminPanel = () => {
         </div>
 
         <Tabs defaultValue="posts" className="space-y-6">
-          <TabsList className="grid w-full grid-cols-4">
-            <TabsTrigger value="posts">Posts Management</TabsTrigger>
+          <TabsList className="grid w-full grid-cols-5">
+            <TabsTrigger value="posts">Posts</TabsTrigger>
+            <TabsTrigger value="stories">Stories</TabsTrigger>
+            <TabsTrigger value="vip">VIP/Users</TabsTrigger>
             <TabsTrigger value="reports">Reports</TabsTrigger>
-            <TabsTrigger value="tasks">Tasks Management</TabsTrigger>
-            <TabsTrigger value="users">Users Overview</TabsTrigger>
+            <TabsTrigger value="tasks">Tasks</TabsTrigger>
           </TabsList>
 
           <TabsContent value="posts">
@@ -223,6 +226,14 @@ const AdminPanel = () => {
             </Card>
           </TabsContent>
 
+          <TabsContent value="stories">
+            <StoryManagement />
+          </TabsContent>
+
+          <TabsContent value="vip">
+            <VIPManager />
+          </TabsContent>
+
           <TabsContent value="reports">
             <ReportsTab />
           </TabsContent>
@@ -285,43 +296,6 @@ const AdminPanel = () => {
             </Card>
           </TabsContent>
 
-          <TabsContent value="users">
-            <Card>
-              <CardHeader>
-                <CardTitle>Users Overview ({users.length})</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>ID</TableHead>
-                      <TableHead>Full Name</TableHead>
-                      <TableHead>Username</TableHead>
-                      <TableHead>Balance</TableHead>
-                      <TableHead>VIP</TableHead>
-                      <TableHead>Created</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {users.map((user: any) => (
-                      <TableRow key={user.id}>
-                        <TableCell>{user.id}</TableCell>
-                        <TableCell>{user.full_name || 'N/A'}</TableCell>
-                        <TableCell>{user.username}</TableCell>
-                        <TableCell>₦{user.wallet_balance || 0}</TableCell>
-                        <TableCell>
-                          <Badge variant={user.vip ? 'default' : 'secondary'}>
-                            {user.vip ? 'VIP' : 'Regular'}
-                          </Badge>
-                        </TableCell>
-                        <TableCell>{new Date(user.created_at).toLocaleDateString()}</TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-              </CardContent>
-            </Card>
-          </TabsContent>
         </Tabs>
       </div>
     </div>

@@ -114,8 +114,13 @@ export const EnhancedStorylineViewer: React.FC<StorylineViewerProps> = ({ userId
     setHasViewed(!!data);
     
     const currentStory = stories[currentIndex];
+    // Block if: story has star price AND user hasn't viewed it AND user has insufficient balance
     if (currentStory.star_price > 0 && !data) {
-      setIsBlurred(true);
+      if (userStarBalance === 0 || userStarBalance < currentStory.star_price) {
+        setIsBlurred(true);
+      } else {
+        setIsBlurred(false);
+      }
     } else {
       setIsBlurred(false);
     }
@@ -126,6 +131,15 @@ export const EnhancedStorylineViewer: React.FC<StorylineViewerProps> = ({ userId
 
     const currentStory = stories[currentIndex];
     
+    if (userStarBalance === 0) {
+      toast({
+        title: 'No Stars Available',
+        description: 'You need to purchase stars to view premium stories. Please buy stars to continue.',
+        variant: 'destructive'
+      });
+      return;
+    }
+
     if (userStarBalance < currentStory.star_price) {
       toast({
         title: 'Insufficient Stars',
