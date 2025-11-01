@@ -2011,6 +2011,7 @@ export type Database = {
       }
       user_profiles: {
         Row: {
+          age: number | null
           analytics_last_seen: string | null
           avatar_url: string | null
           bio: string | null
@@ -2026,6 +2027,7 @@ export type Database = {
           post_count: number | null
           post_count_free: number | null
           star_balance: number | null
+          story_settings: Json | null
           suspended_at: string | null
           suspension_reason: string | null
           total_reactions: number | null
@@ -2033,10 +2035,12 @@ export type Database = {
           username: string
           vip: boolean | null
           vip_expires_at: string | null
+          vip_post_count: number | null
           vip_started_at: string | null
           wallet_balance: number | null
         }
         Insert: {
+          age?: number | null
           analytics_last_seen?: string | null
           avatar_url?: string | null
           bio?: string | null
@@ -2052,6 +2056,7 @@ export type Database = {
           post_count?: number | null
           post_count_free?: number | null
           star_balance?: number | null
+          story_settings?: Json | null
           suspended_at?: string | null
           suspension_reason?: string | null
           total_reactions?: number | null
@@ -2059,10 +2064,12 @@ export type Database = {
           username: string
           vip?: boolean | null
           vip_expires_at?: string | null
+          vip_post_count?: number | null
           vip_started_at?: string | null
           wallet_balance?: number | null
         }
         Update: {
+          age?: number | null
           analytics_last_seen?: string | null
           avatar_url?: string | null
           bio?: string | null
@@ -2078,6 +2085,7 @@ export type Database = {
           post_count?: number | null
           post_count_free?: number | null
           star_balance?: number | null
+          story_settings?: Json | null
           suspended_at?: string | null
           suspension_reason?: string | null
           total_reactions?: number | null
@@ -2085,6 +2093,7 @@ export type Database = {
           username?: string
           vip?: boolean | null
           vip_expires_at?: string | null
+          vip_post_count?: number | null
           vip_started_at?: string | null
           wallet_balance?: number | null
         }
@@ -2560,10 +2569,7 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
-      execute_admin_sql: {
-        Args: { query: string }
-        Returns: Json
-      }
+      execute_admin_sql: { Args: { query: string }; Returns: Json }
       get_user_device_info: {
         Args: { user_agent_string: string }
         Returns: Json

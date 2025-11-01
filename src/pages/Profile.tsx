@@ -14,6 +14,7 @@ import { CommentSection } from '@/components/Feed/CommentSection';
 import { ShareMenu } from '@/components/Feed/ShareMenu';
 import { PostMenu } from '@/components/Feed/PostMenu';
 import { EditProfile } from '@/components/Profile/EditProfile';
+import { WithdrawalForm } from '@/components/Profile/WithdrawalForm';
 
 interface UserProfile {
   id: string;
@@ -329,16 +330,23 @@ const Profile = () => {
               </div>
 
               {isOwnProfile && (
-                <div className="flex flex-col sm:flex-row items-center justify-center md:justify-start space-y-2 sm:space-y-0 sm:space-x-4 pt-2">
-                  <div className="flex items-center space-x-2">
-                    <span className="text-sm font-medium">₦{profile.wallet_balance}</span>
-                    <span className="text-xs text-muted-foreground">Wallet</span>
+                <div className="flex flex-col space-y-3 pt-2">
+                  <div className="flex items-center justify-center md:justify-start space-x-4">
+                    <div className="flex items-center space-x-2">
+                      <span className="text-sm font-medium">₦{profile.wallet_balance}</span>
+                      <span className="text-xs text-muted-foreground">Wallet</span>
+                    </div>
+                    <div className="flex items-center space-x-2">
+                      <Star className="w-4 h-4 text-yellow-500" />
+                      <span className="text-sm font-medium">{profile.star_balance}</span>
+                      <span className="text-xs text-muted-foreground">Stars</span>
+                    </div>
                   </div>
-                  <div className="flex items-center space-x-2">
-                    <Star className="w-4 h-4 text-yellow-500" />
-                    <span className="text-sm font-medium">{profile.star_balance}</span>
-                    <span className="text-xs text-muted-foreground">Stars</span>
-                  </div>
+                  {profile.vip && (
+                    <div className="w-full max-w-xs mx-auto md:mx-0">
+                      <WithdrawalForm />
+                    </div>
+                  )}
                 </div>
               )}
             </div>

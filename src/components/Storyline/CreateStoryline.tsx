@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
@@ -9,6 +9,7 @@ import { Plus, Upload, Star } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
 import { useToast } from '@/hooks/use-toast';
 import { Alert, AlertDescription } from '@/components/ui/alert';
+import { StorySettings } from './StorySettings';
 
 interface CreateStorylineProps {
   onCreated?: () => void;
@@ -26,7 +27,9 @@ export const CreateStoryline: React.FC<CreateStorylineProps> = ({ onCreated, use
   const [caption, setCaption] = useState('');
   const [previewFile, setPreviewFile] = useState<File | null>(null);
   const [musicFile, setMusicFile] = useState<File | null>(null);
+  const [musicPreview, setMusicPreview] = useState<string>('');
   const [starPrice, setStarPrice] = useState<number>(0);
+  const audioRef = useRef<HTMLAudioElement>(null);
 
   const handleCardClick = () => {
     setShowWelcome(true);
@@ -221,11 +224,11 @@ export const CreateStoryline: React.FC<CreateStorylineProps> = ({ onCreated, use
         </DialogContent>
       </Dialog>
 
-      {/* Create Story Dialog */}
       <Dialog open={open} onOpenChange={setOpen}>
         <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto glass-card">
-          <DialogHeader>
+          <DialogHeader className="flex flex-row items-center justify-between">
             <DialogTitle className="gradient-text">Create Story</DialogTitle>
+            <StorySettings />
           </DialogHeader>
 
           <div className="space-y-4">
@@ -288,10 +291,18 @@ export const CreateStoryline: React.FC<CreateStorylineProps> = ({ onCreated, use
                 accept="audio/*"
                 onChange={(e) => {
                   const file = e.target.files?.[0];
-                  if (file) setMusicFile(file);
+                  if (file) {
+                    setMusicFile(file);
+                    setMusicPreview(URL.createObjectURL(file));
+                  }
                 }}
                 className="mt-1"
               />
+              {musicPreview && (
+                <div className="mt-2 glass-card p-3 rounded-lg">
+                  <audio ref={audioRef} src={musicPreview} controls className="w-full" />
+                </div>
+              )}
             </div>
 
             {/* Star Price Selection */}
