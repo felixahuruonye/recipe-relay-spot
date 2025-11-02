@@ -1137,6 +1137,7 @@ export type Database = {
       }
       posts: {
         Row: {
+          ad_attached: boolean | null
           admin_action: string | null
           body: string
           boost_until: string | null
@@ -1148,16 +1149,20 @@ export type Database = {
           featured_rank: number | null
           id: string
           likes_count: number | null
+          media_type: string | null
           media_urls: string[] | null
+          post_status: string | null
           rating: number | null
           reports_count: number | null
           requires_approval: boolean | null
+          star_price: number | null
           status: string
           title: string
           user_id: string
           view_count: number | null
         }
         Insert: {
+          ad_attached?: boolean | null
           admin_action?: string | null
           body: string
           boost_until?: string | null
@@ -1169,16 +1174,20 @@ export type Database = {
           featured_rank?: number | null
           id?: string
           likes_count?: number | null
+          media_type?: string | null
           media_urls?: string[] | null
+          post_status?: string | null
           rating?: number | null
           reports_count?: number | null
           requires_approval?: boolean | null
+          star_price?: number | null
           status?: string
           title: string
           user_id: string
           view_count?: number | null
         }
         Update: {
+          ad_attached?: boolean | null
           admin_action?: string | null
           body?: string
           boost_until?: string | null
@@ -1190,10 +1199,13 @@ export type Database = {
           featured_rank?: number | null
           id?: string
           likes_count?: number | null
+          media_type?: string | null
           media_urls?: string[] | null
+          post_status?: string | null
           rating?: number | null
           reports_count?: number | null
           requires_approval?: boolean | null
+          star_price?: number | null
           status?: string
           title?: string
           user_id?: string
@@ -1391,6 +1403,96 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      search_trends: {
+        Row: {
+          created_at: string | null
+          id: string
+          keyword: string
+          last_search_at: string | null
+          search_count: number | null
+        }
+        Insert: {
+          created_at?: string | null
+          id?: string
+          keyword: string
+          last_search_at?: string | null
+          search_count?: number | null
+        }
+        Update: {
+          created_at?: string | null
+          id?: string
+          keyword?: string
+          last_search_at?: string | null
+          search_count?: number | null
+        }
+        Relationships: []
+      }
+      star_market: {
+        Row: {
+          created_at: string | null
+          id: string
+          note: string | null
+          price_naira: number
+          price_usd: number
+          purchase_url: string | null
+          stars: number
+          status: string | null
+          updated_at: string | null
+        }
+        Insert: {
+          created_at?: string | null
+          id?: string
+          note?: string | null
+          price_naira: number
+          price_usd: number
+          purchase_url?: string | null
+          stars: number
+          status?: string | null
+          updated_at?: string | null
+        }
+        Update: {
+          created_at?: string | null
+          id?: string
+          note?: string | null
+          price_naira?: number
+          price_usd?: number
+          purchase_url?: string | null
+          stars?: number
+          status?: string | null
+          updated_at?: string | null
+        }
+        Relationships: []
+      }
+      star_rates: {
+        Row: {
+          created_at: string | null
+          id: string
+          price_naira: number
+          price_usd: number
+          stars: number
+          status: string | null
+          updated_at: string | null
+        }
+        Insert: {
+          created_at?: string | null
+          id?: string
+          price_naira: number
+          price_usd: number
+          stars: number
+          status?: string | null
+          updated_at?: string | null
+        }
+        Update: {
+          created_at?: string | null
+          id?: string
+          price_naira?: number
+          price_usd?: number
+          stars?: number
+          status?: string | null
+          updated_at?: string | null
+        }
+        Relationships: []
       }
       story_transactions: {
         Row: {
@@ -2012,6 +2114,7 @@ export type Database = {
       user_profiles: {
         Row: {
           age: number | null
+          ai_credits: number | null
           analytics_last_seen: string | null
           avatar_url: string | null
           bio: string | null
@@ -2041,6 +2144,7 @@ export type Database = {
         }
         Insert: {
           age?: number | null
+          ai_credits?: number | null
           analytics_last_seen?: string | null
           avatar_url?: string | null
           bio?: string | null
@@ -2070,6 +2174,7 @@ export type Database = {
         }
         Update: {
           age?: number | null
+          ai_credits?: number | null
           analytics_last_seen?: string | null
           avatar_url?: string | null
           bio?: string | null
@@ -2582,6 +2687,8 @@ export type Database = {
         Args: { p_story_id: string; p_viewer_id: string }
         Returns: Json
       }
+      track_search: { Args: { search_keyword: string }; Returns: undefined }
+      update_post_status: { Args: never; Returns: undefined }
     }
     Enums: {
       [_ in never]: never

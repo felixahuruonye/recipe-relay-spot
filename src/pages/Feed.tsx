@@ -13,7 +13,7 @@ import { useToast } from '@/hooks/use-toast';
 import { useNavigate } from 'react-router-dom';
 import CreatePost from '@/components/Posts/CreatePost';
 import ProfileSetup from '@/components/Profile/ProfileSetup';
-import { SearchBar } from '@/components/Feed/SearchBar';
+import { AdvancedSearchBar } from '@/components/Search/AdvancedSearchBar';
 import { CommentSection } from '@/components/Feed/CommentSection';
 import { VideoPlayer } from '@/components/Feed/VideoPlayer';
 import { ShareMenu } from '@/components/Feed/ShareMenu';
@@ -509,8 +509,6 @@ const Feed = () => {
           <h1 className="text-2xl font-bold text-primary">SaveMore Community</h1>
           <p className="text-muted-foreground">Share your food experiences</p>
         </div>
-        
-        <SearchBar />
 
         {/* Stories Strip */}
         <section aria-label="Stories" className="-mx-2">

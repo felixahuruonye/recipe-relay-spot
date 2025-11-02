@@ -237,7 +237,11 @@ export const EnhancedStorylineViewer: React.FC<StorylineViewerProps> = ({ userId
   const loadViewers = async () => {
     if (!stories[currentIndex]) return;
     
-    const { data } = await supabase
+    // Get story owner ID
+    const storyOwnerId = stories[currentIndex].user_id;
+    
+    // Get all viewers
+    const { data: viewData } = await supabase
       .from('story_views')
       .select(`
         viewer_id,
@@ -251,9 +255,35 @@ export const EnhancedStorylineViewer: React.FC<StorylineViewerProps> = ({ userId
       .eq('story_id', stories[currentIndex].id)
       .order('viewed_at', { ascending: false });
     
-    if (data) {
-      setViewers(data);
-    }
+    if (!viewData) return;
+    
+    // Get followers of the story owner
+    const { data: followersData } = await supabase
+      .from('followers')
+      .select('follower_id')
+      .eq('following_id', storyOwnerId);
+    
+    const followerIds = new Set(followersData?.map(f => f.follower_id) || []);
+    
+    // Sort viewers: followers first, then others
+    const sortedViewers = [...viewData].sort((a, b) => {
+      const aIsFollower = followerIds.has(a.viewer_id);
+      const bIsFollower = followerIds.has(b.viewer_id);
+      
+      if (aIsFollower && !bIsFollower) return -1;
+      if (!aIsFollower && bIsFollower) return 1;
+      
+      // If both are followers or both are not, sort by viewed_at
+      return new Date(b.viewed_at).getTime() - new Date(a.viewed_at).getTime();
+    });
+    
+    // Add follower flag to each viewer
+    const viewersWithFollowerFlag = sortedViewers.map(viewer => ({
+      ...viewer,
+      isFollower: followerIds.has(viewer.viewer_id)
+    }));
+    
+    setViewers(viewersWithFollowerFlag);
   };
 
   const handleLike = async () => {
@@ -495,34 +525,88 @@ export const EnhancedStorylineViewer: React.FC<StorylineViewerProps> = ({ userId
             <DialogTitle>Story Viewers ({viewers.length})</DialogTitle>
           </DialogHeader>
           <ScrollArea className="max-h-96">
-            {viewers.map((viewer) => (
-              <div 
-                key={viewer.viewer_id} 
-                className="flex items-center justify-between p-3 hover:bg-muted rounded cursor-pointer"
-                onClick={() => {
-                  setShowViewers(false);
-                  window.location.href = `/profile/${viewer.viewer_id}`;
-                }}
-              >
-                <div className="flex items-center space-x-3">
-                  <Avatar>
-                    <AvatarImage src={viewer.user_profiles?.avatar_url} />
-                    <AvatarFallback>{viewer.user_profiles?.username?.[0]}</AvatarFallback>
-                  </Avatar>
-                  <div>
-                    <p className="font-medium">{viewer.user_profiles?.username}</p>
-                    <p className="text-xs text-muted-foreground">
-                      {new Date(viewer.viewed_at).toLocaleString()}
-                    </p>
-                  </div>
-                </div>
-                {viewer.stars_spent > 0 && (
-                  <Badge variant="secondary">
-                    {viewer.stars_spent}<Star className="h-3 w-3 ml-1 inline" />
-                  </Badge>
-                )}
+            {viewers.length === 0 ? (
+              <div className="text-center p-6 text-muted-foreground">
+                No viewers yet
               </div>
-            ))}
+            ) : (
+              <>
+                {/* Show followers section if there are any */}
+                {viewers.some(v => v.isFollower) && (
+                  <div className="mb-4">
+                    <h4 className="text-sm font-semibold text-primary mb-2 px-3">Top Viewers (Followers)</h4>
+                    {viewers.filter(v => v.isFollower).map((viewer) => (
+                      <div 
+                        key={viewer.viewer_id} 
+                        className="flex items-center justify-between p-3 hover:bg-muted rounded cursor-pointer glass-card mb-2"
+                        onClick={() => {
+                          setShowViewers(false);
+                          window.location.href = `/profile/${viewer.viewer_id}`;
+                        }}
+                      >
+                        <div className="flex items-center space-x-3">
+                          <Avatar>
+                            <AvatarImage src={viewer.user_profiles?.avatar_url} />
+                            <AvatarFallback>{viewer.user_profiles?.username?.[0]}</AvatarFallback>
+                          </Avatar>
+                          <div>
+                            <div className="flex items-center space-x-2">
+                              <p className="font-medium">{viewer.user_profiles?.username}</p>
+                              <Badge variant="default" className="text-xs">Follower</Badge>
+                            </div>
+                            <p className="text-xs text-muted-foreground">
+                              {new Date(viewer.viewed_at).toLocaleString()}
+                            </p>
+                          </div>
+                        </div>
+                        {viewer.stars_spent > 0 && (
+                          <Badge variant="secondary">
+                            {viewer.stars_spent}<Star className="h-3 w-3 ml-1 inline" />
+                          </Badge>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                )}
+                
+                {/* Show other viewers */}
+                {viewers.filter(v => !v.isFollower).length > 0 && (
+                  <div>
+                    {viewers.some(v => v.isFollower) && (
+                      <h4 className="text-sm font-semibold text-muted-foreground mb-2 px-3">Other Viewers</h4>
+                    )}
+                    {viewers.filter(v => !v.isFollower).map((viewer) => (
+                      <div 
+                        key={viewer.viewer_id} 
+                        className="flex items-center justify-between p-3 hover:bg-muted rounded cursor-pointer"
+                        onClick={() => {
+                          setShowViewers(false);
+                          window.location.href = `/profile/${viewer.viewer_id}`;
+                        }}
+                      >
+                        <div className="flex items-center space-x-3">
+                          <Avatar>
+                            <AvatarImage src={viewer.user_profiles?.avatar_url} />
+                            <AvatarFallback>{viewer.user_profiles?.username?.[0]}</AvatarFallback>
+                          </Avatar>
+                          <div>
+                            <p className="font-medium">{viewer.user_profiles?.username}</p>
+                            <p className="text-xs text-muted-foreground">
+                              {new Date(viewer.viewed_at).toLocaleString()}
+                            </p>
+                          </div>
+                        </div>
+                        {viewer.stars_spent > 0 && (
+                          <Badge variant="secondary">
+                            {viewer.stars_spent}<Star className="h-3 w-3 ml-1 inline" />
+                          </Badge>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </>
+            )}
           </ScrollArea>
         </DialogContent>
       </Dialog>
