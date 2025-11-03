@@ -68,15 +68,18 @@ export const AdvancedSearchBar = () => {
   }, [query, searchType, selectedCategory]);
 
   const loadUserCredits = async () => {
-    if (!user) return;
-    const { data } = await supabase
-      .from('user_profiles')
-      .select('ai_credits, star_balance')
-      .eq('id', user.id)
-      .single();
-    
-    if (data) {
-      setUserCredits(data.ai_credits || 0);
+    if (!user?.id) return;
+    try {
+      const result: any = await supabase
+        .from('user_profiles')
+        .select('ai_credits')
+        .eq('user_id', user.id);
+      
+      if (result.data && result.data.length > 0) {
+        setUserCredits(result.data[0].ai_credits || 0);
+      }
+    } catch (err) {
+      console.error('Error loading credits:', err);
     }
   };
 
@@ -92,7 +95,27 @@ export const AdvancedSearchBar = () => {
 
   const trackSearch = async () => {
     if (query.length < 3) return;
-    await supabase.rpc('track_search', { search_keyword: query.toLowerCase() });
+    // Track search trend
+    const keyword = query.toLowerCase().trim();
+    const { data: existing } = await supabase
+      .from('search_trends')
+      .select('*')
+      .eq('keyword', keyword)
+      .single();
+
+    if (existing) {
+      await supabase
+        .from('search_trends')
+        .update({ 
+          search_count: existing.search_count + 1,
+          last_search_at: new Date().toISOString()
+        })
+        .eq('keyword', keyword);
+    } else {
+      await supabase
+        .from('search_trends')
+        .insert({ keyword, search_count: 1 });
+    }
     loadTrending();
   };
 
@@ -160,56 +183,56 @@ export const AdvancedSearchBar = () => {
   };
 
   const getAISummary = async () => {
-    if (!user || userCredits <= 0) {
-      // Check star balance for top-up
-      const { data } = await supabase
-        .from('user_profiles')
-        .select('star_balance')
-        .eq('id', user?.id)
-        .single();
-
-      if (data && data.star_balance >= 100) {
-        // Top up credits
-        await supabase
-          .from('user_profiles')
-          .update({ 
-            ai_credits: 250, 
-            star_balance: data.star_balance - 100 
-          })
-          .eq('id', user?.id);
-        
-        setUserCredits(250);
-        toast({ 
-          title: '✨ Credits Recharged', 
-          description: '100 Stars exchanged for 250 FlowaIr credits!' 
-        });
-      } else {
-        toast({
-          title: 'Out of Credits',
-          description: 'Earn or buy Stars to use FlowaIr AI.',
-          variant: 'destructive'
-        });
-        return;
-      }
+    if (!user) {
+      toast({
+        title: 'Login Required',
+        description: 'Please login to use FlowaIr AI.',
+        variant: 'destructive'
+      });
+      return;
     }
 
     setLoadingAI(true);
     try {
-      // Call AI edge function
-      const { data, error } = await supabase.functions.invoke('flowaIr-search', {
+      // Get current session token for authentication
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) {
+        toast({
+          title: 'Session Expired',
+          description: 'Please login again.',
+          variant: 'destructive'
+        });
+        return;
+      }
+
+      // Call AI edge function (it will handle credit checking and deduction)
+      const { data, error } = await supabase.functions.invoke('flowair-search', {
         body: { query, results, trending }
       });
 
-      if (error) throw error;
+      if (error) {
+        if (error.message?.includes('Out of AI credits') || error.message?.includes('402')) {
+          toast({
+            title: 'Out of Credits',
+            description: 'Earn or buy Stars to use FlowaIr AI (100 Stars = 250 credits).',
+            variant: 'destructive'
+          });
+        } else {
+          throw error;
+        }
+        return;
+      }
 
       if (data?.aiResponse) {
         setAiSummary(data.aiResponse);
-        // Deduct 1 credit
-        await supabase
-          .from('user_profiles')
-          .update({ ai_credits: userCredits - 1 })
-          .eq('id', user?.id);
-        setUserCredits(prev => prev - 1);
+        // Update displayed credits count
+        if (data?.creditsRemaining !== undefined) {
+          setUserCredits(data.creditsRemaining);
+        }
+        toast({ 
+          title: '✨ FlowaIr Insights', 
+          description: `Credits remaining: ${data.creditsRemaining || userCredits - 1}`
+        });
       }
     } catch (error) {
       console.error('AI Error:', error);

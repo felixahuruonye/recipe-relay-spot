@@ -13,23 +13,45 @@ import { VIPManager } from '@/components/Admin/VIPManager';
 import { StoryManagement } from '@/components/Admin/StoryManagement';
 
 const AdminPanel = () => {
-  const [isAuthenticated, setIsAuthenticated] = useState(false);
-  const [password, setPassword] = useState('');
+  const [isAdmin, setIsAdmin] = useState<boolean | null>(null);
   const [users, setUsers] = useState([]);
   const [posts, setPosts] = useState([]);
   const [tasks, setTasks] = useState([]);
   const [loading, setLoading] = useState(false);
   const { toast } = useToast();
 
-  const handleLogin = () => {
-    if (password === 'Felix333666') {
-      setIsAuthenticated(true);
-      toast({ title: "Access Granted", description: "Welcome to Admin Panel" });
-      loadData();
-    } else {
-      toast({ title: "Access Denied", description: "Invalid password", variant: "destructive" });
-    }
-  };
+  // Check if user has admin role
+  useEffect(() => {
+    const checkAdminRole = async () => {
+      const { data: { user } } = await supabase.auth.getUser();
+      
+      if (!user) {
+        setIsAdmin(false);
+        return;
+      }
+
+      const { data, error } = await supabase
+        .from('user_roles')
+        .select('role')
+        .eq('user_id', user.id)
+        .eq('role', 'admin')
+        .single();
+
+      if (error || !data) {
+        setIsAdmin(false);
+        toast({ 
+          title: "Access Denied", 
+          description: "You don't have admin privileges. Please contact support if you believe this is an error.",
+          variant: "destructive" 
+        });
+      } else {
+        setIsAdmin(true);
+        loadData();
+      }
+    };
+
+    checkAdminRole();
+  }, []);
 
   const loadData = async () => {
     setLoading(true);
@@ -94,7 +116,7 @@ const AdminPanel = () => {
 
   // Set up realtime subscriptions
   useEffect(() => {
-    if (!isAuthenticated) return;
+    if (!isAdmin) return;
 
     const postsSubscription = supabase
       .channel('posts-changes')
@@ -116,26 +138,38 @@ const AdminPanel = () => {
       supabase.removeChannel(postsSubscription);
       supabase.removeChannel(tasksSubscription);
     };
-  }, [isAuthenticated]);
+  }, [isAdmin]);
 
-  if (!isAuthenticated) {
+  if (isAdmin === null) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-background to-muted flex items-center justify-center">
+        <Card className="w-full max-w-md">
+          <CardContent className="py-8 text-center">
+            <RefreshCw className="w-12 h-12 mx-auto mb-4 text-primary animate-spin" />
+            <p>Checking admin access...</p>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
+
+  if (!isAdmin) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-background to-muted flex items-center justify-center">
         <Card className="w-full max-w-md">
           <CardHeader className="text-center">
-            <Lock className="w-12 h-12 mx-auto mb-4 text-primary" />
-            <CardTitle>Admin Access Required</CardTitle>
+            <Lock className="w-12 h-12 mx-auto mb-4 text-destructive" />
+            <CardTitle>Access Denied</CardTitle>
           </CardHeader>
-          <CardContent className="space-y-4">
-            <Input
-              type="password"
-              placeholder="Enter admin password"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              onKeyPress={(e) => e.key === 'Enter' && handleLogin()}
-            />
-            <Button onClick={handleLogin} className="w-full">
-              Access Admin Panel
+          <CardContent className="text-center space-y-4">
+            <p className="text-muted-foreground">
+              You don't have admin privileges to access this page.
+            </p>
+            <p className="text-sm text-muted-foreground">
+              If you believe this is an error, please contact support.
+            </p>
+            <Button onClick={() => window.location.href = '/'} className="w-full">
+              Return to Home
             </Button>
           </CardContent>
         </Card>
