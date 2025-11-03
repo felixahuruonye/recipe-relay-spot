@@ -7,51 +7,38 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Badge } from '@/components/ui/badge';
 import { useToast } from '@/hooks/use-toast';
-import { Trash2, Edit, RefreshCw, Lock, Crown, Video } from 'lucide-react';
+import { Trash2, RefreshCw, Lock } from 'lucide-react';
 import { ReportsTab } from '@/components/Admin/ReportsTab';
 import { VIPManager } from '@/components/Admin/VIPManager';
 import { StoryManagement } from '@/components/Admin/StoryManagement';
 
 const AdminPanel = () => {
-  const [isAdmin, setIsAdmin] = useState<boolean | null>(null);
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const [password, setPassword] = useState('');
   const [users, setUsers] = useState([]);
   const [posts, setPosts] = useState([]);
   const [tasks, setTasks] = useState([]);
   const [loading, setLoading] = useState(false);
   const { toast } = useToast();
 
-  // Check if user has admin role
   useEffect(() => {
-    const checkAdminRole = async () => {
-      const { data: { user } } = await supabase.auth.getUser();
-      
-      if (!user) {
-        setIsAdmin(false);
-        return;
-      }
+    if (isAuthenticated) {
+      loadData();
+    }
+  }, [isAuthenticated]);
 
-      const { data, error } = await supabase
-        .from('user_roles')
-        .select('role')
-        .eq('user_id', user.id)
-        .eq('role', 'admin')
-        .single();
-
-      if (error || !data) {
-        setIsAdmin(false);
-        toast({ 
-          title: "Access Denied", 
-          description: "You don't have admin privileges. Please contact support if you believe this is an error.",
-          variant: "destructive" 
-        });
-      } else {
-        setIsAdmin(true);
-        loadData();
-      }
-    };
-
-    checkAdminRole();
-  }, []);
+  const handleLogin = () => {
+    if (password === 'Felix333666') {
+      setIsAuthenticated(true);
+      toast({ title: "Welcome Admin", description: "Access granted" });
+    } else {
+      toast({ 
+        title: "Access Denied", 
+        description: "Incorrect password",
+        variant: "destructive" 
+      });
+    }
+  };
 
   const loadData = async () => {
     setLoading(true);
@@ -116,7 +103,7 @@ const AdminPanel = () => {
 
   // Set up realtime subscriptions
   useEffect(() => {
-    if (!isAdmin) return;
+    if (!isAuthenticated) return;
 
     const postsSubscription = supabase
       .channel('posts-changes')
@@ -138,38 +125,28 @@ const AdminPanel = () => {
       supabase.removeChannel(postsSubscription);
       supabase.removeChannel(tasksSubscription);
     };
-  }, [isAdmin]);
+  }, [isAuthenticated]);
 
-  if (isAdmin === null) {
-    return (
-      <div className="min-h-screen bg-gradient-to-br from-background to-muted flex items-center justify-center">
-        <Card className="w-full max-w-md">
-          <CardContent className="py-8 text-center">
-            <RefreshCw className="w-12 h-12 mx-auto mb-4 text-primary animate-spin" />
-            <p>Checking admin access...</p>
-          </CardContent>
-        </Card>
-      </div>
-    );
-  }
-
-  if (!isAdmin) {
+  if (!isAuthenticated) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-background to-muted flex items-center justify-center">
         <Card className="w-full max-w-md">
           <CardHeader className="text-center">
-            <Lock className="w-12 h-12 mx-auto mb-4 text-destructive" />
-            <CardTitle>Access Denied</CardTitle>
+            <Lock className="w-12 h-12 mx-auto mb-4 text-primary" />
+            <CardTitle>Admin Login</CardTitle>
           </CardHeader>
-          <CardContent className="text-center space-y-4">
-            <p className="text-muted-foreground">
-              You don't have admin privileges to access this page.
-            </p>
-            <p className="text-sm text-muted-foreground">
-              If you believe this is an error, please contact support.
-            </p>
-            <Button onClick={() => window.location.href = '/'} className="w-full">
-              Return to Home
+          <CardContent className="space-y-4">
+            <div className="space-y-2">
+              <Input
+                type="password"
+                placeholder="Enter admin password"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                onKeyPress={(e) => e.key === 'Enter' && handleLogin()}
+              />
+            </div>
+            <Button onClick={handleLogin} className="w-full">
+              Login
             </Button>
           </CardContent>
         </Card>
@@ -182,10 +159,15 @@ const AdminPanel = () => {
       <div className="max-w-7xl mx-auto">
         <div className="flex justify-between items-center mb-6">
           <h1 className="text-3xl font-bold">Admin Panel</h1>
-          <Button onClick={loadData} disabled={loading} variant="outline">
-            <RefreshCw className={`w-4 h-4 mr-2 ${loading ? 'animate-spin' : ''}`} />
-            Refresh Data
-          </Button>
+          <div className="flex gap-2">
+            <Button onClick={loadData} disabled={loading} variant="outline">
+              <RefreshCw className={`w-4 h-4 mr-2 ${loading ? 'animate-spin' : ''}`} />
+              Refresh
+            </Button>
+            <Button onClick={() => setIsAuthenticated(false)} variant="outline">
+              Logout
+            </Button>
+          </div>
         </div>
 
         <Tabs defaultValue="posts" className="space-y-6">
@@ -206,7 +188,6 @@ const AdminPanel = () => {
                 <Table>
                   <TableHeader>
                     <TableRow>
-                      <TableHead>ID</TableHead>
                       <TableHead>Title</TableHead>
                       <TableHead>Status</TableHead>
                       <TableHead>Created</TableHead>
@@ -216,7 +197,6 @@ const AdminPanel = () => {
                   <TableBody>
                     {posts.map((post: any) => (
                       <TableRow key={post.id}>
-                        <TableCell className="font-mono text-sm">{post.id}</TableCell>
                         <TableCell className="max-w-xs truncate">{post.title}</TableCell>
                         <TableCell>
                           <Badge variant={post.status === 'approved' ? 'default' : 'secondary'}>
@@ -281,7 +261,6 @@ const AdminPanel = () => {
                 <Table>
                   <TableHeader>
                     <TableRow>
-                      <TableHead>ID</TableHead>
                       <TableHead>Task Name</TableHead>
                       <TableHead>Category</TableHead>
                       <TableHead>Reward</TableHead>
@@ -292,7 +271,6 @@ const AdminPanel = () => {
                   <TableBody>
                     {tasks.map((task: any) => (
                       <TableRow key={task.id}>
-                        <TableCell className="font-mono text-sm">{task.id}</TableCell>
                         <TableCell className="max-w-xs truncate">{task.task_name}</TableCell>
                         <TableCell>{task.category}</TableCell>
                         <TableCell>₦{task.reward_amount}</TableCell>
@@ -329,7 +307,6 @@ const AdminPanel = () => {
               </CardContent>
             </Card>
           </TabsContent>
-
         </Tabs>
       </div>
     </div>

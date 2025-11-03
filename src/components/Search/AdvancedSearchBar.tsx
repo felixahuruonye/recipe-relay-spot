@@ -70,13 +70,14 @@ export const AdvancedSearchBar = () => {
   const loadUserCredits = async () => {
     if (!user?.id) return;
     try {
-      const result: any = await supabase
+      const { data, error } = await supabase
         .from('user_profiles')
         .select('ai_credits')
-        .eq('user_id', user.id);
+        .eq('id', user.id)
+        .single();
       
-      if (result.data && result.data.length > 0) {
-        setUserCredits(result.data[0].ai_credits || 0);
+      if (data && !error) {
+        setUserCredits(data.ai_credits || 0);
       }
     } catch (err) {
       console.error('Error loading credits:', err);
@@ -404,10 +405,8 @@ export const AdvancedSearchBar = () => {
       {isOpen && results.length === 0 && query.length > 0 && (
         <Card className="absolute z-50 w-full mt-2 glass-card">
           <div className="p-6 text-center">
-            <p className="text-muted-foreground mb-4">No results found</p>
-            <Button onClick={() => navigate('/create-post')} size="sm" className="btn-3d">
-              Create New Post
-            </Button>
+            <p className="text-muted-foreground mb-4">No results found for "{query}"</p>
+            <p className="text-xs text-muted-foreground mt-2">Try different keywords or browse the feed</p>
           </div>
         </Card>
       )}

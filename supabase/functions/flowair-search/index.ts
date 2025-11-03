@@ -64,7 +64,7 @@ serve(async (req) => {
     const { data: profile, error: profileError } = await supabase
       .from('user_profiles')
       .select('ai_credits, star_balance')
-      .eq('user_id', user.id)
+      .eq('id', user.id)
       .single();
 
     if (profileError) {
@@ -101,7 +101,7 @@ serve(async (req) => {
     await supabase
       .from('user_profiles')
       .update({ ai_credits: aiCredits, star_balance: starBalance })
-      .eq('user_id', user.id);
+      .eq('id', user.id);
 
     // 4. LOG REQUEST for audit trail
     console.log(`FlowaIr request from user ${user.id}: "${sanitizedQuery}"`);
