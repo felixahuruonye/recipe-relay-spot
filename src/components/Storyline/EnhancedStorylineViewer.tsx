@@ -367,6 +367,23 @@ export const EnhancedStorylineViewer: React.FC<StorylineViewerProps> = ({ userId
   const handleComment = async () => {
     if (!user || !stories[currentIndex] || !comment.trim()) return;
 
+    // Check if comments are enabled for this story creator
+    const creatorProfile = await supabase
+      .from('user_profiles')
+      .select('story_settings')
+      .eq('id', currentStory.user_id)
+      .single();
+
+    const settings = creatorProfile?.data?.story_settings as any;
+    if (settings && settings.comments_enabled === false) {
+      toast({ 
+        title: 'Comments Disabled', 
+        description: 'The creator has disabled comments for their stories',
+        variant: 'destructive' 
+      });
+      return;
+    }
+
     try {
       const { error } = await supabase
         .from('private_messages')

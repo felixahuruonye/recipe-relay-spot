@@ -208,9 +208,21 @@ const Feed = () => {
 
       if (postsError) throw postsError;
 
-      if (postsData && postsData.length > 0) {
+      // Filter out hidden posts
+      let filteredPosts = postsData || [];
+      if (user) {
+        const { data: hiddenPosts } = await supabase
+          .from('hidden_posts')
+          .select('post_id')
+          .eq('user_id', user.id);
+        
+        const hiddenPostIds = new Set(hiddenPosts?.map(h => h.post_id) || []);
+        filteredPosts = postsData?.filter(post => !hiddenPostIds.has(post.id)) || [];
+      }
+
+      if (filteredPosts && filteredPosts.length > 0) {
         // Get unique user IDs
-        const userIds = [...new Set(postsData.map(post => post.user_id))];
+        const userIds = [...new Set(filteredPosts.map(post => post.user_id))];
         
         // Fetch user profiles
         const { data: usersData, error: usersError } = await supabase
@@ -230,7 +242,7 @@ const Feed = () => {
         const { data: likesData, error: likesError } = await supabase
           .from('post_likes')
           .select('*')
-          .in('post_id', postsData.map(p => p.id));
+          .in('post_id', filteredPosts.map(p => p.id));
 
         if (likesError) throw likesError;
 
@@ -243,12 +255,12 @@ const Feed = () => {
           likesLookup[like.post_id].push(like);
         });
 
-        setPosts(postsData);
+        setPosts(filteredPosts);
         setUsers(usersLookup);
         setPostLikes(likesLookup);
 
         // Load comment counts for these posts
-        await loadCommentCounts(postsData.map((p) => p.id));
+        await loadCommentCounts(filteredPosts.map((p) => p.id));
       } else {
         setPosts([]);
         setUsers({});
