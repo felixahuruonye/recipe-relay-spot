@@ -185,6 +185,68 @@ export type Database = {
         }
         Relationships: []
       }
+      ads_attachments: {
+        Row: {
+          ad_id: string | null
+          attached_at: string | null
+          id: string
+          post_id: string
+          revenue_generated: number | null
+        }
+        Insert: {
+          ad_id?: string | null
+          attached_at?: string | null
+          id?: string
+          post_id: string
+          revenue_generated?: number | null
+        }
+        Update: {
+          ad_id?: string | null
+          attached_at?: string | null
+          id?: string
+          post_id?: string
+          revenue_generated?: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "ads_attachments_ad_id_fkey"
+            columns: ["ad_id"]
+            isOneToOne: false
+            referencedRelation: "ads_table"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      ads_table: {
+        Row: {
+          ad_type: string
+          ad_unit_id: string | null
+          code_snippet: string | null
+          created_at: string | null
+          id: string
+          media_url: string | null
+          status: string | null
+        }
+        Insert: {
+          ad_type: string
+          ad_unit_id?: string | null
+          code_snippet?: string | null
+          created_at?: string | null
+          id?: string
+          media_url?: string | null
+          status?: string | null
+        }
+        Update: {
+          ad_type?: string
+          ad_unit_id?: string | null
+          code_snippet?: string | null
+          created_at?: string | null
+          id?: string
+          media_url?: string | null
+          status?: string | null
+        }
+        Relationships: []
+      }
       balance_history: {
         Row: {
           amount: number
@@ -583,8 +645,10 @@ export type Database = {
           avatar_url: string | null
           created_at: string
           description: string | null
+          entry_fee_stars: number | null
           group_type: string
           id: string
+          indexable: boolean | null
           is_suspended: boolean | null
           member_count: number | null
           name: string
@@ -594,8 +658,10 @@ export type Database = {
           avatar_url?: string | null
           created_at?: string
           description?: string | null
+          entry_fee_stars?: number | null
           group_type?: string
           id?: string
+          indexable?: boolean | null
           is_suspended?: boolean | null
           member_count?: number | null
           name: string
@@ -605,8 +671,10 @@ export type Database = {
           avatar_url?: string | null
           created_at?: string
           description?: string | null
+          entry_fee_stars?: number | null
           group_type?: string
           id?: string
+          indexable?: boolean | null
           is_suspended?: boolean | null
           member_count?: number | null
           name?: string
@@ -632,6 +700,30 @@ export type Database = {
           id?: string
           post_id?: string
           user_id?: string
+        }
+        Relationships: []
+      }
+      hot_topics: {
+        Row: {
+          id: string
+          marked_at: string | null
+          post_id: string
+          reactions_count: number | null
+          views_count: number | null
+        }
+        Insert: {
+          id?: string
+          marked_at?: string | null
+          post_id: string
+          reactions_count?: number | null
+          views_count?: number | null
+        }
+        Update: {
+          id?: string
+          marked_at?: string | null
+          post_id?: string
+          reactions_count?: number | null
+          views_count?: number | null
         }
         Relationships: []
       }
@@ -1404,27 +1496,63 @@ export type Database = {
           },
         ]
       }
-      search_trends: {
+      saved_searches: {
         Row: {
           created_at: string | null
           id: string
-          keyword: string
-          last_search_at: string | null
-          search_count: number | null
+          query: string
+          user_id: string | null
         }
         Insert: {
           created_at?: string | null
           id?: string
-          keyword: string
-          last_search_at?: string | null
-          search_count?: number | null
+          query: string
+          user_id?: string | null
         }
         Update: {
           created_at?: string | null
           id?: string
+          query?: string
+          user_id?: string | null
+        }
+        Relationships: []
+      }
+      search_trends: {
+        Row: {
+          created_at: string | null
+          daily_count: number | null
+          hourly_count: number | null
+          id: string
+          keyword: string
+          last_search_at: string | null
+          monthly_count: number | null
+          search_count: number | null
+          search_date: string | null
+          weekly_count: number | null
+        }
+        Insert: {
+          created_at?: string | null
+          daily_count?: number | null
+          hourly_count?: number | null
+          id?: string
+          keyword: string
+          last_search_at?: string | null
+          monthly_count?: number | null
+          search_count?: number | null
+          search_date?: string | null
+          weekly_count?: number | null
+        }
+        Update: {
+          created_at?: string | null
+          daily_count?: number | null
+          hourly_count?: number | null
+          id?: string
           keyword?: string
           last_search_at?: string | null
+          monthly_count?: number | null
           search_count?: number | null
+          search_date?: string | null
+          weekly_count?: number | null
         }
         Relationships: []
       }
@@ -2129,6 +2257,7 @@ export type Database = {
           last_seen: string | null
           post_count: number | null
           post_count_free: number | null
+          saved_searches: Json | null
           star_balance: number | null
           story_settings: Json | null
           suspended_at: string | null
@@ -2140,6 +2269,7 @@ export type Database = {
           vip_expires_at: string | null
           vip_post_count: number | null
           vip_started_at: string | null
+          voice_credits: number | null
           wallet_balance: number | null
         }
         Insert: {
@@ -2159,6 +2289,7 @@ export type Database = {
           last_seen?: string | null
           post_count?: number | null
           post_count_free?: number | null
+          saved_searches?: Json | null
           star_balance?: number | null
           story_settings?: Json | null
           suspended_at?: string | null
@@ -2170,6 +2301,7 @@ export type Database = {
           vip_expires_at?: string | null
           vip_post_count?: number | null
           vip_started_at?: string | null
+          voice_credits?: number | null
           wallet_balance?: number | null
         }
         Update: {
@@ -2189,6 +2321,7 @@ export type Database = {
           last_seen?: string | null
           post_count?: number | null
           post_count_free?: number | null
+          saved_searches?: Json | null
           star_balance?: number | null
           story_settings?: Json | null
           suspended_at?: string | null
@@ -2200,6 +2333,7 @@ export type Database = {
           vip_expires_at?: string | null
           vip_post_count?: number | null
           vip_started_at?: string | null
+          voice_credits?: number | null
           wallet_balance?: number | null
         }
         Relationships: []
@@ -2558,6 +2692,36 @@ export type Database = {
         }
         Relationships: []
       }
+      wallet_history: {
+        Row: {
+          amount: number
+          created_at: string | null
+          currency: string | null
+          id: number
+          meta: Json | null
+          type: string
+          user_id: string | null
+        }
+        Insert: {
+          amount: number
+          created_at?: string | null
+          currency?: string | null
+          id?: number
+          meta?: Json | null
+          type: string
+          user_id?: string | null
+        }
+        Update: {
+          amount?: number
+          created_at?: string | null
+          currency?: string | null
+          id?: number
+          meta?: Json | null
+          type?: string
+          user_id?: string | null
+        }
+        Relationships: []
+      }
       website_content: {
         Row: {
           content: string
@@ -2695,6 +2859,7 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      deduct_voice_credits: { Args: { p_user_id: string }; Returns: Json }
       execute_admin_sql: { Args: { query: string }; Returns: Json }
       get_user_device_info: {
         Args: { user_agent_string: string }

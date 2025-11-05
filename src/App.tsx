@@ -18,6 +18,8 @@ import Admin from "./pages/Admin";
 import Notifications from "./pages/Notifications";
 import NotFound from "./pages/NotFound";
 import Settings from "./pages/Settings";
+import StarMarketplace from "./pages/StarMarketplace";
+import VIPSubscription from "./pages/VIPSubscription";
 
 const queryClient = new QueryClient();
 
@@ -95,6 +97,16 @@ const App = () => (
               </ProtectedRoute>
             } />
             <Route path="/admin" element={<Admin />} />
+            <Route path="/star-marketplace" element={
+              <ProtectedRoute>
+                <StarMarketplace />
+              </ProtectedRoute>
+            } />
+            <Route path="/vip-subscription" element={
+              <ProtectedRoute>
+                <VIPSubscription />
+              </ProtectedRoute>
+            } />
             {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
             <Route path="*" element={<NotFound />} />
             </Routes>

@@ -13,7 +13,7 @@ import { useToast } from '@/hooks/use-toast';
 import { useNavigate } from 'react-router-dom';
 import CreatePost from '@/components/Posts/CreatePost';
 import ProfileSetup from '@/components/Profile/ProfileSetup';
-import { AdvancedSearchBar } from '@/components/Search/AdvancedSearchBar';
+import { ComprehensiveSearchBar } from '@/components/Search/ComprehensiveSearchBar';
 import { CommentSection } from '@/components/Feed/CommentSection';
 import { VideoPlayer } from '@/components/Feed/VideoPlayer';
 import { ShareMenu } from '@/components/Feed/ShareMenu';
@@ -513,7 +513,7 @@ const Feed = () => {
         </div>
 
         {/* Search Bar */}
-        <AdvancedSearchBar />
+        <ComprehensiveSearchBar />
 
         {/* Stories Strip */}
         <section aria-label="Stories" className="-mx-2">
