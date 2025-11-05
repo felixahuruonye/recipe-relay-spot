@@ -653,6 +653,7 @@ export type Database = {
           member_count: number | null
           name: string
           owner_id: string
+          slug: string | null
         }
         Insert: {
           avatar_url?: string | null
@@ -666,6 +667,7 @@ export type Database = {
           member_count?: number | null
           name: string
           owner_id: string
+          slug?: string | null
         }
         Update: {
           avatar_url?: string | null
@@ -679,6 +681,7 @@ export type Database = {
           member_count?: number | null
           name?: string
           owner_id?: string
+          slug?: string | null
         }
         Relationships: []
       }
@@ -1239,6 +1242,7 @@ export type Database = {
           created_at: string
           disabled: boolean | null
           featured_rank: number | null
+          group_id: string | null
           id: string
           likes_count: number | null
           media_type: string | null
@@ -1248,8 +1252,11 @@ export type Database = {
           reports_count: number | null
           requires_approval: boolean | null
           star_price: number | null
+          star_price_paid: number | null
           status: string
+          thumbnail_url: string | null
           title: string
+          uploader_id: string | null
           user_id: string
           view_count: number | null
         }
@@ -1264,6 +1271,7 @@ export type Database = {
           created_at?: string
           disabled?: boolean | null
           featured_rank?: number | null
+          group_id?: string | null
           id?: string
           likes_count?: number | null
           media_type?: string | null
@@ -1273,8 +1281,11 @@ export type Database = {
           reports_count?: number | null
           requires_approval?: boolean | null
           star_price?: number | null
+          star_price_paid?: number | null
           status?: string
+          thumbnail_url?: string | null
           title: string
+          uploader_id?: string | null
           user_id: string
           view_count?: number | null
         }
@@ -1289,6 +1300,7 @@ export type Database = {
           created_at?: string
           disabled?: boolean | null
           featured_rank?: number | null
+          group_id?: string | null
           id?: string
           likes_count?: number | null
           media_type?: string | null
@@ -1298,12 +1310,23 @@ export type Database = {
           reports_count?: number | null
           requires_approval?: boolean | null
           star_price?: number | null
+          star_price_paid?: number | null
           status?: string
+          thumbnail_url?: string | null
           title?: string
+          uploader_id?: string | null
           user_id?: string
           view_count?: number | null
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "posts_group_id_fkey"
+            columns: ["group_id"]
+            isOneToOne: false
+            referencedRelation: "groups"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       private_messages: {
         Row: {
@@ -1619,6 +1642,84 @@ export type Database = {
           stars?: number
           status?: string | null
           updated_at?: string | null
+        }
+        Relationships: []
+      }
+      sticker_usage: {
+        Row: {
+          created_at: string | null
+          id: string
+          sticker_id: string | null
+          story_id: string | null
+          user_id: string | null
+        }
+        Insert: {
+          created_at?: string | null
+          id?: string
+          sticker_id?: string | null
+          story_id?: string | null
+          user_id?: string | null
+        }
+        Update: {
+          created_at?: string | null
+          id?: string
+          sticker_id?: string | null
+          story_id?: string | null
+          user_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "sticker_usage_sticker_id_fkey"
+            columns: ["sticker_id"]
+            isOneToOne: false
+            referencedRelation: "stickers"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "sticker_usage_story_id_fkey"
+            columns: ["story_id"]
+            isOneToOne: false
+            referencedRelation: "user_storylines"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      stickers: {
+        Row: {
+          created_at: string | null
+          creator_id: string | null
+          id: string
+          image_url: string
+          is_featured: boolean | null
+          star_price: number | null
+          status: string | null
+          tags: string[] | null
+          title: string
+          usage_count: number | null
+        }
+        Insert: {
+          created_at?: string | null
+          creator_id?: string | null
+          id?: string
+          image_url: string
+          is_featured?: boolean | null
+          star_price?: number | null
+          status?: string | null
+          tags?: string[] | null
+          title: string
+          usage_count?: number | null
+        }
+        Update: {
+          created_at?: string | null
+          creator_id?: string | null
+          id?: string
+          image_url?: string
+          is_featured?: boolean | null
+          star_price?: number | null
+          status?: string | null
+          tags?: string[] | null
+          title?: string
+          usage_count?: number | null
         }
         Relationships: []
       }
@@ -2254,6 +2355,7 @@ export type Database = {
           id: string
           is_online: boolean | null
           is_suspended: boolean | null
+          is_vip: boolean | null
           last_seen: string | null
           post_count: number | null
           post_count_free: number | null
@@ -2262,6 +2364,7 @@ export type Database = {
           story_settings: Json | null
           suspended_at: string | null
           suspension_reason: string | null
+          total_earned: number | null
           total_reactions: number | null
           updated_at: string
           username: string
@@ -2286,6 +2389,7 @@ export type Database = {
           id: string
           is_online?: boolean | null
           is_suspended?: boolean | null
+          is_vip?: boolean | null
           last_seen?: string | null
           post_count?: number | null
           post_count_free?: number | null
@@ -2294,6 +2398,7 @@ export type Database = {
           story_settings?: Json | null
           suspended_at?: string | null
           suspension_reason?: string | null
+          total_earned?: number | null
           total_reactions?: number | null
           updated_at?: string
           username: string
@@ -2318,6 +2423,7 @@ export type Database = {
           id?: string
           is_online?: boolean | null
           is_suspended?: boolean | null
+          is_vip?: boolean | null
           last_seen?: string | null
           post_count?: number | null
           post_count_free?: number | null
@@ -2326,6 +2432,7 @@ export type Database = {
           story_settings?: Json | null
           suspended_at?: string | null
           suspension_reason?: string | null
+          total_earned?: number | null
           total_reactions?: number | null
           updated_at?: string
           username?: string
@@ -2692,6 +2799,60 @@ export type Database = {
         }
         Relationships: []
       }
+      view_transactions: {
+        Row: {
+          created_at: string | null
+          id: number
+          platform_share: number
+          post_id: string | null
+          star_price: number
+          story_id: string | null
+          uploader_id: string | null
+          uploader_share: number
+          viewer_id: string | null
+          viewer_share: number
+        }
+        Insert: {
+          created_at?: string | null
+          id?: number
+          platform_share: number
+          post_id?: string | null
+          star_price: number
+          story_id?: string | null
+          uploader_id?: string | null
+          uploader_share: number
+          viewer_id?: string | null
+          viewer_share: number
+        }
+        Update: {
+          created_at?: string | null
+          id?: number
+          platform_share?: number
+          post_id?: string | null
+          star_price?: number
+          story_id?: string | null
+          uploader_id?: string | null
+          uploader_share?: number
+          viewer_id?: string | null
+          viewer_share?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "view_transactions_post_id_fkey"
+            columns: ["post_id"]
+            isOneToOne: false
+            referencedRelation: "posts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "view_transactions_story_id_fkey"
+            columns: ["story_id"]
+            isOneToOne: false
+            referencedRelation: "user_storylines"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       wallet_history: {
         Row: {
           amount: number
@@ -2875,6 +3036,20 @@ export type Database = {
       increment_checkin_balance: {
         Args: { amount_param: number; user_id_param: string }
         Returns: undefined
+      }
+      join_group_with_fee: {
+        Args: { p_entry_fee: number; p_group_id: string; p_user_id: string }
+        Returns: Json
+      }
+      process_paid_view: {
+        Args: {
+          p_content_id: string
+          p_content_type: string
+          p_star_price: number
+          p_uploader_id: string
+          p_viewer_id: string
+        }
+        Returns: Json
       }
       process_story_view: {
         Args: { p_story_id: string; p_viewer_id: string }

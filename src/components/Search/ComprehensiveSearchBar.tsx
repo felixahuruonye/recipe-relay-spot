@@ -53,8 +53,11 @@ export const ComprehensiveSearchBar = () => {
   }, []);
 
   useEffect(() => {
-    if (query.length >= 2) {
-      performSearch();
+    if (query.length >= 2 || category !== 'All') {
+      const debounce = setTimeout(() => {
+        performSearch();
+      }, 300);
+      return () => clearTimeout(debounce);
     } else {
       setResults([]);
       setNewPosts([]);
@@ -261,6 +264,9 @@ export const ComprehensiveSearchBar = () => {
             onChange={(e) => setQuery(e.target.value)}
             placeholder="Search posts, stories, trends..."
             className="pl-10 pr-20"
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') performSearch();
+            }}
           />
           {query && (
             <Button
@@ -292,6 +298,10 @@ export const ComprehensiveSearchBar = () => {
             ))}
           </SelectContent>
         </Select>
+
+        <Button onClick={performSearch} disabled={isSearching} className="gap-2">
+          {isSearching ? 'Searching...' : 'Search'}
+        </Button>
       </div>
 
       {/* Voice Credits Indicator */}

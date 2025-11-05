@@ -12,6 +12,8 @@ import Feed from "./pages/Feed";
 import Chat from "./pages/Chat";
 import Groups from "./pages/Groups";
 import Marketplace from "./pages/Marketplace";
+import Stickers from "./pages/Stickers";
+import { WalletBalance } from "./components/Wallet/WalletBalance";
 import Explore from "./pages/Explore";
 import Profile from "./pages/Profile";
 import Admin from "./pages/Admin";
@@ -105,6 +107,16 @@ const App = () => (
             <Route path="/vip-subscription" element={
               <ProtectedRoute>
                 <VIPSubscription />
+              </ProtectedRoute>
+            } />
+            <Route path="/stickers" element={
+              <ProtectedRoute>
+                <Stickers />
+              </ProtectedRoute>
+            } />
+            <Route path="/wallet" element={
+              <ProtectedRoute>
+                <div className="p-4"><WalletBalance /></div>
               </ProtectedRoute>
             } />
             {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
