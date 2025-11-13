@@ -22,6 +22,7 @@ import NotFound from "./pages/NotFound";
 import Settings from "./pages/Settings";
 import StarMarketplace from "./pages/StarMarketplace";
 import VIPSubscription from "./pages/VIPSubscription";
+import SavedSearches from "./pages/SavedSearches";
 
 const queryClient = new QueryClient();
 
@@ -112,6 +113,11 @@ const App = () => (
             <Route path="/stickers" element={
               <ProtectedRoute>
                 <Stickers />
+              </ProtectedRoute>
+            } />
+            <Route path="/saved-searches" element={
+              <ProtectedRoute>
+                <SavedSearches />
               </ProtectedRoute>
             } />
             <Route path="/wallet" element={

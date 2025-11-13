@@ -13,7 +13,7 @@ import { useToast } from '@/hooks/use-toast';
 import { useNavigate } from 'react-router-dom';
 import CreatePost from '@/components/Posts/CreatePost';
 import ProfileSetup from '@/components/Profile/ProfileSetup';
-import { ComprehensiveSearchBar } from '@/components/Search/ComprehensiveSearchBar';
+import NewSearchBar from '@/components/Search/NewSearchBar';
 import { CommentSection } from '@/components/Feed/CommentSection';
 import { VideoPlayer } from '@/components/Feed/VideoPlayer';
 import { ShareMenu } from '@/components/Feed/ShareMenu';
@@ -70,6 +70,7 @@ const Feed = () => {
   const [showStoryViewer, setShowStoryViewer] = useState(false);
   const [showCreateStory, setShowCreateStory] = useState(false);
   const [currentUserProfile, setCurrentUserProfile] = useState<any>(null);
+  const [isCreatePostOpen, setisCreatePostOpen] = useState(false);
   const { toast } = useToast();
 
   useEffect(() => {
@@ -519,7 +520,7 @@ const Feed = () => {
         </div>
 
         {/* Search Bar */}
-        <ComprehensiveSearchBar />
+        <NewSearchBar />
 
         {/* Stories Strip */}
         <section aria-label="Stories" className="-mx-2">
@@ -553,7 +554,11 @@ const Feed = () => {
           </div>
         </section>
 
-        <CreatePost onPostCreated={fetchPosts} />
+        <CreatePost
+          onPostCreated={fetchPosts}
+          isOpen={isCreatePostOpen}
+          onOpenChange={setisCreatePostOpen}
+        />
       </div>
 
       {/* View Toggle */}

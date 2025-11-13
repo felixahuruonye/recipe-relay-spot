@@ -13,11 +13,18 @@ import { useToast } from '@/hooks/use-toast';
 
 interface CreatePostProps {
   onPostCreated?: () => void;
+  postToEdit?: any;
+  isOpen?: boolean;
+  onOpenChange?: (isOpen: boolean) => void;
 }
 
-const CreatePost: React.FC<CreatePostProps> = ({ onPostCreated }) => {
+const CreatePost: React.FC<CreatePostProps> = ({
+  onPostCreated,
+  postToEdit,
+  isOpen,
+  onOpenChange
+}) => {
   const { user } = useAuth();
-  const [open, setOpen] = useState(false);
   const [loading, setLoading] = useState(false);
   const [title, setTitle] = useState('');
   const [body, setBody] = useState('');
@@ -28,19 +35,22 @@ const CreatePost: React.FC<CreatePostProps> = ({ onPostCreated }) => {
   const { toast } = useToast();
 
   useEffect(() => {
-    // Check if there's an edit post in sessionStorage
-    const editData = sessionStorage.getItem('editPost');
-    if (editData) {
-      const post = JSON.parse(editData);
-      setTitle(post.title);
-      setBody(post.body);
-      setCategory(post.category);
-      setEditPostId(post.id);
-      setMediaPreviews(post.media_urls || []);
-      setOpen(true);
-      sessionStorage.removeItem('editPost');
+    if (postToEdit) {
+      setTitle(postToEdit.title);
+      setBody(postToEdit.body);
+      setCategory(postToEdit.category);
+      setEditPostId(postToEdit.id);
+      setMediaPreviews(postToEdit.media_urls || []);
+    } else {
+      // Reset form when there's no post to edit
+      setTitle('');
+      setBody('');
+      setCategory('');
+      setEditPostId(null);
+      setMediaPreviews([]);
+      setMediaFiles([]);
     }
-  }, []);
+  }, [postToEdit]);
 
   const categories = [
     'Jollof Rice', 'Desserts', 'Equipment', 'For Sale', 'Tips & Tricks',
@@ -182,7 +192,7 @@ const CreatePost: React.FC<CreatePostProps> = ({ onPostCreated }) => {
       setMediaFiles([]);
       setMediaPreviews([]);
       setEditPostId(null);
-      setOpen(false);
+      if (onOpenChange) onOpenChange(false);
       
       if (onPostCreated) {
         onPostCreated();
@@ -200,16 +210,18 @@ const CreatePost: React.FC<CreatePostProps> = ({ onPostCreated }) => {
   };
 
   return (
-    <Dialog open={open} onOpenChange={setOpen}>
-      <DialogTrigger asChild>
-        <Button className="w-full" size="lg">
-          <Plus className="w-4 h-4 mr-2" />
-          Create Post
-        </Button>
-      </DialogTrigger>
+    <Dialog open={isOpen} onOpenChange={onOpenChange}>
+      {!postToEdit && (
+        <DialogTrigger asChild>
+          <Button className="w-full" size="lg">
+            <Plus className="w-4 h-4 mr-2" />
+            Create Post
+          </Button>
+        </DialogTrigger>
+      )}
       <DialogContent className="sm:max-w-2xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>
-          <DialogTitle>Create New Post</DialogTitle>
+          <DialogTitle>{editPostId ? 'Edit Post' : 'Create New Post'}</DialogTitle>
         </DialogHeader>
         
         <form onSubmit={handleSubmit} className="space-y-4">
@@ -327,7 +339,7 @@ const CreatePost: React.FC<CreatePostProps> = ({ onPostCreated }) => {
             <Button
               type="button"
               variant="outline"
-              onClick={() => setOpen(false)}
+              onClick={() => onOpenChange && onOpenChange(false)}
               disabled={loading}
             >
               Cancel

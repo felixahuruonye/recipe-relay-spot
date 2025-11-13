@@ -19,6 +19,7 @@ import {
 import { useState } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
+import CreatePost from '@/components/Posts/CreatePost';
 import { useToast } from '@/hooks/use-toast';
 import { useNavigate } from 'react-router-dom';
 
@@ -32,6 +33,8 @@ export const PostMenu = ({ postId, postOwnerId, onPostDeleted }: PostMenuProps) 
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
   const [showReportDialog, setShowReportDialog] = useState(false);
   const [reportReason, setReportReason] = useState('');
+  const [isEditing, setIsEditing] = useState(false);
+  const [postToEdit, setPostToEdit] = useState<any>(null);
   const { user } = useAuth();
   const { toast } = useToast();
   const navigate = useNavigate();
@@ -39,7 +42,6 @@ export const PostMenu = ({ postId, postOwnerId, onPostDeleted }: PostMenuProps) 
   const isOwner = user?.id === postOwnerId;
 
   const handleEdit = async () => {
-    // Fetch post data and open create post dialog with edit mode
     const { data: post } = await supabase
       .from('posts')
       .select('*')
@@ -47,9 +49,8 @@ export const PostMenu = ({ postId, postOwnerId, onPostDeleted }: PostMenuProps) 
       .single();
     
     if (post) {
-      // Store post data in sessionStorage to be picked up by CreatePost
-      sessionStorage.setItem('editPost', JSON.stringify(post));
-      window.location.reload(); // Reload to trigger CreatePost to open with edit data
+      setPostToEdit(post);
+      setIsEditing(true);
     }
   };
 
@@ -115,6 +116,16 @@ export const PostMenu = ({ postId, postOwnerId, onPostDeleted }: PostMenuProps) 
 
   return (
     <>
+      {isEditing && (
+        <CreatePost
+          isOpen={isEditing}
+          onOpenChange={setIsEditing}
+          postToEdit={postToEdit}
+          onPostCreated={() => {
+            if (onPostDeleted) onPostDeleted();
+          }}
+        />
+      )}
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
           <Button variant="ghost" size="icon">
