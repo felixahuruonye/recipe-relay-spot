@@ -293,7 +293,9 @@ const NewSearchBar = () => {
         />
       )}
 
-      {flowaIrResponse && <FlowaIr {...flowaIrResponse} />}
+      {flowaIrResponse && typeof flowaIrResponse === 'object' && (
+        <FlowaIr {...flowaIrResponse} />
+      )}
 
       {searchResults.length === 0 && query.length > 2 && !isSearching && !flowaIrResponse && (
         <div className="text-center p-6 bg-card rounded-lg border">

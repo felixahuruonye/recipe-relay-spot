@@ -5,29 +5,49 @@ import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { ThumbsUp } from 'lucide-react';
 
 interface CommunityInsightProps {
-  recommendations: any[];
+  recommendations?: any[];
 }
 
-const CommunityInsight: React.FC<CommunityInsightProps> = ({ recommendations }) => {
+const CommunityInsight: React.FC<CommunityInsightProps> = ({ recommendations = [] }) => {
   const [topComments, setTopComments] = useState<any[]>([]);
 
   useEffect(() => {
-    if (recommendations.length > 0) {
+    if (Array.isArray(recommendations) && recommendations.length > 0) {
       loadTopComments();
     }
   }, [recommendations]);
 
   const loadTopComments = async () => {
-    const postIds = recommendations.map((r) => r.id);
-    const { data } = await supabase
-      .from('post_comments')
-      .select('*, user_profiles(username, avatar_url)')
-      .in('post_id', postIds)
-      .order('likes_count', { ascending: false })
-      .limit(5);
+    if (!Array.isArray(recommendations) || recommendations.length === 0) return;
+    
+    const postIds = recommendations
+      .filter((r) => r?.id)
+      .map((r) => r.id);
+    
+    if (postIds.length === 0) return;
 
-    if (data) setTopComments(data);
+    try {
+      const { data, error } = await supabase
+        .from('post_comments')
+        .select('*, user_profiles(username, avatar_url)')
+        .in('post_id', postIds)
+        .order('created_at', { ascending: false })
+        .limit(5);
+
+      if (error) {
+        console.error('Error loading comments:', error);
+        return;
+      }
+
+      if (data) setTopComments(data);
+    } catch (err) {
+      console.error('Error in loadTopComments:', err);
+    }
   };
+
+  if (!Array.isArray(recommendations) || recommendations.length === 0) {
+    return null;
+  }
 
   return (
     <Card>
@@ -37,24 +57,30 @@ const CommunityInsight: React.FC<CommunityInsightProps> = ({ recommendations }) 
       <CardContent>
         {topComments.length > 0 ? (
           <div className="space-y-4">
-            {topComments.map((comment) => (
-              <div key={comment.id} className="flex items-start gap-4">
-                <Avatar>
-                  <AvatarImage src={comment.user_profiles.avatar_url} />
-                  <AvatarFallback>{comment.user_profiles.username.charAt(0)}</AvatarFallback>
-                </Avatar>
-                <div className="flex-1">
-                  <div className="flex items-center justify-between">
-                    <p className="font-semibold">{comment.user_profiles.username}</p>
-                    <div className="flex items-center gap-1 text-xs text-muted-foreground">
-                      <ThumbsUp className="w-4 h-4" />
-                      <span>{comment.likes_count}</span>
+            {topComments.map((comment) => {
+              const userProfile = comment?.user_profiles;
+              const username = userProfile?.username || 'Anonymous';
+              const avatarUrl = userProfile?.avatar_url;
+              
+              return (
+                <div key={comment.id} className="flex items-start gap-4">
+                  <Avatar>
+                    <AvatarImage src={avatarUrl} />
+                    <AvatarFallback>{username.charAt(0).toUpperCase()}</AvatarFallback>
+                  </Avatar>
+                  <div className="flex-1">
+                    <div className="flex items-center justify-between">
+                      <p className="font-semibold">{username}</p>
+                      <div className="flex items-center gap-1 text-xs text-muted-foreground">
+                        <ThumbsUp className="w-4 h-4" />
+                        <span>{comment.likes_count || 0}</span>
+                      </div>
                     </div>
+                    <p className="text-sm">{comment.content}</p>
                   </div>
-                  <p className="text-sm">{comment.content}</p>
                 </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         ) : (
           <p className="text-muted-foreground">No comments yet.</p>
