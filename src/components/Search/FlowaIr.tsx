@@ -1,4 +1,5 @@
-import React from 'react';
+import React, { useState } from 'react';
+import { supabase } from '@/integrations/supabase/client';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { useNavigate } from 'react-router-dom';
@@ -28,6 +29,7 @@ const FlowaIr: React.FC<FlowaIrProps> = ({ summary, recommendations, trending, n
   };
 
   const handleCreatePost = () => {
+    if (!newTopic) return;
     navigate(
       `/?create=true&title=${encodeURIComponent(
         newTopic.title
@@ -47,7 +49,6 @@ const FlowaIr: React.FC<FlowaIrProps> = ({ summary, recommendations, trending, n
         </div>
         <div>
           <h4 className="font-semibold">You may also like</h4>
-          {/* Recommendations will go here */}
           <div className="flex gap-2 mt-2">
             <Button size="sm" onClick={() => generateContent('name')}>Generate Name</Button>
             <Button size="sm" onClick={() => generateContent('title')}>Generate Title</Button>
@@ -61,7 +62,6 @@ const FlowaIr: React.FC<FlowaIrProps> = ({ summary, recommendations, trending, n
         </div>
         <div>
           <h4 className="font-semibold">People are also searching for...</h4>
-          {/* Trending searches will go here */}
         </div>
         {newTopic && (
           <div>

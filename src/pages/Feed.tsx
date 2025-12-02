@@ -437,10 +437,29 @@ const Feed = () => {
       if (!existingView) {
         // If paid content and not uploader, process earning split atomically (RPC)
         if (post.star_price && post.star_price > 0 && post.user_id !== user.id) {
-          await (supabase as any).rpc('process_post_view', { p_post_id: post.id, p_viewer_id: user.id });
+          const { error: rpcError } = await supabase.rpc('process_post_view', { 
+            p_post_id: post.id, 
+            p_viewer_id: user.id 
+          });
+          
+          if (rpcError) {
+            // Check if it's insufficient stars error
+            if (rpcError.message?.toLowerCase().includes('insufficient') || 
+                rpcError.message?.toLowerCase().includes('stars')) {
+              toast({
+                title: "Insufficient Stars",
+                description: `You need ${post.star_price} stars to view this content. Earn stars by completing tasks!`,
+                variant: "destructive"
+              });
+            } else {
+              console.error('RPC error:', rpcError);
+            }
+            // Don't record the view if payment failed
+            return;
+          }
         }
 
-        // Record the view
+        // Record the view only if payment succeeded (or no payment needed)
         await supabase.from('post_views').insert({
           post_id: post.id,
           user_id: user.id,

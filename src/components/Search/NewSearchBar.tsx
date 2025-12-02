@@ -4,14 +4,8 @@ import { useAuth } from '@/contexts/AuthContext';
 import { useToast } from '@/hooks/use-toast';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent } from '@/components/ui/card';
-import { Badge } from '@/components/ui/badge';
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Search, TrendingUp, Flame, Mic, Bookmark, Plus, X, Send } from 'lucide-react';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { useAuth } from '@/contexts/AuthContext';
-import { useToast } from '@/hooks/use-toast';
+import { X, Mic, Send, Bookmark } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import TrendingNow from './TrendingNow';
 import SearchResults from './SearchResults';
@@ -74,45 +68,40 @@ const NewSearchBar = () => {
 
       // Search posts
       if (category === 'All' || category === 'Posts') {
-      let postsQuery = supabase.from('posts').select('*, view_count, likes_count');
-      if (q.length > 0) {
-        postsQuery = postsQuery.or(`title.ilike.%${q}%,body.ilike.%${q}%`);
-      }
-      const { data: posts } = await postsQuery.limit(10);
-      if (posts) {
-        const trendingKeywords = trending.map((t: any) => t.keyword);
-        allResults = allResults.concat(
-          posts.map(p => ({
-            ...p,
-            type: 'post',
-            is_trending: trendingKeywords.some((k: string) =>
-              p.title.toLowerCase().includes(k.toLowerCase())
-            ),
-            is_new: new Date(p.created_at) > new Date(Date.now() - 24 * 60 * 60 * 1000),
-            is_hot_topic: hotTopics.some((ht: any) => ht.post_id === p.id),
-          }))
-        );
-      }
-    }
-
-    // Search users
-    if (category === 'All' || category === 'Users') {
-      if (q.length > 0) {
-        const { data: users } = await supabase
-          .from('user_profiles')
-          .select('id, username, avatar_url')
-          .ilike('username', `%${q}%`)
-          .limit(5);
-        if (users) {
-          allResults = allResults.concat(users.map(u => ({ ...u, type: 'user' })));
+        let postsQuery = supabase.from('posts').select('*, view_count, likes_count');
+        if (q.length > 0) {
+          postsQuery = postsQuery.or(`title.ilike.%${q}%,body.ilike.%${q}%`);
+        }
+        const { data: posts } = await postsQuery.limit(10);
+        if (posts) {
+          const trendingKeywords = trending.map((t: any) => t.keyword);
+          allResults = allResults.concat(
+            posts.map(p => ({
+              ...p,
+              type: 'post',
+              is_trending: trendingKeywords.some((k: string) =>
+                p.title.toLowerCase().includes(k.toLowerCase())
+              ),
+              is_new: new Date(p.created_at) > new Date(Date.now() - 24 * 60 * 60 * 1000),
+              is_hot_topic: hotTopics.some((ht: any) => ht.post_id === p.id),
+            }))
+          );
         }
       }
-    }
 
-    // Search marketplace (placeholder)
-    if (category === 'All' || category === 'Marketplace') {
-      // Placeholder - replace with actual marketplace search
-    }
+      // Search users
+      if (category === 'All' || category === 'Users') {
+        if (q.length > 0) {
+          const { data: users } = await supabase
+            .from('user_profiles')
+            .select('id, username, avatar_url')
+            .ilike('username', `%${q}%`)
+            .limit(5);
+          if (users) {
+            allResults = allResults.concat(users.map(u => ({ ...u, type: 'user' })));
+          }
+        }
+      }
 
       setSearchResults(allResults);
     } catch (error) {
@@ -169,27 +158,8 @@ const NewSearchBar = () => {
 
   const handleFlowaIr = async () => {
     if (!user) return;
-    const { data: profile } = await supabase
-      .from('user_profiles')
-      .select('flowair_credits, star_balance')
-      .eq('id', user.id)
-      .single();
-
-    if (profile) {
-      if (profile.flowair_credits > 0) {
-        await supabase.rpc('deduct_flowair_credits', { p_user_id: user.id });
-        callFlowaIr(query);
-      } else if (profile.star_balance >= 100) {
-        await supabase.rpc('recharge_flowair_credits', { p_user_id: user.id });
-        callFlowaIr(query);
-      } else {
-        toast({
-          title: "Out of AI Credits",
-          description: "You need 100 stars to recharge 250 FlowaIr credits",
-          variant: "destructive"
-        });
-      }
-    }
+    // Call FlowaIr edge function directly - it handles credit checks internally
+    callFlowaIr(query);
   };
 
   const callFlowaIr = async (item: any) => {
@@ -199,12 +169,29 @@ const NewSearchBar = () => {
         body: { item }
       });
 
-      if (error) throw error;
+      if (error) {
+        // Check if it's a credit error
+        if (error.message?.includes('402') || error.message?.includes('credits')) {
+          toast({
+            title: "Out of AI Credits",
+            description: "You need more stars to use FlowaIr. Earn stars by viewing content!",
+            variant: "destructive"
+          });
+        } else {
+          throw error;
+        }
+        return;
+      }
       if (data) {
         setFlowaIrResponse(data);
       }
     } catch (error: any) {
       console.error('FlowaIr error:', error);
+      toast({
+        title: "FlowaIr Error",
+        description: "Failed to get AI response. Please try again.",
+        variant: "destructive"
+      });
     }
   };
 
@@ -279,7 +266,7 @@ const NewSearchBar = () => {
         </div>
       )}
     </div>
-  )
-}
+  );
+};
 
 export default NewSearchBar;
