@@ -162,11 +162,11 @@ const NewSearchBar = () => {
     callFlowaIr(query);
   };
 
-  const callFlowaIr = async (item: any) => {
+  const callFlowaIr = async (searchQuery: string) => {
     setSearchResults([]);
     try {
       const { data, error } = await supabase.functions.invoke('flowair-search', {
-        body: { item }
+        body: { query: searchQuery }
       });
 
       if (error) {
