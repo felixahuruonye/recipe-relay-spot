@@ -3,19 +3,18 @@ import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-
 import { Skeleton } from '@/components/ui/skeleton';
 
 interface SearchResultsProps {
-  results: any[];
+  results?: any[];
   onSelect: (item: any) => void;
-  isLoading: boolean;
+  isLoading?: boolean;
 }
 
-const SearchResults: React.FC<SearchResultsProps> = ({ results, onSelect, isLoading }) => {
+const SearchResults: React.FC<SearchResultsProps> = ({ results = [], onSelect, isLoading = false }) => {
   if (isLoading) {
     return (
-      <Card className="absolute top-full mt-2 w-full z-10">
+      <Card>
         <CardContent className="p-4 space-y-4">
           <Skeleton className="h-8 w-full" />
           <Skeleton className="h-12 w-full" />
@@ -25,80 +24,105 @@ const SearchResults: React.FC<SearchResultsProps> = ({ results, onSelect, isLoad
     );
   }
 
-  const posts = results.filter((item) => item.type === 'post');
-  const users = results.filter((item) => item.type === 'user');
-  const marketplaceItems = results.filter((item) => item.type === 'marketplace');
+  if (!Array.isArray(results) || results.length === 0) {
+    return null;
+  }
+
+  const posts = results.filter((item) => item?.type === 'post');
+  const users = results.filter((item) => item?.type === 'user');
+  const marketplaceItems = results.filter((item) => item?.type === 'marketplace');
 
   return (
-    <Card className="absolute top-full mt-2 w-full z-10">
+    <Card>
       <CardContent className="p-4">
         <Tabs defaultValue="posts">
           <TabsList className="grid w-full grid-cols-3">
-            <TabsTrigger value="posts">Posts</TabsTrigger>
-            <TabsTrigger value="users">Users</TabsTrigger>
-            <TabsTrigger value="marketplace">Marketplace</TabsTrigger>
+            <TabsTrigger value="posts">Posts ({posts.length})</TabsTrigger>
+            <TabsTrigger value="users">Users ({users.length})</TabsTrigger>
+            <TabsTrigger value="marketplace">Marketplace ({marketplaceItems.length})</TabsTrigger>
           </TabsList>
-          <TabsContent value="posts">
-            {posts.map((post) => (
-              <div
-                key={post.id}
-                className="flex items-center gap-4 p-2 cursor-pointer hover:bg-muted"
-                onClick={() => onSelect(post)}
-              >
-                <img
-                  src={post.thumbnail}
-                  alt={post.title}
-                  className="w-12 h-12 rounded-md object-cover"
-                />
-                <div>
-                  <h4 className="font-semibold">{post.title}</h4>
-                  <p className="text-sm text-muted-foreground">{post.preview}</p>
-                  <div className="flex items-center gap-2 mt-2">
-                    {post.is_hot_topic && <Badge variant="destructive">Hot Topic</Badge>}
-                    {post.is_trending && <Badge variant="secondary">Trending</Badge>}
-                    {post.is_new && <Badge>New</Badge>}
-                    <span className="text-xs text-muted-foreground">{post.view_count} views</span>
-                    <span className="text-xs text-muted-foreground">{post.likes_count} reactions</span>
+          <TabsContent value="posts" className="max-h-64 overflow-y-auto">
+            {posts.length === 0 ? (
+              <p className="text-sm text-muted-foreground p-2">No posts found</p>
+            ) : (
+              posts.map((post) => (
+                <div
+                  key={post.id}
+                  className="flex items-center gap-4 p-2 cursor-pointer hover:bg-muted rounded-md"
+                  onClick={() => onSelect(post)}
+                >
+                  {(post.thumbnail_url || post.thumbnail) && (
+                    <img
+                      src={post.thumbnail_url || post.thumbnail}
+                      alt={post.title || 'Post'}
+                      className="w-12 h-12 rounded-md object-cover"
+                    />
+                  )}
+                  <div className="flex-1 min-w-0">
+                    <h4 className="font-semibold truncate">{post.title || 'Untitled'}</h4>
+                    {post.body && (
+                      <p className="text-sm text-muted-foreground truncate">{post.body.substring(0, 60)}...</p>
+                    )}
+                    <div className="flex items-center gap-2 mt-1 flex-wrap">
+                      {post.is_hot_topic && <Badge variant="destructive">Hot Topic</Badge>}
+                      {post.is_trending && <Badge variant="secondary">Trending</Badge>}
+                      {post.is_new && <Badge>New</Badge>}
+                      <span className="text-xs text-muted-foreground">{post.view_count || 0} views</span>
+                      <span className="text-xs text-muted-foreground">{post.likes_count || 0} reactions</span>
+                    </div>
                   </div>
                 </div>
-              </div>
-            ))}
+              ))
+            )}
           </TabsContent>
-          <TabsContent value="users">
-            {users.map((user) => (
-              <div
-                key={user.id}
-                className="flex items-center gap-4 p-2 cursor-pointer hover:bg-muted"
-                onClick={() => onSelect(user)}
-              >
-                <Avatar>
-                  <AvatarImage src={user.avatar_url} />
-                  <AvatarFallback>{user.username.charAt(0)}</AvatarFallback>
-                </Avatar>
-                <div>
-                  <h4 className="font-semibold">{user.username}</h4>
-                </div>
-              </div>
-            ))}
+          <TabsContent value="users" className="max-h-64 overflow-y-auto">
+            {users.length === 0 ? (
+              <p className="text-sm text-muted-foreground p-2">No users found</p>
+            ) : (
+              users.map((user) => {
+                const username = user?.username || 'User';
+                return (
+                  <div
+                    key={user.id}
+                    className="flex items-center gap-4 p-2 cursor-pointer hover:bg-muted rounded-md"
+                    onClick={() => onSelect(user)}
+                  >
+                    <Avatar>
+                      <AvatarImage src={user.avatar_url} />
+                      <AvatarFallback>{username.charAt(0).toUpperCase()}</AvatarFallback>
+                    </Avatar>
+                    <div>
+                      <h4 className="font-semibold">{username}</h4>
+                    </div>
+                  </div>
+                );
+              })
+            )}
           </TabsContent>
-          <TabsContent value="marketplace">
-            {marketplaceItems.map((item) => (
-              <div
-                key={item.id}
-                className="flex items-center gap-4 p-2 cursor-pointer hover:bg-muted"
-                onClick={() => onSelect(item)}
-              >
-                <img
-                  src={item.thumbnail}
-                  alt={item.name}
-                  className="w-12 h-12 rounded-md object-cover"
-                />
-                <div>
-                  <h4 className="font-semibold">{item.name}</h4>
-                  <p className="text-sm text-muted-foreground">{item.price}</p>
+          <TabsContent value="marketplace" className="max-h-64 overflow-y-auto">
+            {marketplaceItems.length === 0 ? (
+              <p className="text-sm text-muted-foreground p-2">No marketplace items found</p>
+            ) : (
+              marketplaceItems.map((item) => (
+                <div
+                  key={item.id}
+                  className="flex items-center gap-4 p-2 cursor-pointer hover:bg-muted rounded-md"
+                  onClick={() => onSelect(item)}
+                >
+                  {(item.thumbnail || item.images?.[0]) && (
+                    <img
+                      src={item.thumbnail || item.images?.[0]}
+                      alt={item.name || item.title || 'Item'}
+                      className="w-12 h-12 rounded-md object-cover"
+                    />
+                  )}
+                  <div>
+                    <h4 className="font-semibold">{item.name || item.title || 'Unnamed Item'}</h4>
+                    <p className="text-sm text-muted-foreground">{item.price || item.price_ngn ? `₦${item.price_ngn}` : 'Price not set'}</p>
+                  </div>
                 </div>
-              </div>
-            ))}
+              ))
+            )}
           </TabsContent>
         </Tabs>
       </CardContent>

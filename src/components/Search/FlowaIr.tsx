@@ -6,25 +6,38 @@ import { useNavigate } from 'react-router-dom';
 import CommunityInsight from './CommunityInsight';
 
 interface FlowaIrProps {
-  summary: string;
-  recommendations: any[];
-  trending: any[];
+  summary?: string;
+  recommendations?: any[];
+  trending?: any[];
   newTopic?: {
     title: string;
     category: string;
   };
+  response?: string;
+  error?: string;
 }
 
-const FlowaIr: React.FC<FlowaIrProps> = ({ summary, recommendations, trending, newTopic }) => {
+const FlowaIr: React.FC<FlowaIrProps> = ({ 
+  summary, 
+  recommendations = [], 
+  trending = [], 
+  newTopic,
+  response,
+  error 
+}) => {
   const navigate = useNavigate();
   const [generatedContent, setGeneratedContent] = useState('');
 
   const generateContent = async (type: 'name' | 'title' | 'content') => {
-    const { data } = await supabase.functions.invoke('flowair-generate', {
-      body: { type, recommendations },
-    });
-    if (data) {
-      setGeneratedContent(data.content);
+    try {
+      const { data } = await supabase.functions.invoke('flowair-generate', {
+        body: { type, recommendations },
+      });
+      if (data) {
+        setGeneratedContent(data.content || '');
+      }
+    } catch (err) {
+      console.error('Generate content error:', err);
     }
   };
 
@@ -37,6 +50,23 @@ const FlowaIr: React.FC<FlowaIrProps> = ({ summary, recommendations, trending, n
     );
   };
 
+  // Handle error state
+  if (error) {
+    return (
+      <Card>
+        <CardHeader>
+          <CardTitle>FlowaIr</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <p className="text-destructive">{error}</p>
+        </CardContent>
+      </Card>
+    );
+  }
+
+  // Use response as summary if summary is not provided
+  const displaySummary = summary || response || 'No summary available';
+
   return (
     <Card>
       <CardHeader>
@@ -45,24 +75,38 @@ const FlowaIr: React.FC<FlowaIrProps> = ({ summary, recommendations, trending, n
       <CardContent className="space-y-4">
         <div>
           <h4 className="font-semibold">Summary</h4>
-          <p className="text-sm text-muted-foreground">{summary}</p>
+          <p className="text-sm text-muted-foreground whitespace-pre-wrap">{displaySummary}</p>
         </div>
-        <div>
-          <h4 className="font-semibold">You may also like</h4>
-          <div className="flex gap-2 mt-2">
-            <Button size="sm" onClick={() => generateContent('name')}>Generate Name</Button>
-            <Button size="sm" onClick={() => generateContent('title')}>Generate Title</Button>
-            <Button size="sm" onClick={() => generateContent('content')}>Generate Content</Button>
-          </div>
-          {generatedContent && (
-            <div className="mt-4 p-4 border rounded-md bg-muted">
-              <p className="text-sm">{generatedContent}</p>
+        
+        {Array.isArray(recommendations) && recommendations.length > 0 && (
+          <div>
+            <h4 className="font-semibold">You may also like</h4>
+            <div className="flex gap-2 mt-2 flex-wrap">
+              <Button size="sm" onClick={() => generateContent('name')}>Generate Name</Button>
+              <Button size="sm" onClick={() => generateContent('title')}>Generate Title</Button>
+              <Button size="sm" onClick={() => generateContent('content')}>Generate Content</Button>
             </div>
-          )}
-        </div>
-        <div>
-          <h4 className="font-semibold">People are also searching for...</h4>
-        </div>
+            {generatedContent && (
+              <div className="mt-4 p-4 border rounded-md bg-muted">
+                <p className="text-sm">{generatedContent}</p>
+              </div>
+            )}
+          </div>
+        )}
+
+        {Array.isArray(trending) && trending.length > 0 && (
+          <div>
+            <h4 className="font-semibold">People are also searching for...</h4>
+            <div className="flex flex-wrap gap-2 mt-2">
+              {trending.map((item: any, index: number) => (
+                <span key={index} className="text-sm text-primary">
+                  {typeof item === 'string' ? item : item?.keyword || item?.term}
+                </span>
+              ))}
+            </div>
+          </div>
+        )}
+
         {newTopic && (
           <div>
             <h4 className="font-semibold">New Topic Suggestion</h4>
@@ -74,7 +118,10 @@ const FlowaIr: React.FC<FlowaIrProps> = ({ summary, recommendations, trending, n
             </Button>
           </div>
         )}
-        {recommendations.length > 0 && <CommunityInsight recommendations={recommendations} />}
+
+        {Array.isArray(recommendations) && recommendations.length > 0 && (
+          <CommunityInsight recommendations={recommendations} />
+        )}
       </CardContent>
     </Card>
   );
