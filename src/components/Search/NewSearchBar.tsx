@@ -5,7 +5,7 @@ import { useToast } from '@/hooks/use-toast';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { X, Mic, Send, Bookmark } from 'lucide-react';
+import { Search, X, Mic, Bookmark, Sparkles } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import TrendingNow from './TrendingNow';
 import SearchResults from './SearchResults';
@@ -59,14 +59,16 @@ const NewSearchBar = () => {
   const performSearch = async () => {
     setIsSearching(true);
     const q = query.trim();
-    if (q.length < 2 && category === 'All') return;
+    if (q.length < 2 && category === 'All') {
+      setIsSearching(false);
+      return;
+    }
 
     try {
       await supabase.rpc('track_search', { search_keyword: q || category });
 
       let allResults: any[] = [];
 
-      // Search posts
       if (category === 'All' || category === 'Posts') {
         let postsQuery = supabase.from('posts').select('*, view_count, likes_count');
         if (q.length > 0) {
@@ -89,7 +91,6 @@ const NewSearchBar = () => {
         }
       }
 
-      // Search users
       if (category === 'All' || category === 'Users') {
         if (q.length > 0) {
           const { data: users } = await supabase
@@ -140,14 +141,8 @@ const NewSearchBar = () => {
     recognition.interimResults = false;
     recognition.lang = 'en-US';
 
-    recognition.onstart = () => {
-      setIsListening(true);
-    };
-
-    recognition.onend = () => {
-      setIsListening(false);
-    };
-
+    recognition.onstart = () => setIsListening(true);
+    recognition.onend = () => setIsListening(false);
     recognition.onresult = (event: any) => {
       const transcript = event.results[0][0].transcript;
       setQuery(transcript);
@@ -157,8 +152,13 @@ const NewSearchBar = () => {
   };
 
   const handleFlowaIr = async () => {
-    if (!user) return;
-    // Call FlowaIr edge function directly - it handles credit checks internally
+    if (!user || !query.trim()) {
+      toast({
+        title: "Enter a query",
+        description: "Type something to search with AI",
+      });
+      return;
+    }
     callFlowaIr(query);
   };
 
@@ -170,11 +170,10 @@ const NewSearchBar = () => {
       });
 
       if (error) {
-        // Check if it's a credit error
         if (error.message?.includes('402') || error.message?.includes('credits')) {
           toast({
             title: "Out of AI Credits",
-            description: "You need more stars to use FlowaIr. Earn stars by viewing content!",
+            description: "You need more stars to use FlowaIr.",
             variant: "destructive"
           });
         } else {
@@ -189,68 +188,103 @@ const NewSearchBar = () => {
       console.error('FlowaIr error:', error);
       toast({
         title: "FlowaIr Error",
-        description: "Failed to get AI response. Please try again.",
+        description: "Failed to get AI response.",
         variant: "destructive"
       });
     }
   };
 
-  return (
-    <div className="w-full space-y-4 relative">
-      <div className="flex items-center gap-2">
-        <Select value={category} onValueChange={setCategory}>
-          <SelectTrigger className="w-auto">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="All">All Categories</SelectItem>
-            <SelectItem value="Users">Users</SelectItem>
-            <SelectItem value="Posts">Posts</SelectItem>
-            <SelectItem value="Marketplace">Marketplace</SelectItem>
-          </SelectContent>
-        </Select>
+  const clearSearch = () => {
+    setQuery('');
+    setSearchResults([]);
+    setFlowaIrResponse(null);
+  };
 
-        <div className="relative flex-1">
+  return (
+    <div className="w-full space-y-3">
+      {/* Search Bar Container */}
+      <div className="flex flex-col gap-2 p-3 bg-card rounded-lg border">
+        {/* Main Search Row */}
+        <div className="flex items-center gap-2">
+          <Search className="w-5 h-5 text-muted-foreground shrink-0" />
           <Input
             value={query}
             onChange={(e) => setQuery(e.target.value)}
-            placeholder="Search..."
-            className="pr-10"
+            placeholder="Search posts, users, marketplace..."
+            className="flex-1 border-0 bg-transparent focus-visible:ring-0 focus-visible:ring-offset-0 text-base"
             onFocus={() => setShowTrending(true)}
             onBlur={() => setTimeout(() => setShowTrending(false), 200)}
           />
-          <Button
-            size="icon"
-            variant="ghost"
-            className="absolute right-10 top-1 h-8 w-8"
-            onClick={() => setQuery('')}
-          >
-            <X className="w-4 h-4" />
-          </Button>
-          <Button
-            size="icon"
-            variant="ghost"
-            className={`absolute right-1 top-1 h-8 w-8 ${isListening ? 'text-red-500' : ''}`}
-            onClick={handleVoiceSearch}
-          >
-            <Mic className="w-4 h-4" />
-          </Button>
+          {query && (
+            <Button
+              size="icon"
+              variant="ghost"
+              className="h-8 w-8 shrink-0"
+              onClick={clearSearch}
+            >
+              <X className="w-4 h-4" />
+            </Button>
+          )}
         </div>
 
-        <Button size="icon">
-          <Send className="w-4 h-4" />
-        </Button>
-        <Button size="icon" variant="ghost" onClick={saveSearch}>
-          <Bookmark className="w-4 h-4" />
-        </Button>
-        <Button size="icon" variant="ghost" onClick={handleFlowaIr}>
-          <img src="/flowair-logo.svg" alt="FlowaIr Logo" className="w-6 h-6" />
-        </Button>
+        {/* Action Buttons Row */}
+        <div className="flex items-center gap-2 flex-wrap">
+          <Select value={category} onValueChange={setCategory}>
+            <SelectTrigger className="w-[140px] h-9">
+              <SelectValue placeholder="Category" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="All">All</SelectItem>
+              <SelectItem value="Users">Users</SelectItem>
+              <SelectItem value="Posts">Posts</SelectItem>
+              <SelectItem value="Marketplace">Marketplace</SelectItem>
+            </SelectContent>
+          </Select>
+
+          <div className="flex items-center gap-1 ml-auto">
+            <Button
+              size="sm"
+              variant="ghost"
+              className={`h-9 px-3 ${isListening ? 'text-destructive bg-destructive/10' : ''}`}
+              onClick={handleVoiceSearch}
+            >
+              <Mic className="w-4 h-4 mr-1" />
+              {isListening ? 'Listening...' : 'Voice'}
+            </Button>
+
+            <Button
+              size="sm"
+              variant="ghost"
+              className="h-9 px-3"
+              onClick={saveSearch}
+              disabled={!query}
+            >
+              <Bookmark className="w-4 h-4 mr-1" />
+              Save
+            </Button>
+
+            <Button
+              size="sm"
+              variant="default"
+              className="h-9 px-3"
+              onClick={handleFlowaIr}
+              disabled={!query.trim()}
+            >
+              <Sparkles className="w-4 h-4 mr-1" />
+              AI Search
+            </Button>
+          </div>
+        </div>
       </div>
-      {showTrending && <TrendingNow onSelect={(keyword) => {
-        setQuery(keyword);
-        setShowTrending(false);
-      }} />}
+
+      {/* Results Area */}
+      {showTrending && !query && (
+        <TrendingNow onSelect={(keyword) => {
+          setQuery(keyword);
+          setShowTrending(false);
+        }} />
+      )}
+
       {(searchResults.length > 0 || isSearching) && (
         <SearchResults
           results={searchResults}
@@ -258,11 +292,15 @@ const NewSearchBar = () => {
           isLoading={isSearching}
         />
       )}
+
       {flowaIrResponse && <FlowaIr {...flowaIrResponse} />}
-      {searchResults.length === 0 && query.length > 2 && !isSearching && (
-        <div className="text-center p-4">
-          <p className="text-muted-foreground mb-4">No results found for "{query}"</p>
-          <Button onClick={() => navigate(`/`)}>Create Post</Button>
+
+      {searchResults.length === 0 && query.length > 2 && !isSearching && !flowaIrResponse && (
+        <div className="text-center p-6 bg-card rounded-lg border">
+          <p className="text-muted-foreground mb-3">No results found for "{query}"</p>
+          <Button variant="outline" onClick={() => navigate(`/`)}>
+            Create a Post
+          </Button>
         </div>
       )}
     </div>
