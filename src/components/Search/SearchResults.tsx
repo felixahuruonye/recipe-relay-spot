@@ -67,8 +67,8 @@ const SearchResults: React.FC<SearchResultsProps> = ({ results = [], onSelect, i
                       {post.is_hot_topic && <Badge variant="destructive">Hot Topic</Badge>}
                       {post.is_trending && <Badge variant="secondary">Trending</Badge>}
                       {post.is_new && <Badge>New</Badge>}
-                      <span className="text-xs text-muted-foreground">{post.view_count || 0} views</span>
-                      <span className="text-xs text-muted-foreground">{post.likes_count || 0} reactions</span>
+                      <span className="text-xs text-muted-foreground">{Number(post.view_count) || 0} views</span>
+                      <span className="text-xs text-muted-foreground">{Number(post.likes_count) || 0} reactions</span>
                     </div>
                   </div>
                 </div>
@@ -116,9 +116,14 @@ const SearchResults: React.FC<SearchResultsProps> = ({ results = [], onSelect, i
                       className="w-12 h-12 rounded-md object-cover"
                     />
                   )}
-                  <div>
-                    <h4 className="font-semibold">{item.name || item.title || 'Unnamed Item'}</h4>
-                    <p className="text-sm text-muted-foreground">{item.price || item.price_ngn ? `₦${item.price_ngn}` : 'Price not set'}</p>
+                  <div className="flex-1 min-w-0">
+                    <h4 className="font-semibold truncate">{item.name || item.title || 'Unnamed Item'}</h4>
+                    {item.description && (
+                      <p className="text-sm text-muted-foreground truncate">{item.description.substring(0, 50)}...</p>
+                    )}
+                    <p className="text-sm font-medium text-primary">
+                      {item.price_ngn ? `₦${Number(item.price_ngn).toLocaleString()}` : 'Price not set'}
+                    </p>
                   </div>
                 </div>
               ))

@@ -70,7 +70,7 @@ const NewSearchBar = () => {
       let allResults: any[] = [];
 
       if (category === 'All' || category === 'Posts') {
-        let postsQuery = supabase.from('posts').select('*, view_count, likes_count');
+        let postsQuery = supabase.from('posts').select('id, title, body, thumbnail_url, category, created_at, view_count, likes_count, user_id');
         if (q.length > 0) {
           postsQuery = postsQuery.or(`title.ilike.%${q}%,body.ilike.%${q}%`);
         }
@@ -81,8 +81,10 @@ const NewSearchBar = () => {
             posts.map(p => ({
               ...p,
               type: 'post',
+              view_count: p.view_count || 0,
+              likes_count: p.likes_count || 0,
               is_trending: trendingKeywords.some((k: string) =>
-                p.title.toLowerCase().includes(k.toLowerCase())
+                p.title?.toLowerCase().includes(k.toLowerCase())
               ),
               is_new: new Date(p.created_at) > new Date(Date.now() - 24 * 60 * 60 * 1000),
               is_hot_topic: hotTopics.some((ht: any) => ht.post_id === p.id),
@@ -101,6 +103,25 @@ const NewSearchBar = () => {
           if (users) {
             allResults = allResults.concat(users.map(u => ({ ...u, type: 'user' })));
           }
+        }
+      }
+
+      if (category === 'All' || category === 'Marketplace') {
+        let productQuery = supabase.from('products').select('id, title, description, price_ngn, images, seller_user_id, status');
+        if (q.length > 0) {
+          productQuery = productQuery.or(`title.ilike.%${q}%,description.ilike.%${q}%`);
+        }
+        productQuery = productQuery.eq('status', 'active');
+        const { data: products } = await productQuery.limit(10);
+        if (products) {
+          allResults = allResults.concat(
+            products.map(p => ({
+              ...p,
+              type: 'marketplace',
+              name: p.title,
+              thumbnail: p.images?.[0] || null,
+            }))
+          );
         }
       }
 
@@ -200,6 +221,17 @@ const NewSearchBar = () => {
     setFlowaIrResponse(null);
   };
 
+  const handleResultSelect = (item: any) => {
+    if (item.type === 'post') {
+      navigate(`/feed?post=${item.id}`);
+    } else if (item.type === 'user') {
+      navigate(`/profile/${item.id}`);
+    } else if (item.type === 'marketplace') {
+      navigate(`/marketplace?product=${item.id}`);
+    }
+    clearSearch();
+  };
+
   return (
     <div className="w-full space-y-3">
       {/* Search Bar Container */}
@@ -288,7 +320,7 @@ const NewSearchBar = () => {
       {(searchResults.length > 0 || isSearching) && (
         <SearchResults
           results={searchResults}
-          onSelect={handleFlowaIr}
+          onSelect={handleResultSelect}
           isLoading={isSearching}
         />
       )}
