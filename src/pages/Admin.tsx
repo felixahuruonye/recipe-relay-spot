@@ -1,44 +1,65 @@
 import React, { useState, useEffect } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Badge } from '@/components/ui/badge';
 import { useToast } from '@/hooks/use-toast';
-import { Trash2, RefreshCw, Lock } from 'lucide-react';
+import { Trash2, RefreshCw, Lock, ShieldAlert } from 'lucide-react';
 import { ReportsTab } from '@/components/Admin/ReportsTab';
 import { VIPManager } from '@/components/Admin/VIPManager';
 import { StoryManagement } from '@/components/Admin/StoryManagement';
+import { useAuth } from '@/contexts/AuthContext';
+import { useNavigate } from 'react-router-dom';
 
 const AdminPanel = () => {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
-  const [password, setPassword] = useState('');
+  const [isCheckingAuth, setIsCheckingAuth] = useState(true);
   const [users, setUsers] = useState([]);
   const [posts, setPosts] = useState([]);
   const [tasks, setTasks] = useState([]);
   const [loading, setLoading] = useState(false);
   const { toast } = useToast();
+  const { user } = useAuth();
+  const navigate = useNavigate();
+
+  // Check admin role on mount - SERVER-SIDE verification via RLS
+  useEffect(() => {
+    const checkAdminRole = async () => {
+      if (!user) {
+        setIsCheckingAuth(false);
+        return;
+      }
+
+      try {
+        // Use the has_role function to verify admin status server-side
+        const { data, error } = await supabase.rpc('has_role', {
+          _user_id: user.id,
+          _role: 'admin'
+        });
+
+        if (error) {
+          console.error('Admin check error:', error);
+          setIsAuthenticated(false);
+        } else {
+          setIsAuthenticated(data === true);
+        }
+      } catch (error) {
+        console.error('Admin verification failed:', error);
+        setIsAuthenticated(false);
+      }
+      setIsCheckingAuth(false);
+    };
+
+    checkAdminRole();
+  }, [user]);
 
   useEffect(() => {
     if (isAuthenticated) {
       loadData();
     }
   }, [isAuthenticated]);
-
-  const handleLogin = () => {
-    if (password === 'Felix333666') {
-      setIsAuthenticated(true);
-      toast({ title: "Welcome Admin", description: "Access granted" });
-    } else {
-      toast({ 
-        title: "Access Denied", 
-        description: "Incorrect password",
-        variant: "destructive" 
-      });
-    }
-  };
 
   const loadData = async () => {
     setLoading(true);
@@ -101,52 +122,55 @@ const AdminPanel = () => {
     }
   };
 
-  // Set up realtime subscriptions
-  useEffect(() => {
-    if (!isAuthenticated) return;
-
-    const postsSubscription = supabase
-      .channel('posts-changes')
-      .on('postgres_changes', 
-        { event: '*', schema: 'public', table: 'posts' }, 
-        () => loadData()
-      )
-      .subscribe();
-
-    const tasksSubscription = supabase
-      .channel('tasks-changes')
-      .on('postgres_changes', 
-        { event: '*', schema: 'public', table: 'tasks' }, 
-        () => loadData()
-      )
-      .subscribe();
-
-    return () => {
-      supabase.removeChannel(postsSubscription);
-      supabase.removeChannel(tasksSubscription);
-    };
-  }, [isAuthenticated]);
-
-  if (!isAuthenticated) {
+  // Loading state while checking authentication
+  if (isCheckingAuth) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-background to-muted flex items-center justify-center">
+      <div className="min-h-screen flex items-center justify-center bg-background">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary mx-auto mb-4"></div>
+          <p className="text-muted-foreground">Verifying admin access...</p>
+        </div>
+      </div>
+    );
+  }
+
+  // Not logged in
+  if (!user) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-background p-4">
         <Card className="w-full max-w-md">
           <CardHeader className="text-center">
-            <Lock className="w-12 h-12 mx-auto mb-4 text-primary" />
-            <CardTitle>Admin Login</CardTitle>
+            <Lock className="w-12 h-12 mx-auto mb-4 text-muted-foreground" />
+            <CardTitle>Authentication Required</CardTitle>
           </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="space-y-2">
-              <Input
-                type="password"
-                placeholder="Enter admin password"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                onKeyPress={(e) => e.key === 'Enter' && handleLogin()}
-              />
-            </div>
-            <Button onClick={handleLogin} className="w-full">
-              Login
+          <CardContent className="text-center space-y-4">
+            <p className="text-muted-foreground">
+              You must be logged in to access the admin panel.
+            </p>
+            <Button onClick={() => navigate('/auth')} className="w-full">
+              Go to Login
+            </Button>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
+
+  // Not an admin
+  if (!isAuthenticated) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-background p-4">
+        <Card className="w-full max-w-md">
+          <CardHeader className="text-center">
+            <ShieldAlert className="w-12 h-12 mx-auto mb-4 text-destructive" />
+            <CardTitle>Access Denied</CardTitle>
+          </CardHeader>
+          <CardContent className="text-center space-y-4">
+            <p className="text-muted-foreground">
+              You do not have admin privileges. This incident has been logged.
+            </p>
+            <Button onClick={() => navigate('/')} variant="outline" className="w-full">
+              Return to Home
             </Button>
           </CardContent>
         </Card>
@@ -155,41 +179,82 @@ const AdminPanel = () => {
   }
 
   return (
-    <div className="min-h-screen bg-background p-6">
+    <div className="min-h-screen bg-background p-4">
       <div className="max-w-7xl mx-auto">
         <div className="flex justify-between items-center mb-6">
           <h1 className="text-3xl font-bold">Admin Panel</h1>
           <div className="flex gap-2">
-            <Button onClick={loadData} disabled={loading} variant="outline">
+            <Badge variant="outline" className="text-green-500 border-green-500">
+              Admin Verified
+            </Badge>
+            <Button onClick={loadData} variant="outline" size="sm" disabled={loading}>
               <RefreshCw className={`w-4 h-4 mr-2 ${loading ? 'animate-spin' : ''}`} />
               Refresh
-            </Button>
-            <Button onClick={() => setIsAuthenticated(false)} variant="outline">
-              Logout
             </Button>
           </div>
         </div>
 
-        <Tabs defaultValue="posts" className="space-y-6">
-          <TabsList className="grid w-full grid-cols-5">
+        <Tabs defaultValue="users" className="w-full">
+          <TabsList className="grid w-full grid-cols-6">
+            <TabsTrigger value="users">Users</TabsTrigger>
             <TabsTrigger value="posts">Posts</TabsTrigger>
-            <TabsTrigger value="stories">Stories</TabsTrigger>
-            <TabsTrigger value="vip">VIP/Users</TabsTrigger>
-            <TabsTrigger value="reports">Reports</TabsTrigger>
             <TabsTrigger value="tasks">Tasks</TabsTrigger>
+            <TabsTrigger value="reports">Reports</TabsTrigger>
+            <TabsTrigger value="vip">VIP Manager</TabsTrigger>
+            <TabsTrigger value="stories">Stories</TabsTrigger>
           </TabsList>
+
+          <TabsContent value="users">
+            <Card>
+              <CardHeader>
+                <CardTitle>User Management ({users.length})</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Username</TableHead>
+                      <TableHead>Email</TableHead>
+                      <TableHead>VIP</TableHead>
+                      <TableHead>Stars</TableHead>
+                      <TableHead>Wallet</TableHead>
+                      <TableHead>Created</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {users.map((user: any) => (
+                      <TableRow key={user.id}>
+                        <TableCell className="font-medium">{user.username}</TableCell>
+                        <TableCell>{user.full_name || '-'}</TableCell>
+                        <TableCell>
+                          <Badge variant={user.vip ? "default" : "secondary"}>
+                            {user.vip ? 'VIP' : 'Regular'}
+                          </Badge>
+                        </TableCell>
+                        <TableCell>{user.star_balance || 0}</TableCell>
+                        <TableCell>₦{user.wallet_balance || 0}</TableCell>
+                        <TableCell>{new Date(user.created_at).toLocaleDateString()}</TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </CardContent>
+            </Card>
+          </TabsContent>
 
           <TabsContent value="posts">
             <Card>
               <CardHeader>
-                <CardTitle>Posts Management ({posts.length})</CardTitle>
+                <CardTitle>Post Management ({posts.length})</CardTitle>
               </CardHeader>
               <CardContent>
                 <Table>
                   <TableHeader>
                     <TableRow>
                       <TableHead>Title</TableHead>
+                      <TableHead>Author</TableHead>
                       <TableHead>Status</TableHead>
+                      <TableHead>Views</TableHead>
                       <TableHead>Created</TableHead>
                       <TableHead>Actions</TableHead>
                     </TableRow>
@@ -197,37 +262,28 @@ const AdminPanel = () => {
                   <TableBody>
                     {posts.map((post: any) => (
                       <TableRow key={post.id}>
-                        <TableCell className="max-w-xs truncate">{post.title}</TableCell>
+                        <TableCell className="font-medium max-w-[200px] truncate">{post.title}</TableCell>
+                        <TableCell>{post.user_profiles?.username || 'Unknown'}</TableCell>
                         <TableCell>
                           <Badge variant={post.status === 'approved' ? 'default' : 'secondary'}>
                             {post.status}
                           </Badge>
                         </TableCell>
+                        <TableCell>{post.view_count || 0}</TableCell>
                         <TableCell>{new Date(post.created_at).toLocaleDateString()}</TableCell>
                         <TableCell>
                           <div className="flex gap-2">
-                            {post.status === 'pending' && (
-                              <Button 
-                                size="sm" 
-                                onClick={() => updatePostStatus(post.id, 'approved')}
-                              >
+                            {post.status !== 'approved' && (
+                              <Button size="sm" onClick={() => updatePostStatus(post.id, 'approved')}>
                                 Approve
                               </Button>
                             )}
-                            {post.status === 'approved' && (
-                              <Button 
-                                size="sm" 
-                                variant="outline"
-                                onClick={() => updatePostStatus(post.id, 'pending')}
-                              >
-                                Unapprove
+                            {post.status !== 'rejected' && (
+                              <Button size="sm" variant="outline" onClick={() => updatePostStatus(post.id, 'rejected')}>
+                                Reject
                               </Button>
                             )}
-                            <Button 
-                              size="sm" 
-                              variant="destructive"
-                              onClick={() => deletePost(post.id)}
-                            >
+                            <Button size="sm" variant="destructive" onClick={() => deletePost(post.id)}>
                               <Trash2 className="w-4 h-4" />
                             </Button>
                           </div>
@@ -240,38 +296,27 @@ const AdminPanel = () => {
             </Card>
           </TabsContent>
 
-          <TabsContent value="stories">
-            <StoryManagement />
-          </TabsContent>
-
-          <TabsContent value="vip">
-            <VIPManager />
-          </TabsContent>
-
-          <TabsContent value="reports">
-            <ReportsTab />
-          </TabsContent>
-
           <TabsContent value="tasks">
             <Card>
               <CardHeader>
-                <CardTitle>Tasks Management ({tasks.length})</CardTitle>
+                <CardTitle>Task Management ({tasks.length})</CardTitle>
               </CardHeader>
               <CardContent>
                 <Table>
                   <TableHeader>
                     <TableRow>
-                      <TableHead>Task Name</TableHead>
+                      <TableHead>Name</TableHead>
                       <TableHead>Category</TableHead>
                       <TableHead>Reward</TableHead>
                       <TableHead>Status</TableHead>
+                      <TableHead>Workers</TableHead>
                       <TableHead>Actions</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
                     {tasks.map((task: any) => (
                       <TableRow key={task.id}>
-                        <TableCell className="max-w-xs truncate">{task.task_name}</TableCell>
+                        <TableCell className="font-medium">{task.task_name}</TableCell>
                         <TableCell>{task.category}</TableCell>
                         <TableCell>₦{task.reward_amount}</TableCell>
                         <TableCell>
@@ -279,23 +324,17 @@ const AdminPanel = () => {
                             {task.status}
                           </Badge>
                         </TableCell>
+                        <TableCell>{task.worker_count}</TableCell>
                         <TableCell>
                           <div className="flex gap-2">
-                            {task.status === 'pending_approval' && (
-                              <Button 
-                                size="sm" 
-                                onClick={() => updateTaskStatus(task.id, 'approved')}
-                              >
+                            {task.status !== 'approved' && (
+                              <Button size="sm" onClick={() => updateTaskStatus(task.id, 'approved')}>
                                 Approve
                               </Button>
                             )}
-                            {task.status === 'approved' && (
-                              <Button 
-                                size="sm" 
-                                variant="outline"
-                                onClick={() => updateTaskStatus(task.id, 'pending_approval')}
-                              >
-                                Unapprove
+                            {task.status !== 'rejected' && (
+                              <Button size="sm" variant="outline" onClick={() => updateTaskStatus(task.id, 'rejected')}>
+                                Reject
                               </Button>
                             )}
                           </div>
@@ -306,6 +345,18 @@ const AdminPanel = () => {
                 </Table>
               </CardContent>
             </Card>
+          </TabsContent>
+
+          <TabsContent value="reports">
+            <ReportsTab />
+          </TabsContent>
+
+          <TabsContent value="vip">
+            <VIPManager />
+          </TabsContent>
+
+          <TabsContent value="stories">
+            <StoryManagement />
           </TabsContent>
         </Tabs>
       </div>
