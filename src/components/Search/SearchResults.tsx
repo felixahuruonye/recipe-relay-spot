@@ -4,6 +4,7 @@ import { Badge } from '@/components/ui/badge';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Skeleton } from '@/components/ui/skeleton';
+import { Image, Video, Eye, Heart } from 'lucide-react';
 
 interface SearchResultsProps {
   results?: any[];
@@ -32,6 +33,28 @@ const SearchResults: React.FC<SearchResultsProps> = ({ results = [], onSelect, i
   const users = results.filter((item) => item?.type === 'user');
   const marketplaceItems = results.filter((item) => item?.type === 'marketplace');
 
+  // Helper to get thumbnail from various sources
+  const getThumbnail = (item: any): string | null => {
+    // Check thumbnail_url first
+    if (item.thumbnail_url) return item.thumbnail_url;
+    // Check thumbnail
+    if (item.thumbnail) return item.thumbnail;
+    // Check media_urls array
+    if (item.media_urls && Array.isArray(item.media_urls) && item.media_urls.length > 0) {
+      return item.media_urls[0];
+    }
+    // Check images array (for marketplace)
+    if (item.images && Array.isArray(item.images) && item.images.length > 0) {
+      return item.images[0];
+    }
+    return null;
+  };
+
+  // Check if URL is a video
+  const isVideoUrl = (url: string): boolean => {
+    return url.match(/\.(mp4|webm|ogg|mov)$/i) !== null || url.includes('video');
+  };
+
   return (
     <Card>
       <CardContent className="p-4">
@@ -45,34 +68,72 @@ const SearchResults: React.FC<SearchResultsProps> = ({ results = [], onSelect, i
             {posts.length === 0 ? (
               <p className="text-sm text-muted-foreground p-2">No posts found</p>
             ) : (
-              posts.map((post) => (
-                <div
-                  key={post.id}
-                  className="flex items-center gap-4 p-2 cursor-pointer hover:bg-muted rounded-md"
-                  onClick={() => onSelect(post)}
-                >
-                  {(post.thumbnail_url || post.thumbnail) && (
-                    <img
-                      src={post.thumbnail_url || post.thumbnail}
-                      alt={post.title || 'Post'}
-                      className="w-12 h-12 rounded-md object-cover"
-                    />
-                  )}
-                  <div className="flex-1 min-w-0">
-                    <h4 className="font-semibold truncate">{post.title || 'Untitled'}</h4>
-                    {post.body && (
-                      <p className="text-sm text-muted-foreground truncate">{post.body.substring(0, 60)}...</p>
-                    )}
-                    <div className="flex items-center gap-2 mt-1 flex-wrap">
-                      {post.is_hot_topic && <Badge variant="destructive">Hot Topic</Badge>}
-                      {post.is_trending && <Badge variant="secondary">Trending</Badge>}
-                      {post.is_new && <Badge>New</Badge>}
-                      <span className="text-xs text-muted-foreground">{Number(post.view_count) || 0} views</span>
-                      <span className="text-xs text-muted-foreground">{Number(post.likes_count) || 0} reactions</span>
+              posts.map((post) => {
+                const thumbnail = getThumbnail(post);
+                const isVideo = thumbnail ? isVideoUrl(thumbnail) : false;
+                
+                return (
+                  <div
+                    key={post.id}
+                    className="flex items-center gap-4 p-2 cursor-pointer hover:bg-muted rounded-md"
+                    onClick={() => onSelect(post)}
+                  >
+                    {/* Thumbnail with media type indicator */}
+                    <div className="relative w-14 h-14 shrink-0">
+                      {thumbnail ? (
+                        <>
+                          {isVideo ? (
+                            <div className="w-14 h-14 rounded-md bg-muted flex items-center justify-center overflow-hidden">
+                              <video 
+                                src={thumbnail} 
+                                className="w-full h-full object-cover"
+                                muted
+                                preload="metadata"
+                              />
+                              <div className="absolute inset-0 bg-black/30 flex items-center justify-center">
+                                <Video className="w-5 h-5 text-white" />
+                              </div>
+                            </div>
+                          ) : (
+                            <img
+                              src={thumbnail}
+                              alt={post.title || 'Post'}
+                              className="w-14 h-14 rounded-md object-cover"
+                              onError={(e) => {
+                                (e.target as HTMLImageElement).style.display = 'none';
+                              }}
+                            />
+                          )}
+                        </>
+                      ) : (
+                        <div className="w-14 h-14 rounded-md bg-muted flex items-center justify-center">
+                          <Image className="w-5 h-5 text-muted-foreground" />
+                        </div>
+                      )}
+                    </div>
+                    
+                    <div className="flex-1 min-w-0">
+                      <h4 className="font-semibold truncate">{post.title || 'Untitled'}</h4>
+                      {post.body && (
+                        <p className="text-sm text-muted-foreground truncate">{post.body.substring(0, 60)}...</p>
+                      )}
+                      <div className="flex items-center gap-2 mt-1 flex-wrap">
+                        {post.is_hot_topic && <Badge variant="destructive" className="text-xs">Hot Topic</Badge>}
+                        {post.is_trending && <Badge variant="secondary" className="text-xs">Trending</Badge>}
+                        {post.is_new && <Badge className="text-xs">New</Badge>}
+                        <span className="text-xs text-muted-foreground flex items-center gap-1">
+                          <Eye className="w-3 h-3" />
+                          {Number(post.view_count) || 0}
+                        </span>
+                        <span className="text-xs text-muted-foreground flex items-center gap-1">
+                          <Heart className="w-3 h-3" />
+                          {Number(post.likes_count) || 0}
+                        </span>
+                      </div>
                     </div>
                   </div>
-                </div>
-              ))
+                );
+              })
             )}
           </TabsContent>
           <TabsContent value="users" className="max-h-64 overflow-y-auto">
@@ -103,30 +164,43 @@ const SearchResults: React.FC<SearchResultsProps> = ({ results = [], onSelect, i
             {marketplaceItems.length === 0 ? (
               <p className="text-sm text-muted-foreground p-2">No marketplace items found</p>
             ) : (
-              marketplaceItems.map((item) => (
-                <div
-                  key={item.id}
-                  className="flex items-center gap-4 p-2 cursor-pointer hover:bg-muted rounded-md"
-                  onClick={() => onSelect(item)}
-                >
-                  {(item.thumbnail || item.images?.[0]) && (
-                    <img
-                      src={item.thumbnail || item.images?.[0]}
-                      alt={item.name || item.title || 'Item'}
-                      className="w-12 h-12 rounded-md object-cover"
-                    />
-                  )}
-                  <div className="flex-1 min-w-0">
-                    <h4 className="font-semibold truncate">{item.name || item.title || 'Unnamed Item'}</h4>
-                    {item.description && (
-                      <p className="text-sm text-muted-foreground truncate">{item.description.substring(0, 50)}...</p>
-                    )}
-                    <p className="text-sm font-medium text-primary">
-                      {item.price_ngn ? `₦${Number(item.price_ngn).toLocaleString()}` : 'Price not set'}
-                    </p>
+              marketplaceItems.map((item) => {
+                const thumbnail = getThumbnail(item);
+                
+                return (
+                  <div
+                    key={item.id}
+                    className="flex items-center gap-4 p-2 cursor-pointer hover:bg-muted rounded-md"
+                    onClick={() => onSelect(item)}
+                  >
+                    <div className="relative w-14 h-14 shrink-0">
+                      {thumbnail ? (
+                        <img
+                          src={thumbnail}
+                          alt={item.name || item.title || 'Item'}
+                          className="w-14 h-14 rounded-md object-cover"
+                          onError={(e) => {
+                            (e.target as HTMLImageElement).style.display = 'none';
+                          }}
+                        />
+                      ) : (
+                        <div className="w-14 h-14 rounded-md bg-muted flex items-center justify-center">
+                          <Image className="w-5 h-5 text-muted-foreground" />
+                        </div>
+                      )}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <h4 className="font-semibold truncate">{item.name || item.title || 'Unnamed Item'}</h4>
+                      {item.description && (
+                        <p className="text-sm text-muted-foreground truncate">{item.description.substring(0, 50)}...</p>
+                      )}
+                      <p className="text-sm font-medium text-primary">
+                        {item.price_ngn ? `₦${Number(item.price_ngn).toLocaleString()}` : 'Price not set'}
+                      </p>
+                    </div>
                   </div>
-                </div>
-              ))
+                );
+              })
             )}
           </TabsContent>
         </Tabs>
