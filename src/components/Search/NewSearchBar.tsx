@@ -5,7 +5,7 @@ import { useToast } from '@/hooks/use-toast';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Search, X, Mic, Bookmark, Sparkles } from 'lucide-react';
+import { Search, X, Mic, Bookmark, Sparkles, BookmarkCheck } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import TrendingNow from './TrendingNow';
 import SearchResults from './SearchResults';
@@ -70,7 +70,7 @@ const NewSearchBar = () => {
       let allResults: any[] = [];
 
       if (category === 'All' || category === 'Posts') {
-        let postsQuery = supabase.from('posts').select('id, title, body, thumbnail_url, category, created_at, view_count, likes_count, user_id');
+        let postsQuery = supabase.from('posts').select('id, title, body, thumbnail_url, media_urls, category, created_at, view_count, likes_count, user_id');
         if (q.length > 0) {
           postsQuery = postsQuery.or(`title.ilike.%${q}%,body.ilike.%${q}%`);
         }
@@ -81,6 +81,8 @@ const NewSearchBar = () => {
             posts.map(p => ({
               ...p,
               type: 'post',
+              // Use thumbnail_url first, then first media_url as fallback
+              thumbnail: p.thumbnail_url || (p.media_urls && p.media_urls.length > 0 ? p.media_urls[0] : null),
               view_count: p.view_count || 0,
               likes_count: p.likes_count || 0,
               is_trending: trendingKeywords.some((k: string) =>
@@ -147,6 +149,10 @@ const NewSearchBar = () => {
     toast({ title: 'Search Saved', description: 'Added to your saved searches' });
   };
 
+  const viewSavedSearches = () => {
+    navigate('/saved-searches');
+  };
+
   const handleVoiceSearch = () => {
     if (!('webkitSpeechRecognition' in window)) {
       toast({
@@ -184,10 +190,14 @@ const NewSearchBar = () => {
   };
 
   const callFlowaIr = async (searchQuery: string) => {
-    setSearchResults([]);
+    setFlowaIrResponse(null);
     try {
       const { data, error } = await supabase.functions.invoke('flowair-search', {
-        body: { query: searchQuery }
+        body: { 
+          query: searchQuery,
+          results: searchResults,
+          trending: trending
+        }
       });
 
       if (error) {
@@ -290,9 +300,21 @@ const NewSearchBar = () => {
               className="h-9 px-3"
               onClick={saveSearch}
               disabled={!query}
+              title="Save this search"
             >
               <Bookmark className="w-4 h-4 mr-1" />
               Save
+            </Button>
+
+            <Button
+              size="sm"
+              variant="outline"
+              className="h-9 px-3"
+              onClick={viewSavedSearches}
+              title="View saved searches"
+            >
+              <BookmarkCheck className="w-4 h-4 mr-1" />
+              Saved
             </Button>
 
             <Button

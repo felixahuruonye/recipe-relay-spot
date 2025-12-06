@@ -14,6 +14,8 @@ interface FlowaIrProps {
     category: string;
   };
   response?: string;
+  aiResponse?: string;
+  creditsRemaining?: number;
   error?: string;
 }
 
@@ -23,6 +25,8 @@ const FlowaIr: React.FC<FlowaIrProps> = ({
   trending = [], 
   newTopic,
   response,
+  aiResponse,
+  creditsRemaining,
   error 
 }) => {
   const navigate = useNavigate();
@@ -64,18 +68,25 @@ const FlowaIr: React.FC<FlowaIrProps> = ({
     );
   }
 
-  // Use response as summary if summary is not provided
-  const displaySummary = summary || response || 'No summary available';
+  // Use aiResponse or response as summary if summary is not provided
+  const displaySummary = aiResponse || summary || response || 'No summary available';
 
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle>FlowaIr Summary</CardTitle>
+    <Card className="border-primary/20 bg-gradient-to-br from-primary/5 to-transparent">
+      <CardHeader className="pb-2">
+        <CardTitle className="flex items-center gap-2 text-lg">
+          <span className="text-2xl">✨</span>
+          FlowaIr AI Summary
+          {typeof creditsRemaining === 'number' && (
+            <span className="text-xs font-normal text-muted-foreground ml-auto">
+              {creditsRemaining} credits left
+            </span>
+          )}
+        </CardTitle>
       </CardHeader>
       <CardContent className="space-y-4">
-        <div>
-          <h4 className="font-semibold">Summary</h4>
-          <p className="text-sm text-muted-foreground whitespace-pre-wrap">{displaySummary}</p>
+        <div className="p-3 bg-background/50 rounded-lg">
+          <p className="text-sm whitespace-pre-wrap leading-relaxed">{displaySummary}</p>
         </div>
         
         {Array.isArray(recommendations) && recommendations.length > 0 && (

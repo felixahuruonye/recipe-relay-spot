@@ -59,6 +59,11 @@ const App = () => (
                 <Feed />
               </ProtectedRoute>
             } />
+            <Route path="/feed" element={
+              <ProtectedRoute>
+                <Feed />
+              </ProtectedRoute>
+            } />
             <Route path="/groups" element={
               <ProtectedRoute>
                 <Groups />
