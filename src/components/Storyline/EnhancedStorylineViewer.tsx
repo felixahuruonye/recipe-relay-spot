@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
@@ -9,6 +9,7 @@ import { Heart, MessageCircle, X, ChevronLeft, ChevronRight, Eye, Star, Lock } f
 import { useAuth } from '@/contexts/AuthContext';
 import { useToast } from '@/hooks/use-toast';
 import { ScrollArea } from '@/components/ui/scroll-area';
+import { useNavigate } from 'react-router-dom';
 
 interface Story {
   id: string;
@@ -23,6 +24,7 @@ interface Story {
   user?: {
     username: string;
     avatar_url: string;
+    story_settings?: any;
   };
 }
 
@@ -35,6 +37,7 @@ interface StorylineViewerProps {
 export const EnhancedStorylineViewer: React.FC<StorylineViewerProps> = ({ userId, open, onClose }) => {
   const { user } = useAuth();
   const { toast } = useToast();
+  const navigate = useNavigate();
   const [stories, setStories] = useState<Story[]>([]);
   const [currentIndex, setCurrentIndex] = useState(0);
   const [comment, setComment] = useState('');
@@ -45,12 +48,20 @@ export const EnhancedStorylineViewer: React.FC<StorylineViewerProps> = ({ userId
   const [showViewers, setShowViewers] = useState(false);
   const [isBlurred, setIsBlurred] = useState(false);
   const [userStarBalance, setUserStarBalance] = useState(0);
+  const [commentsEnabled, setCommentsEnabled] = useState(true);
+  const [imageTimer, setImageTimer] = useState<number | null>(null);
+  const [isProcessingPayment, setIsProcessingPayment] = useState(false);
+  const videoRef = useRef<HTMLVideoElement>(null);
+  const timerRef = useRef<NodeJS.Timeout | null>(null);
 
   useEffect(() => {
     if (open && userId) {
       loadStories();
       loadUserStarBalance();
     }
+    return () => {
+      if (timerRef.current) clearTimeout(timerRef.current);
+    };
   }, [open, userId]);
 
   useEffect(() => {
@@ -59,6 +70,7 @@ export const EnhancedStorylineViewer: React.FC<StorylineViewerProps> = ({ userId
       loadLikeCount();
       checkViewStatus();
       loadViewers();
+      checkCommentsEnabled();
     }
   }, [currentIndex, stories]);
 
@@ -87,6 +99,135 @@ export const EnhancedStorylineViewer: React.FC<StorylineViewerProps> = ({ userId
     };
   }, [stories, currentIndex]);
 
+  // Auto payment timer for images (30 seconds) and video end
+  useEffect(() => {
+    if (!stories[currentIndex] || isBlurred || hasViewed || isProcessingPayment) return;
+    
+    const currentStory = stories[currentIndex];
+    
+    // If free story or own story, just record view
+    if (currentStory.star_price === 0 || currentStory.user_id === user?.id) {
+      recordFreeView();
+      return;
+    }
+    
+    // For paid content - start timer for images
+    if (currentStory.media_type !== 'video') {
+      setImageTimer(30);
+      timerRef.current = setInterval(() => {
+        setImageTimer(prev => {
+          if (prev === null || prev <= 1) {
+            if (timerRef.current) clearInterval(timerRef.current);
+            // Process payment after timer ends
+            processAutoPayment();
+            return null;
+          }
+          return prev - 1;
+        });
+      }, 1000);
+    }
+    
+    return () => {
+      if (timerRef.current) clearInterval(timerRef.current);
+      setImageTimer(null);
+    };
+  }, [currentIndex, stories, isBlurred, hasViewed]);
+
+  const recordFreeView = async () => {
+    if (!user || !stories[currentIndex] || hasViewed) return;
+    
+    const currentStory = stories[currentIndex];
+    
+    // Check if already viewed
+    const { data: existingView } = await supabase
+      .from('story_views')
+      .select('id')
+      .eq('story_id', currentStory.id)
+      .eq('viewer_id', user.id)
+      .maybeSingle();
+    
+    if (existingView) {
+      setHasViewed(true);
+      return;
+    }
+    
+    // Record free view
+    await supabase.from('story_views').insert({
+      story_id: currentStory.id,
+      viewer_id: user.id,
+      stars_spent: 0
+    });
+    
+    setHasViewed(true);
+    loadViewers();
+  };
+
+  const processAutoPayment = async () => {
+    if (!user || !stories[currentIndex] || hasViewed || isProcessingPayment) return;
+    
+    setIsProcessingPayment(true);
+    const currentStory = stories[currentIndex];
+    
+    try {
+      const { data, error } = await supabase.rpc('process_story_view', {
+        p_story_id: currentStory.id,
+        p_viewer_id: user.id
+      });
+
+      if (error) throw error;
+
+      const result = data as any;
+      
+      if (result.success) {
+        setHasViewed(true);
+        await loadUserStarBalance();
+        await loadViewers();
+        
+        if (result.charged) {
+          toast({
+            title: 'Story Unlocked!',
+            description: `You earned ₦${result.viewer_earn} cashback! Stars deducted: ${currentStory.star_price}`,
+          });
+        }
+      } else if (result.error === 'Insufficient stars') {
+        setIsBlurred(true);
+        toast({
+          title: 'Insufficient Stars',
+          description: `You need ${currentStory.star_price} stars to view this story.`,
+          variant: 'destructive'
+        });
+      }
+    } catch (error) {
+      console.error('Error processing payment:', error);
+    } finally {
+      setIsProcessingPayment(false);
+    }
+  };
+
+  const handleVideoEnd = () => {
+    if (!hasViewed && !isBlurred) {
+      processAutoPayment();
+    }
+  };
+
+  const checkCommentsEnabled = async () => {
+    if (!stories[currentIndex]) return;
+    
+    const creatorId = stories[currentIndex].user_id;
+    const { data } = await supabase
+      .from('user_profiles')
+      .select('story_settings')
+      .eq('id', creatorId)
+      .single();
+    
+    if (data?.story_settings && typeof data.story_settings === 'object') {
+      const settings = data.story_settings as any;
+      setCommentsEnabled(settings.comments_enabled !== false);
+    } else {
+      setCommentsEnabled(true);
+    }
+  };
+
   const loadUserStarBalance = async () => {
     if (!user) return;
     const { data } = await supabase
@@ -98,7 +239,6 @@ export const EnhancedStorylineViewer: React.FC<StorylineViewerProps> = ({ userId
   };
 
   const loadStories = async () => {
-    // First load the stories
     const { data, error } = await supabase
       .from('user_storylines')
       .select('*')
@@ -112,7 +252,6 @@ export const EnhancedStorylineViewer: React.FC<StorylineViewerProps> = ({ userId
       return;
     }
 
-    // Load user profiles and story settings
     const userIds = [...new Set(data?.map(s => s.user_id) || [])];
     const { data: profiles } = await supabase
       .from('user_profiles')
@@ -121,7 +260,6 @@ export const EnhancedStorylineViewer: React.FC<StorylineViewerProps> = ({ userId
 
     const profileMap = new Map(profiles?.map(p => [p.id, p]));
 
-    // Check if current user should see these stories based on settings
     let filteredStories = data || [];
     
     if (user && userId !== user.id) {
@@ -135,12 +273,10 @@ export const EnhancedStorylineViewer: React.FC<StorylineViewerProps> = ({ userId
       if (creatorProfile?.story_settings) {
         const settings = creatorProfile.story_settings as any;
         
-        // Check if stories are set to "Only Me"
         if (settings.show_only_me) {
           filteredStories = [];
         }
         
-        // Check if stories are set to "Followers Only"
         if (settings.show_to_followers) {
           const { data: followData } = await supabase
             .from('followers')
@@ -154,7 +290,6 @@ export const EnhancedStorylineViewer: React.FC<StorylineViewerProps> = ({ userId
           }
         }
         
-        // Check age restriction
         if (settings.audience_control && settings.min_age) {
           const viewerAge = viewerProfile?.data?.age;
           if (!viewerAge || viewerAge < settings.min_age) {
@@ -189,7 +324,6 @@ export const EnhancedStorylineViewer: React.FC<StorylineViewerProps> = ({ userId
     setHasViewed(!!data);
     
     const currentStory = stories[currentIndex];
-    // Block if: story has star price AND user hasn't viewed it AND user has insufficient balance
     if (currentStory.star_price > 0 && !data) {
       if (userStarBalance === 0 || userStarBalance < currentStory.star_price) {
         setIsBlurred(true);
@@ -209,7 +343,7 @@ export const EnhancedStorylineViewer: React.FC<StorylineViewerProps> = ({ userId
     if (userStarBalance === 0) {
       toast({
         title: 'No Stars Available',
-        description: 'You need to purchase stars to view premium stories. Please buy stars to continue.',
+        description: 'You need to purchase stars to view premium stories.',
         variant: 'destructive'
       });
       return;
@@ -218,7 +352,7 @@ export const EnhancedStorylineViewer: React.FC<StorylineViewerProps> = ({ userId
     if (userStarBalance < currentStory.star_price) {
       toast({
         title: 'Insufficient Stars',
-        description: `You need ${currentStory.star_price} stars to view this story. You have ${userStarBalance} stars.`,
+        description: `You need ${currentStory.star_price} stars. You have ${userStarBalance}.`,
         variant: 'destructive'
       });
       return;
@@ -287,10 +421,8 @@ export const EnhancedStorylineViewer: React.FC<StorylineViewerProps> = ({ userId
   const loadViewers = async () => {
     if (!stories[currentIndex]) return;
     
-    // Get story owner ID
     const storyOwnerId = stories[currentIndex].user_id;
     
-    // Get all viewers
     const { data: viewData } = await supabase
       .from('story_views')
       .select(`
@@ -307,7 +439,6 @@ export const EnhancedStorylineViewer: React.FC<StorylineViewerProps> = ({ userId
     
     if (!viewData) return;
     
-    // Get followers of the story owner
     const { data: followersData } = await supabase
       .from('followers')
       .select('follower_id')
@@ -315,7 +446,6 @@ export const EnhancedStorylineViewer: React.FC<StorylineViewerProps> = ({ userId
     
     const followerIds = new Set(followersData?.map(f => f.follower_id) || []);
     
-    // Sort viewers: followers first, then others
     const sortedViewers = [...viewData].sort((a, b) => {
       const aIsFollower = followerIds.has(a.viewer_id);
       const bIsFollower = followerIds.has(b.viewer_id);
@@ -323,11 +453,9 @@ export const EnhancedStorylineViewer: React.FC<StorylineViewerProps> = ({ userId
       if (aIsFollower && !bIsFollower) return -1;
       if (!aIsFollower && bIsFollower) return 1;
       
-      // If both are followers or both are not, sort by viewed_at
       return new Date(b.viewed_at).getTime() - new Date(a.viewed_at).getTime();
     });
     
-    // Add follower flag to each viewer
     const viewersWithFollowerFlag = sortedViewers.map(viewer => ({
       ...viewer,
       isFollower: followerIds.has(viewer.viewer_id)
@@ -367,15 +495,7 @@ export const EnhancedStorylineViewer: React.FC<StorylineViewerProps> = ({ userId
   const handleComment = async () => {
     if (!user || !stories[currentIndex] || !comment.trim()) return;
 
-    // Check if comments are enabled for this story creator
-    const creatorProfile = await supabase
-      .from('user_profiles')
-      .select('story_settings')
-      .eq('id', currentStory.user_id)
-      .single();
-
-    const settings = creatorProfile?.data?.story_settings as any;
-    if (settings && settings.comments_enabled === false) {
+    if (!commentsEnabled) {
       toast({ 
         title: 'Comments Disabled', 
         description: 'The creator has disabled comments for their stories',
@@ -383,6 +503,8 @@ export const EnhancedStorylineViewer: React.FC<StorylineViewerProps> = ({ userId
       });
       return;
     }
+
+    const currentStory = stories[currentIndex];
 
     try {
       const { error } = await supabase
@@ -404,6 +526,8 @@ export const EnhancedStorylineViewer: React.FC<StorylineViewerProps> = ({ userId
   };
 
   const goNext = () => {
+    if (timerRef.current) clearInterval(timerRef.current);
+    setImageTimer(null);
     if (currentIndex < stories.length - 1) {
       setCurrentIndex(currentIndex + 1);
     } else {
@@ -412,9 +536,16 @@ export const EnhancedStorylineViewer: React.FC<StorylineViewerProps> = ({ userId
   };
 
   const goPrev = () => {
+    if (timerRef.current) clearInterval(timerRef.current);
+    setImageTimer(null);
     if (currentIndex > 0) {
       setCurrentIndex(currentIndex - 1);
     }
+  };
+
+  const handleViewerClick = (viewerId: string) => {
+    setShowViewers(false);
+    navigate(`/profile/${viewerId}`);
   };
 
   if (!stories[currentIndex]) return null;
@@ -444,6 +575,11 @@ export const EnhancedStorylineViewer: React.FC<StorylineViewerProps> = ({ userId
                   </div>
                 </div>
                 <div className="flex items-center gap-2">
+                  {imageTimer !== null && (
+                    <Badge className="bg-primary text-primary-foreground animate-pulse">
+                      {imageTimer}s
+                    </Badge>
+                  )}
                   {currentStory.star_price > 0 && (
                     <Badge className="bg-yellow-500 text-black neon-glow text-xs">
                       {currentStory.star_price}<Star className="h-3 w-3 ml-1 inline fill-current" />
@@ -489,10 +625,12 @@ export const EnhancedStorylineViewer: React.FC<StorylineViewerProps> = ({ userId
                 <>
                   {currentStory.media_type === 'video' ? (
                     <video
+                      ref={videoRef}
                       src={currentStory.media_url}
                       controls
                       className="max-h-full max-w-full"
                       autoPlay
+                      onEnded={handleVideoEnd}
                     />
                   ) : (
                     <img
@@ -531,12 +669,12 @@ export const EnhancedStorylineViewer: React.FC<StorylineViewerProps> = ({ userId
               )}
             </div>
 
-            {/* Caption - Always visible even when blurred */}
+            {/* Caption */}
             {currentStory.caption && (
               <div className="absolute bottom-24 sm:bottom-28 left-0 right-0 px-3 sm:px-4 z-10">
                 <p className={`text-white p-3 rounded-lg ${
                   isBlurred 
-                    ? 'bg-black/90 text-xl sm:text-2xl font-bold text-shadow-3d' 
+                    ? 'bg-black/90 text-xl sm:text-2xl font-bold' 
                     : 'bg-black/50 text-sm sm:text-base'
                 }`}>
                   {currentStory.caption}
@@ -568,18 +706,21 @@ export const EnhancedStorylineViewer: React.FC<StorylineViewerProps> = ({ userId
                 <span className="text-white text-sm sm:text-base">{viewers.length}</span>
               </div>
 
-              <div className="flex items-center space-x-2">
-                <Input
-                  value={comment}
-                  onChange={(e) => setComment(e.target.value)}
-                  placeholder="Add a comment..."
-                  className="flex-1 bg-white/10 border-white/20 text-white placeholder:text-white/50 text-sm"
-                  onKeyDown={(e) => e.key === 'Enter' && handleComment()}
-                />
-                <Button onClick={handleComment} size="sm" className="btn-3d">
-                  <MessageCircle className="h-4 w-4" />
-                </Button>
-              </div>
+              {/* Comment input - only show if comments are enabled */}
+              {commentsEnabled && (
+                <div className="flex items-center space-x-2">
+                  <Input
+                    value={comment}
+                    onChange={(e) => setComment(e.target.value)}
+                    placeholder="Add a comment..."
+                    className="flex-1 bg-white/10 border-white/20 text-white placeholder:text-white/50 text-sm"
+                    onKeyDown={(e) => e.key === 'Enter' && handleComment()}
+                  />
+                  <Button onClick={handleComment} size="sm" className="btn-3d">
+                    <MessageCircle className="h-4 w-4" />
+                  </Button>
+                </div>
+              )}
             </div>
           </div>
         </DialogContent>
@@ -598,7 +739,6 @@ export const EnhancedStorylineViewer: React.FC<StorylineViewerProps> = ({ userId
               </div>
             ) : (
               <>
-                {/* Show followers section if there are any */}
                 {viewers.some(v => v.isFollower) && (
                   <div className="mb-4">
                     <h4 className="text-sm font-semibold text-primary mb-2 px-3">Top Viewers (Followers)</h4>
@@ -606,10 +746,7 @@ export const EnhancedStorylineViewer: React.FC<StorylineViewerProps> = ({ userId
                       <div 
                         key={viewer.viewer_id} 
                         className="flex items-center justify-between p-3 hover:bg-muted rounded cursor-pointer glass-card mb-2"
-                        onClick={() => {
-                          setShowViewers(false);
-                          window.location.href = `/profile/${viewer.viewer_id}`;
-                        }}
+                        onClick={() => handleViewerClick(viewer.viewer_id)}
                       >
                         <div className="flex items-center space-x-3">
                           <Avatar>
@@ -636,7 +773,6 @@ export const EnhancedStorylineViewer: React.FC<StorylineViewerProps> = ({ userId
                   </div>
                 )}
                 
-                {/* Show other viewers */}
                 {viewers.filter(v => !v.isFollower).length > 0 && (
                   <div>
                     {viewers.some(v => v.isFollower) && (
@@ -646,10 +782,7 @@ export const EnhancedStorylineViewer: React.FC<StorylineViewerProps> = ({ userId
                       <div 
                         key={viewer.viewer_id} 
                         className="flex items-center justify-between p-3 hover:bg-muted rounded cursor-pointer"
-                        onClick={() => {
-                          setShowViewers(false);
-                          window.location.href = `/profile/${viewer.viewer_id}`;
-                        }}
+                        onClick={() => handleViewerClick(viewer.viewer_id)}
                       >
                         <div className="flex items-center space-x-3">
                           <Avatar>

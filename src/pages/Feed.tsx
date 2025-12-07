@@ -1,16 +1,16 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/integrations/supabase/client';
 import { Card, CardContent, CardHeader } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Badge } from '@/components/ui/badge';
-import { Heart, MessageCircle, Star, Home, History, X, Plus } from 'lucide-react';
+import { Heart, MessageCircle, Star, Home, History, X, Plus, Lock, Timer } from 'lucide-react';
 import { EnhancedStorylineViewer } from '@/components/Storyline/EnhancedStorylineViewer';
 import { CreateStoryline } from '@/components/Storyline/CreateStoryline';
 import { StorylineCard } from '@/components/Storyline/StorylineCard';
 import { useToast } from '@/hooks/use-toast';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import CreatePost from '@/components/Posts/CreatePost';
 import ProfileSetup from '@/components/Profile/ProfileSetup';
 import NewSearchBar from '@/components/Search/NewSearchBar';
@@ -51,9 +51,55 @@ interface PostLike {
   post_id: string;
 }
 
+// Post view timer component
+const PostViewTimer: React.FC<{
+  post: Post;
+  isVideo: boolean;
+  onComplete: () => void;
+  videoEnded?: boolean;
+}> = ({ post, isVideo, onComplete, videoEnded }) => {
+  const [timeLeft, setTimeLeft] = useState(isVideo ? null : 30);
+  const timerRef = useRef<NodeJS.Timeout | null>(null);
+
+  useEffect(() => {
+    if (isVideo) {
+      // For videos, wait for video to end
+      if (videoEnded) {
+        onComplete();
+      }
+    } else {
+      // For images, start 30 second timer
+      timerRef.current = setInterval(() => {
+        setTimeLeft(prev => {
+          if (prev === null || prev <= 1) {
+            if (timerRef.current) clearInterval(timerRef.current);
+            onComplete();
+            return null;
+          }
+          return prev - 1;
+        });
+      }, 1000);
+    }
+
+    return () => {
+      if (timerRef.current) clearInterval(timerRef.current);
+    };
+  }, [isVideo, videoEnded, onComplete]);
+
+  if (isVideo) return null;
+
+  return timeLeft ? (
+    <Badge className="absolute top-2 right-2 bg-primary/80 text-primary-foreground animate-pulse z-10">
+      <Timer className="w-3 h-3 mr-1" />
+      {timeLeft}s
+    </Badge>
+  ) : null;
+};
+
 const Feed = () => {
   const { user } = useAuth();
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const [posts, setPosts] = useState<Post[]>([]);
   const [users, setUsers] = useState<{ [key: string]: UserProfile }>({});
   const [userProfile, setUserProfile] = useState<UserProfile | null>(null);
@@ -71,11 +117,29 @@ const Feed = () => {
   const [showCreateStory, setShowCreateStory] = useState(false);
   const [currentUserProfile, setCurrentUserProfile] = useState<any>(null);
   const [isCreatePostOpen, setisCreatePostOpen] = useState(false);
+  const [processedPosts, setProcessedPosts] = useState<Set<string>>(new Set());
+  const [videoEndedMap, setVideoEndedMap] = useState<{ [key: string]: boolean }>({});
+  const [userStarBalance, setUserStarBalance] = useState(0);
   const { toast } = useToast();
+
+  // Handle post ID from URL params
+  useEffect(() => {
+    const postId = searchParams.get('post');
+    if (postId) {
+      // Scroll to post after loading
+      setTimeout(() => {
+        const element = document.getElementById(`post-${postId}`);
+        if (element) {
+          element.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        }
+      }, 500);
+    }
+  }, [searchParams, posts]);
 
   useEffect(() => {
     if (user) {
       checkUserProfile();
+      loadUserStarBalance();
     }
   }, [user]);
 
@@ -86,7 +150,17 @@ const Feed = () => {
       loadCurrentUserProfile();
       setupRealtimeSubscription();
     }
-  }, [userProfile]);
+  }, [userProfile, showOldPosts]);
+
+  const loadUserStarBalance = async () => {
+    if (!user) return;
+    const { data } = await supabase
+      .from('user_profiles')
+      .select('star_balance')
+      .eq('id', user.id)
+      .single();
+    setUserStarBalance(data?.star_balance || 0);
+  };
 
   const loadCurrentUserProfile = async () => {
     if (!user) return;
@@ -130,12 +204,6 @@ const Feed = () => {
     }
   };
 
-  useEffect(() => {
-    if (posts.length > 0) {
-      loadUserStories();
-    }
-  }, [posts]);
-
   const checkUserProfile = async () => {
     if (!user) return;
 
@@ -147,7 +215,6 @@ const Feed = () => {
         .single();
 
       if (error && error.code === 'PGRST116') {
-        // Profile doesn't exist
         setNeedsProfileSetup(true);
         setLoading(false);
         return;
@@ -161,7 +228,6 @@ const Feed = () => {
       setLoading(false);
     }
   };
-
 
   const loadCommentCounts = async (postIds: string[]) => {
     if (postIds.length === 0) return;
@@ -195,10 +261,8 @@ const Feed = () => {
         .eq('status', 'approved');
 
       if (showOldPosts) {
-        // Show posts with post_status = 'viewed' (48+ hours old)
         query = query.eq('post_status', 'viewed');
       } else {
-        // Show new posts (less than 48 hours old)
         query = query.eq('post_status', 'new');
       }
 
@@ -210,7 +274,6 @@ const Feed = () => {
 
       if (postsError) throw postsError;
 
-      // Filter out hidden posts
       let filteredPosts = postsData || [];
       if (user) {
         const { data: hiddenPosts } = await supabase
@@ -223,10 +286,8 @@ const Feed = () => {
       }
 
       if (filteredPosts && filteredPosts.length > 0) {
-        // Get unique user IDs
         const userIds = [...new Set(filteredPosts.map(post => post.user_id))];
         
-        // Fetch user profiles
         const { data: usersData, error: usersError } = await supabase
           .from('user_profiles')
           .select('id, username, avatar_url, vip')
@@ -234,13 +295,11 @@ const Feed = () => {
 
         if (usersError) throw usersError;
 
-        // Create users lookup
         const usersLookup: { [key: string]: UserProfile } = {};
         usersData?.forEach(user => {
           usersLookup[user.id] = user;
         });
 
-        // Fetch post likes
         const { data: likesData, error: likesError } = await supabase
           .from('post_likes')
           .select('*')
@@ -248,7 +307,6 @@ const Feed = () => {
 
         if (likesError) throw likesError;
 
-        // Group likes by post_id
         const likesLookup: { [key: string]: PostLike[] } = {};
         likesData?.forEach(like => {
           if (!likesLookup[like.post_id]) {
@@ -261,7 +319,6 @@ const Feed = () => {
         setUsers(usersLookup);
         setPostLikes(likesLookup);
 
-        // Load comment counts for these posts
         await loadCommentCounts(filteredPosts.map((p) => p.id));
       } else {
         setPosts([]);
@@ -283,91 +340,34 @@ const Feed = () => {
   const setupRealtimeSubscription = () => {
     const channel = supabase
       .channel('posts-feed')
-      .on(
-        'postgres_changes',
-        {
-          event: 'INSERT',
-          schema: 'public',
-          table: 'posts',
-          filter: 'status=eq.approved'
-        },
-        () => {
-          fetchPosts();
-        }
-      )
-      .on(
-        'postgres_changes',
-        {
-          event: 'INSERT',
-          schema: 'public',
-          table: 'post_likes'
-        },
-        (payload) => {
-          setPostLikes(prev => {
-            const updated = { ...prev };
-            const postId = payload.new.post_id;
-            if (!updated[postId]) {
-              updated[postId] = [];
-            }
-            updated[postId].push(payload.new as PostLike);
-            return updated;
-          });
-          
-          // Update likes count on the post
-          setPosts(prev => prev.map(post => 
-            post.id === payload.new.post_id 
-              ? { ...post, likes_count: post.likes_count + 1 }
-              : post
-          ));
-        }
-      )
-      .on(
-        'postgres_changes',
-        {
-          event: 'DELETE',
-          schema: 'public',
-          table: 'post_likes'
-        },
-        (payload) => {
-          setPostLikes(prev => {
-            const updated = { ...prev };
-            const postId = payload.old.post_id;
-            if (updated[postId]) {
-              updated[postId] = updated[postId].filter(like => like.id !== payload.old.id);
-            }
-            return updated;
-          });
-          
-          // Update likes count on the post
-          setPosts(prev => prev.map(post => 
-            post.id === payload.old.post_id 
-              ? { ...post, likes_count: Math.max(0, post.likes_count - 1) }
-              : post
-          ));
-        }
-      )
-      .on(
-        'postgres_changes',
-        {
-          event: 'DELETE',
-          schema: 'public',
-          table: 'posts'
-        },
-        () => {
-          fetchPosts();
-        }
-      )
-      .on(
-        'postgres_changes',
-        {
-          event: '*',
-          schema: 'public',
-          table: 'post_comments',
-        },
-        () => {
-          fetchPosts();
-        }
-      )
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'posts', filter: 'status=eq.approved' }, () => fetchPosts())
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'post_likes' }, (payload) => {
+        setPostLikes(prev => {
+          const updated = { ...prev };
+          const postId = payload.new.post_id;
+          if (!updated[postId]) updated[postId] = [];
+          updated[postId].push(payload.new as PostLike);
+          return updated;
+        });
+        setPosts(prev => prev.map(post => 
+          post.id === payload.new.post_id ? { ...post, likes_count: post.likes_count + 1 } : post
+        ));
+      })
+      .on('postgres_changes', { event: 'DELETE', schema: 'public', table: 'post_likes' }, (payload) => {
+        setPostLikes(prev => {
+          const updated = { ...prev };
+          const postId = payload.old.post_id;
+          if (updated[postId]) {
+            updated[postId] = updated[postId].filter(like => like.id !== payload.old.id);
+          }
+          return updated;
+        });
+        setPosts(prev => prev.map(post => 
+          post.id === payload.old.post_id ? { ...post, likes_count: Math.max(0, post.likes_count - 1) } : post
+        ));
+      })
+      .on('postgres_changes', { event: 'DELETE', schema: 'public', table: 'posts' }, () => fetchPosts())
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'post_comments' }, () => fetchPosts())
       .subscribe();
 
     return () => {
@@ -383,50 +383,35 @@ const Feed = () => {
 
     try {
       if (existingLike) {
-        // Unlike
-        const { error } = await supabase
-          .from('post_likes')
-          .delete()
-          .eq('id', existingLike.id);
-
+        const { error } = await supabase.from('post_likes').delete().eq('id', existingLike.id);
         if (error) throw error;
       } else {
-        // Like
-        const { error } = await supabase
-          .from('post_likes')
-          .insert({
-            post_id: postId,
-            user_id: user.id
-          });
-
+        const { error } = await supabase.from('post_likes').insert({ post_id: postId, user_id: user.id });
         if (error) throw error;
       }
     } catch (error) {
       console.error('Error toggling like:', error);
-      toast({
-        title: "Error",
-        description: "Failed to update like. Please try again.",
-        variant: "destructive"
-      });
+      toast({ title: "Error", description: "Failed to update like.", variant: "destructive" });
     }
   };
 
   const isPostLiked = (postId: string): boolean => {
     if (!user) return false;
-    const postLikesList = postLikes[postId] || [];
-    return postLikesList.some(like => like.user_id === user.id);
+    return (postLikes[postId] || []).some(like => like.user_id === user.id);
   };
 
   const getUsernamesWhoLiked = (postId: string): string[] => {
-    const postLikesList = postLikes[postId] || [];
-    return postLikesList.map(like => users[like.user_id]?.username || 'Unknown').filter(Boolean);
+    return (postLikes[postId] || []).map(like => users[like.user_id]?.username || 'Unknown').filter(Boolean);
   };
 
-  const trackPostView = async (post: Post) => {
-    if (!user) return;
+  const processPostPayment = async (post: Post) => {
+    if (!user || processedPosts.has(post.id)) return;
+    
+    // Mark as processed immediately to prevent double processing
+    setProcessedPosts(prev => new Set(prev).add(post.id));
 
     try {
-      // Check if view already exists
+      // Check if already viewed
       const { data: existingView } = await supabase
         .from('post_views')
         .select('id')
@@ -434,53 +419,41 @@ const Feed = () => {
         .eq('user_id', user.id)
         .maybeSingle();
 
-      if (!existingView) {
-        // If paid content and not uploader, process earning split atomically (RPC)
-        if (post.star_price && post.star_price > 0 && post.user_id !== user.id) {
-          const { error: rpcError } = await supabase.rpc('process_post_view', { 
-            p_post_id: post.id, 
-            p_viewer_id: user.id 
+      if (existingView) return;
+
+      // If free post or own post, just record view
+      if (!post.star_price || post.star_price === 0 || post.user_id === user.id) {
+        await supabase.from('post_views').insert({ post_id: post.id, user_id: user.id });
+        return;
+      }
+
+      // Process paid view via RPC
+      const { data, error } = await supabase.rpc('process_post_view', { 
+        p_post_id: post.id, 
+        p_viewer_id: user.id 
+      });
+
+      if (error) {
+        if (error.message?.toLowerCase().includes('insufficient')) {
+          toast({
+            title: "Insufficient Stars",
+            description: `You need ${post.star_price} stars to view this content.`,
+            variant: "destructive"
           });
-          
-          if (rpcError) {
-            // Check if it's insufficient stars error
-            if (rpcError.message?.toLowerCase().includes('insufficient') || 
-                rpcError.message?.toLowerCase().includes('stars')) {
-              toast({
-                title: "Insufficient Stars",
-                description: `You need ${post.star_price} stars to view this content. Earn stars by completing tasks!`,
-                variant: "destructive"
-              });
-            } else {
-              console.error('RPC error:', rpcError);
-            }
-            // Don't record the view if payment failed
-            return;
-          }
         }
+        return;
+      }
 
-        // Record the view only if payment succeeded (or no payment needed)
-        await supabase.from('post_views').insert({
-          post_id: post.id,
-          user_id: user.id,
+      const result = data as any;
+      if (result?.success && result?.charged) {
+        await loadUserStarBalance();
+        toast({
+          title: '💰 Earned Cashback!',
+          description: `You earned ₦${result.viewer_earn} for viewing this post!`,
         });
-
-        // Update view count
-        const { data: postRow } = await supabase
-          .from('posts')
-          .select('view_count')
-          .eq('id', post.id)
-          .single();
-
-        if (postRow) {
-          await supabase
-            .from('posts')
-            .update({ view_count: (postRow.view_count || 0) + 1 })
-            .eq('id', post.id);
-        }
       }
     } catch (error) {
-      console.error('Error tracking view:', error);
+      console.error('Error processing post payment:', error);
     }
   };
 
@@ -492,18 +465,12 @@ const Feed = () => {
     setExpandedComments(prev => ({ ...prev, [postId]: !prev[postId] }));
   };
 
-  useEffect(() => {
-    // Track views for visible posts
-    posts.forEach(post => {
-      trackPostView(post);
-    });
-  }, [posts]);
+  const handleVideoEnd = (postId: string) => {
+    setVideoEndedMap(prev => ({ ...prev, [postId]: true }));
+  };
 
   if (needsProfileSetup) {
-    return <ProfileSetup onComplete={() => {
-      setNeedsProfileSetup(false);
-      checkUserProfile();
-    }} />;
+    return <ProfileSetup onComplete={() => { setNeedsProfileSetup(false); checkUserProfile(); }} />;
   }
 
   if (loading) {
@@ -536,16 +503,15 @@ const Feed = () => {
         <div className="text-center">
           <h1 className="text-2xl font-bold text-primary">SaveMore Community</h1>
           <p className="text-muted-foreground">Share your food experiences</p>
+          <Badge className="mt-2">⭐ {userStarBalance} Stars</Badge>
         </div>
 
-        {/* Search Bar */}
         <NewSearchBar />
 
         {/* Stories Strip */}
         <section aria-label="Stories" className="-mx-2">
           <div className="overflow-x-auto px-2">
             <div className="flex items-start gap-3">
-              {/* Create Story - Big Card */}
               <div className="scale-110">
                 <StorylineCard
                   type="create"
@@ -554,7 +520,6 @@ const Feed = () => {
                 />
               </div>
 
-              {/* Other users' stories */}
               {stories.map((story: any) => (
                 <StorylineCard
                   key={story.id}
@@ -585,10 +550,7 @@ const Feed = () => {
         <Button
           variant={!showOldPosts ? 'default' : 'outline'}
           size="sm"
-          onClick={() => {
-            setShowOldPosts(false);
-            fetchPosts();
-          }}
+          onClick={() => setShowOldPosts(false)}
           className="flex-1"
         >
           <Home className="h-4 w-4 mr-2" />
@@ -597,10 +559,7 @@ const Feed = () => {
         <Button
           variant={showOldPosts ? 'default' : 'outline'}
           size="sm"
-          onClick={() => {
-            setShowOldPosts(true);
-            fetchPosts();
-          }}
+          onClick={() => setShowOldPosts(true)}
           className="flex-1"
         >
           <History className="h-4 w-4 mr-2" />
@@ -608,102 +567,122 @@ const Feed = () => {
         </Button>
       </div>
 
-        {/* Posts */}
-        <div className="space-y-3 sm:space-y-4">
-          {posts.map((post) => {
-            const postUser = users[post.user_id];
-            const likedUsernames = getUsernamesWhoLiked(post.id);
-            const currentUserLiked = isPostLiked(post.id);
-            
-            return (
-              <Card key={post.id} id={`post-${post.id}`} className="overflow-hidden glass-card card-3d">
-                <CardHeader className="p-3 sm:p-6">
-                  <div className="flex items-center justify-between">
-                     <button
-                       onClick={() => handleProfileClick(post.user_id)}
-                       className="flex items-center space-x-2 sm:space-x-3 hover:opacity-80 transition-opacity relative"
-                     >
-                       <div className="relative">
-                         <Avatar className="w-9 h-9 sm:w-10 sm:h-10 border-2 border-primary/50">
-                           <AvatarImage src={postUser?.avatar_url} />
-                           <AvatarFallback className="bg-primary text-primary-foreground">
-                             {postUser?.username?.charAt(0).toUpperCase() || 'U'}
-                           </AvatarFallback>
-                         </Avatar>
-                          {stories.some((s: any) => s.user_id === post.user_id) && (
-                            <div 
-                              className="absolute inset-0 rounded-full border-2 border-accent cursor-pointer neon-glow"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                setStorylineUser(post.user_id);
-                              }}
-                            />
-                          )}
-                       </div>
-                      <div className="text-left">
-                        <div className="flex items-center space-x-2">
-                          <span className="font-semibold text-sm sm:text-base">{postUser?.username || 'Anonymous'}</span>
-                          {postUser?.vip && (
-                            <Badge variant="secondary" className="text-xs bg-yellow-400 text-black">
-                              <Star className="w-3 h-3 mr-1 fill-current" />
-                              VIP
-                            </Badge>
-                          )}
-                        </div>
-                        <span className="text-xs text-muted-foreground">
-                          {new Date(post.created_at).toLocaleDateString()}
-                        </span>
-                      </div>
-                    </button>
-                    <div className="flex items-center space-x-2">
-                      {post.boosted && (
-                        <Badge variant="outline" className="text-xs">Boosted</Badge>
+      {/* Posts */}
+      <div className="space-y-3 sm:space-y-4">
+        {posts.map((post) => {
+          const postUser = users[post.user_id];
+          const likedUsernames = getUsernamesWhoLiked(post.id);
+          const currentUserLiked = isPostLiked(post.id);
+          const hasMedia = post.media_urls && post.media_urls.length > 0;
+          const isVideo = hasMedia && (post.media_urls[0].match(/\.(mp4|webm|ogg)$/i) || post.media_urls[0].includes('video'));
+          const isPaidPost = post.star_price && post.star_price > 0 && post.user_id !== user?.id;
+          const insufficientStars = isPaidPost && userStarBalance < (post.star_price || 0);
+          
+          return (
+            <Card key={post.id} id={`post-${post.id}`} className="overflow-hidden glass-card card-3d">
+              <CardHeader className="p-3 sm:p-6">
+                <div className="flex items-center justify-between">
+                  <button
+                    onClick={() => handleProfileClick(post.user_id)}
+                    className="flex items-center space-x-2 sm:space-x-3 hover:opacity-80 transition-opacity relative"
+                  >
+                    <div className="relative">
+                      <Avatar className="w-9 h-9 sm:w-10 sm:h-10 border-2 border-primary/50">
+                        <AvatarImage src={postUser?.avatar_url} />
+                        <AvatarFallback className="bg-primary text-primary-foreground">
+                          {postUser?.username?.charAt(0).toUpperCase() || 'U'}
+                        </AvatarFallback>
+                      </Avatar>
+                      {stories.some((s: any) => s.user_id === post.user_id) && (
+                        <div 
+                          className="absolute inset-0 rounded-full border-2 border-accent cursor-pointer neon-glow"
+                          onClick={(e) => { e.stopPropagation(); setStorylineUser(post.user_id); }}
+                        />
                       )}
-                      {post.rating > 0 && (
-                        <Badge variant="outline" className="text-xs">★ {post.rating}</Badge>
-                      )}
-                      <PostMenu 
-                        postId={post.id} 
-                        postOwnerId={post.user_id}
-                        onPostDeleted={fetchPosts}
-                      />
                     </div>
+                    <div className="text-left">
+                      <div className="flex items-center space-x-2">
+                        <span className="font-semibold text-sm sm:text-base">{postUser?.username || 'Anonymous'}</span>
+                        {postUser?.vip && (
+                          <Badge variant="secondary" className="text-xs bg-yellow-400 text-black">
+                            <Star className="w-3 h-3 mr-1 fill-current" />VIP
+                          </Badge>
+                        )}
+                      </div>
+                      <span className="text-xs text-muted-foreground">
+                        {new Date(post.created_at).toLocaleDateString()}
+                      </span>
+                    </div>
+                  </button>
+                  <div className="flex items-center space-x-2">
+                    {isPaidPost && (
+                      <Badge className="bg-yellow-500 text-black">
+                        {post.star_price}<Star className="w-3 h-3 ml-1 inline fill-current" />
+                      </Badge>
+                    )}
+                    {post.boosted && <Badge variant="outline" className="text-xs">Boosted</Badge>}
+                    <PostMenu postId={post.id} postOwnerId={post.user_id} onPostDeleted={fetchPosts} />
                   </div>
-                  <div className="mt-2 sm:mt-0">
-                    <h3 className="font-semibold mb-2 text-sm sm:text-base">{post.title}</h3>
-                    <Badge variant="outline" className="text-xs">{post.category}</Badge>
-                  </div>
-                </CardHeader>
-              
+                </div>
+                <div className="mt-2 sm:mt-0">
+                  <h3 className="font-semibold mb-2 text-sm sm:text-base">{post.title}</h3>
+                  <Badge variant="outline" className="text-xs">{post.category}</Badge>
+                </div>
+              </CardHeader>
+            
               <CardContent>
                 <p className="text-sm mb-4 whitespace-pre-line">{post.body}</p>
                 
-                {/* Media */}
-                {post.media_urls && post.media_urls.length > 0 && (
-                  <div className="mb-4 space-y-2">
-                    {post.media_urls.map((url, index) => {
-                      const isVideo = url.match(/\.(mp4|webm|ogg)$/i) || url.includes('video');
-                      
-                      return (
-                        <div key={index} onClick={() => !isVideo && setFullscreenMedia(url)}>
-                          {isVideo ? (
-                            <VideoPlayer src={url} autoPlay />
-                          ) : (
-                            <img 
-                              src={url} 
-                              alt={`Post media ${index + 1}`}
-                              className="w-full rounded-lg max-h-96 object-cover cursor-pointer hover:opacity-90 transition-opacity"
-                            />
-                          )}
+                {/* Media with payment timer */}
+                {hasMedia && (
+                  <div className="mb-4 space-y-2 relative">
+                    {insufficientStars ? (
+                      <div className="relative">
+                        <div className="absolute inset-0 backdrop-blur-lg bg-black/50 flex items-center justify-center z-10 rounded-lg">
+                          <div className="text-center text-white p-4">
+                            <Lock className="h-12 w-12 mx-auto mb-2" />
+                            <p className="font-bold">Pay {post.star_price} Stars to view</p>
+                            <p className="text-sm">You have {userStarBalance} stars</p>
+                          </div>
                         </div>
-                      );
-                    })}
+                        <div className="h-48 bg-muted rounded-lg" />
+                      </div>
+                    ) : (
+                      post.media_urls.map((url, index) => {
+                        const isVideoUrl = url.match(/\.(mp4|webm|ogg)$/i) || url.includes('video');
+                        
+                        return (
+                          <div key={index} className="relative" onClick={() => !isVideoUrl && setFullscreenMedia(url)}>
+                            {isPaidPost && !processedPosts.has(post.id) && (
+                              <PostViewTimer
+                                post={post}
+                                isVideo={!!isVideoUrl}
+                                videoEnded={videoEndedMap[post.id]}
+                                onComplete={() => processPostPayment(post)}
+                              />
+                            )}
+                            {isVideoUrl ? (
+                              <VideoPlayer 
+                                src={url} 
+                                autoPlay 
+                                onEnded={() => handleVideoEnd(post.id)}
+                              />
+                            ) : (
+                              <img 
+                                src={url} 
+                                alt={`Post media ${index + 1}`}
+                                className="w-full rounded-lg max-h-96 object-cover cursor-pointer hover:opacity-90 transition-opacity"
+                              />
+                            )}
+                          </div>
+                        );
+                      })
+                    )}
                   </div>
                 )}
 
                 {/* Reactions and Actions */}
                 <div className="pt-4 border-t space-y-3">
-                  {/* Like usernames */}
                   {likedUsernames.length > 0 && (
                     <div className="text-xs text-muted-foreground">
                       Liked by {likedUsernames.slice(0, 3).join(', ')}
@@ -711,7 +690,6 @@ const Feed = () => {
                     </div>
                   )}
                   
-                  {/* Action buttons */}
                   <div className="flex items-center justify-between">
                     <div className="flex items-center space-x-4">
                       <Button 
@@ -723,12 +701,7 @@ const Feed = () => {
                         <Heart className={`w-4 h-4 mr-1 ${currentUserLiked ? 'fill-current' : ''}`} />
                         <span className="text-xs font-medium">{postLikes[post.id]?.length || 0}</span>
                       </Button>
-                      <Button 
-                        variant="ghost" 
-                        size="sm" 
-                        className="p-0"
-                        onClick={() => toggleComments(post.id)}
-                      >
+                      <Button variant="ghost" size="sm" className="p-0" onClick={() => toggleComments(post.id)}>
                         <MessageCircle className="w-4 h-4 mr-1" />
                         <span className="text-xs font-medium">{post.comments_count || 0}</span>
                       </Button>
@@ -736,7 +709,6 @@ const Feed = () => {
                     <ShareMenu postId={post.id} postTitle={post.title} />
                   </div>
 
-                  {/* Comments Section */}
                   {expandedComments[post.id] && (
                     <div className="mt-4 pt-4 border-t">
                       <CommentSection postId={post.id} />
@@ -767,43 +739,27 @@ const Feed = () => {
             <X className="h-6 w-6" />
           </button>
           {fullscreenMedia && (
-            <img
-              src={fullscreenMedia}
-              alt="Fullscreen"
-              className="w-full h-full object-contain"
-            />
+            <img src={fullscreenMedia} alt="Fullscreen" className="w-full h-full object-contain" />
           )}
         </DialogContent>
       </Dialog>
 
-      {/* Storyline Viewer */}
+      {/* Storyline Viewers */}
       {storylineUser && (
-        <EnhancedStorylineViewer
-          userId={storylineUser}
-          open={!!storylineUser}
-          onClose={() => setStorylineUser(null)}
-        />
+        <EnhancedStorylineViewer userId={storylineUser} open={!!storylineUser} onClose={() => setStorylineUser(null)} />
       )}
 
-      {/* New Storyline Viewer for Cards */}
       {selectedStoryUserId && (
         <EnhancedStorylineViewer
           userId={selectedStoryUserId}
           open={showStoryViewer}
-          onClose={() => {
-            setShowStoryViewer(false);
-            setSelectedStoryUserId(null);
-          }}
+          onClose={() => { setShowStoryViewer(false); setSelectedStoryUserId(null); }}
         />
       )}
 
-      {/* Create Story Dialog */}
       {showCreateStory && (
         <CreateStoryline 
-          onCreated={() => {
-            setShowCreateStory(false);
-            loadUserStories();
-          }}
+          onCreated={() => { setShowCreateStory(false); loadUserStories(); }}
         />
       )}
     </div>

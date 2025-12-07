@@ -6,9 +6,8 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
-import { Upload, Plus, X, Image, Video } from 'lucide-react';
+import { Upload, Plus, X, Image, Video, Star } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 
 interface CreatePostProps {
@@ -32,7 +31,10 @@ const CreatePost: React.FC<CreatePostProps> = ({
   const [mediaFiles, setMediaFiles] = useState<File[]>([]);
   const [mediaPreviews, setMediaPreviews] = useState<string[]>([]);
   const [editPostId, setEditPostId] = useState<string | null>(null);
+  const [starPrice, setStarPrice] = useState<number>(0);
   const { toast } = useToast();
+
+  const starPriceOptions = [0, 20, 50, 100, 200, 500, 1000, 2000, 5000, 10000, 50000, 100000];
 
   useEffect(() => {
     if (postToEdit) {
@@ -41,14 +43,15 @@ const CreatePost: React.FC<CreatePostProps> = ({
       setCategory(postToEdit.category);
       setEditPostId(postToEdit.id);
       setMediaPreviews(postToEdit.media_urls || []);
+      setStarPrice(postToEdit.star_price || 0);
     } else {
-      // Reset form when there's no post to edit
       setTitle('');
       setBody('');
       setCategory('');
       setEditPostId(null);
       setMediaPreviews([]);
       setMediaFiles([]);
+      setStarPrice(0);
     }
   }, [postToEdit]);
 
@@ -60,7 +63,7 @@ const CreatePost: React.FC<CreatePostProps> = ({
   const handleMediaChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = Array.from(e.target.files || []);
     const validFiles = files.filter(file => {
-      const maxSize = file.type.startsWith('video/') ? 500 * 1024 * 1024 : 20 * 1024 * 1024; // 500MB for videos, 20MB for images
+      const maxSize = file.type.startsWith('video/') ? 500 * 1024 * 1024 : 20 * 1024 * 1024;
       if (file.size > maxSize) {
         toast({
           title: "File too large",
@@ -83,7 +86,6 @@ const CreatePost: React.FC<CreatePostProps> = ({
 
     setMediaFiles(prev => [...prev, ...validFiles]);
     
-    // Create previews
     validFiles.forEach(file => {
       const previewUrl = URL.createObjectURL(file);
       setMediaPreviews(prev => [...prev, previewUrl]);
@@ -140,23 +142,21 @@ const CreatePost: React.FC<CreatePostProps> = ({
     try {
       let mediaUrls: string[] = [];
       
-      // Upload new media if any
       if (mediaFiles.length > 0) {
         mediaUrls = await uploadMedia();
       } else if (editPostId) {
-        // Keep existing media URLs if editing
         mediaUrls = mediaPreviews;
       }
 
       if (editPostId) {
-        // Update existing post
         const { error } = await supabase
           .from('posts')
           .update({
             title: title.trim(),
             body: body.trim(),
             category,
-            media_urls: mediaUrls
+            media_urls: mediaUrls,
+            star_price: starPrice
           })
           .eq('id', editPostId);
 
@@ -167,14 +167,15 @@ const CreatePost: React.FC<CreatePostProps> = ({
           description: "Post updated successfully!"
         });
       } else {
-        // Create new post
         const { error } = await supabase.from('posts').insert({
           title: title.trim(),
           body: body.trim(),
           category,
           media_urls: mediaUrls,
           user_id: user.id,
-          status: 'approved'
+          status: 'approved',
+          star_price: starPrice,
+          post_status: 'new'
         });
 
         if (error) throw error;
@@ -185,13 +186,13 @@ const CreatePost: React.FC<CreatePostProps> = ({
         });
       }
 
-      // Reset form
       setTitle('');
       setBody('');
       setCategory('');
       setMediaFiles([]);
       setMediaPreviews([]);
       setEditPostId(null);
+      setStarPrice(0);
       if (onOpenChange) onOpenChange(false);
       
       if (onPostCreated) {
@@ -271,6 +272,33 @@ const CreatePost: React.FC<CreatePostProps> = ({
             </div>
           </div>
 
+          {/* Star Price */}
+          <div className="space-y-2">
+            <Label className="flex items-center gap-2">
+              <Star className="w-4 h-4 text-yellow-500" />
+              Star Price (Optional - Set to charge viewers)
+            </Label>
+            <Select value={starPrice.toString()} onValueChange={(val) => setStarPrice(parseInt(val))}>
+              <SelectTrigger>
+                <SelectValue placeholder="Select star price" />
+              </SelectTrigger>
+              <SelectContent>
+                {starPriceOptions.map((price) => (
+                  <SelectItem key={price} value={price.toString()}>
+                    {price === 0 ? 'Free' : `${price} Stars (₦${price * 500})`}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            {starPrice > 0 && (
+              <div className="p-3 bg-muted rounded-lg space-y-1 text-sm">
+                <p className="font-semibold">💰 Viewers pay: ₦{starPrice * 500} (${(starPrice * 0.33).toFixed(2)})</p>
+                <p className="text-primary">✅ You earn: ₦{starPrice * 500 * 0.6} (60%)</p>
+                <p className="text-muted-foreground">🎁 Viewer gets: ₦{starPrice * 500 * 0.2} cashback (20%)</p>
+              </div>
+            )}
+          </div>
+
           {/* Media Upload */}
           <div className="space-y-2">
             <Label>Media (Optional)</Label>
@@ -295,7 +323,6 @@ const CreatePost: React.FC<CreatePostProps> = ({
               </div>
             </div>
 
-            {/* Media Previews */}
             {mediaPreviews.length > 0 && (
               <div className="grid grid-cols-2 gap-2 mt-4">
                 {mediaPreviews.map((preview, index) => (

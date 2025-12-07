@@ -7,9 +7,10 @@ interface VideoPlayerProps {
   src: string;
   poster?: string;
   autoPlay?: boolean;
+  onEnded?: () => void;
 }
 
-export const VideoPlayer = ({ src, poster, autoPlay = false }: VideoPlayerProps) => {
+export const VideoPlayer = ({ src, poster, autoPlay = false, onEnded }: VideoPlayerProps) => {
   const videoRef = useRef<HTMLVideoElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const [isPlaying, setIsPlaying] = useState(false);
@@ -108,6 +109,7 @@ export const VideoPlayer = ({ src, poster, autoPlay = false }: VideoPlayerProps)
         onClick={togglePlay}
         playsInline
         muted={isMuted}
+        onEnded={onEnded}
       />
 
       {(showControls || !isPlaying) && (
