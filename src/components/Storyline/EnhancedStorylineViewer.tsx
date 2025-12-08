@@ -1,11 +1,11 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
-import { Heart, MessageCircle, X, ChevronLeft, ChevronRight, Eye, Star, Lock } from 'lucide-react';
+import { Heart, MessageCircle, X, ChevronLeft, ChevronRight, Eye, Star, Lock, Timer } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
 import { useToast } from '@/hooks/use-toast';
 import { ScrollArea } from '@/components/ui/scroll-area';
@@ -51,6 +51,7 @@ export const EnhancedStorylineViewer: React.FC<StorylineViewerProps> = ({ userId
   const [commentsEnabled, setCommentsEnabled] = useState(true);
   const [imageTimer, setImageTimer] = useState<number | null>(null);
   const [isProcessingPayment, setIsProcessingPayment] = useState(false);
+  const [paymentProcessed, setPaymentProcessed] = useState(false);
   const videoRef = useRef<HTMLVideoElement>(null);
   const timerRef = useRef<NodeJS.Timeout | null>(null);
 
@@ -58,9 +59,11 @@ export const EnhancedStorylineViewer: React.FC<StorylineViewerProps> = ({ userId
     if (open && userId) {
       loadStories();
       loadUserStarBalance();
+      setPaymentProcessed(false);
+      setHasViewed(false);
     }
     return () => {
-      if (timerRef.current) clearTimeout(timerRef.current);
+      if (timerRef.current) clearInterval(timerRef.current);
     };
   }, [open, userId]);
 
@@ -71,6 +74,8 @@ export const EnhancedStorylineViewer: React.FC<StorylineViewerProps> = ({ userId
       checkViewStatus();
       loadViewers();
       checkCommentsEnabled();
+      setPaymentProcessed(false);
+      setImageTimer(null);
     }
   }, [currentIndex, stories]);
 
@@ -79,7 +84,7 @@ export const EnhancedStorylineViewer: React.FC<StorylineViewerProps> = ({ userId
     if (!stories[currentIndex]) return;
     
     const channel = supabase
-      .channel('story-views')
+      .channel('story-views-' + stories[currentIndex].id)
       .on(
         'postgres_changes',
         {
@@ -99,73 +104,69 @@ export const EnhancedStorylineViewer: React.FC<StorylineViewerProps> = ({ userId
     };
   }, [stories, currentIndex]);
 
-  // Auto payment timer for images (30 seconds) and video end
+  // Auto payment timer for images (30 seconds) - only starts when story is visible and not blurred
   useEffect(() => {
-    if (!stories[currentIndex] || isBlurred || hasViewed || isProcessingPayment) return;
+    if (!stories[currentIndex] || isBlurred || hasViewed || isProcessingPayment || paymentProcessed) return;
     
     const currentStory = stories[currentIndex];
     
-    // If free story or own story, just record view
-    if (currentStory.star_price === 0 || currentStory.user_id === user?.id) {
-      recordFreeView();
-      return;
-    }
-    
     // For paid content - start timer for images
-    if (currentStory.media_type !== 'video') {
+    if (currentStory.media_type !== 'video' && currentStory.star_price > 0 && currentStory.user_id !== user?.id) {
       setImageTimer(30);
       timerRef.current = setInterval(() => {
         setImageTimer(prev => {
           if (prev === null || prev <= 1) {
             if (timerRef.current) clearInterval(timerRef.current);
-            // Process payment after timer ends
             processAutoPayment();
             return null;
           }
           return prev - 1;
         });
       }, 1000);
+    } else if (currentStory.star_price === 0 || currentStory.user_id === user?.id) {
+      // Free story or own story - record view immediately
+      recordFreeView();
     }
     
     return () => {
       if (timerRef.current) clearInterval(timerRef.current);
-      setImageTimer(null);
     };
-  }, [currentIndex, stories, isBlurred, hasViewed]);
+  }, [currentIndex, stories, isBlurred, hasViewed, paymentProcessed, user?.id]);
 
-  const recordFreeView = async () => {
-    if (!user || !stories[currentIndex] || hasViewed) return;
+  const recordFreeView = useCallback(async () => {
+    if (!user || !stories[currentIndex] || hasViewed || paymentProcessed) return;
     
     const currentStory = stories[currentIndex];
+    setPaymentProcessed(true);
     
-    // Check if already viewed
-    const { data: existingView } = await supabase
-      .from('story_views')
-      .select('id')
-      .eq('story_id', currentStory.id)
-      .eq('viewer_id', user.id)
-      .maybeSingle();
-    
-    if (existingView) {
-      setHasViewed(true);
-      return;
-    }
-    
-    // Record free view
-    await supabase.from('story_views').insert({
-      story_id: currentStory.id,
-      viewer_id: user.id,
-      stars_spent: 0
-    });
-    
-    setHasViewed(true);
-    loadViewers();
-  };
+    try {
+      // Use RPC to handle view (it handles duplicate check internally)
+      const { data, error } = await supabase.rpc('process_story_view', {
+        p_story_id: currentStory.id,
+        p_viewer_id: user.id
+      });
 
-  const processAutoPayment = async () => {
-    if (!user || !stories[currentIndex] || hasViewed || isProcessingPayment) return;
+      if (!error && data) {
+        setHasViewed(true);
+        await loadViewers();
+        
+        if ((data as any).already_viewed) {
+          toast({
+            title: "Already Viewed",
+            description: "You've already viewed this story",
+          });
+        }
+      }
+    } catch (error) {
+      console.error('Error recording view:', error);
+    }
+  }, [user, stories, currentIndex, hasViewed, paymentProcessed, toast]);
+
+  const processAutoPayment = useCallback(async () => {
+    if (!user || !stories[currentIndex] || hasViewed || isProcessingPayment || paymentProcessed) return;
     
     setIsProcessingPayment(true);
+    setPaymentProcessed(true);
     const currentStory = stories[currentIndex];
     
     try {
@@ -185,30 +186,40 @@ export const EnhancedStorylineViewer: React.FC<StorylineViewerProps> = ({ userId
         
         if (result.charged) {
           toast({
-            title: 'Story Unlocked!',
-            description: `You earned ₦${result.viewer_earn} cashback! Stars deducted: ${currentStory.star_price}`,
+            title: '💰 Story Unlocked!',
+            description: `⭐ ${result.stars_spent} Stars deducted. You earned ₦${result.viewer_earn} cashback!`,
+          });
+        } else if (result.already_viewed) {
+          toast({
+            title: "Already Viewed",
+            description: "You can't earn from this story again",
           });
         }
       } else if (result.error === 'Insufficient stars') {
         setIsBlurred(true);
         toast({
-          title: 'Insufficient Stars',
-          description: `You need ${currentStory.star_price} stars to view this story.`,
+          title: '❌ Insufficient Stars',
+          description: `You need ${result.required} stars but have ${result.available}. You can't earn from this story.`,
           variant: 'destructive'
         });
       }
     } catch (error) {
       console.error('Error processing payment:', error);
+      toast({
+        title: 'Error',
+        description: 'Failed to process story view',
+        variant: 'destructive'
+      });
     } finally {
       setIsProcessingPayment(false);
     }
-  };
+  }, [user, stories, currentIndex, hasViewed, isProcessingPayment, paymentProcessed, toast]);
 
-  const handleVideoEnd = () => {
-    if (!hasViewed && !isBlurred) {
+  const handleVideoEnd = useCallback(() => {
+    if (!hasViewed && !isBlurred && !paymentProcessed) {
       processAutoPayment();
     }
-  };
+  }, [hasViewed, isBlurred, paymentProcessed, processAutoPayment]);
 
   const checkCommentsEnabled = async () => {
     if (!stories[currentIndex]) return;
@@ -324,8 +335,8 @@ export const EnhancedStorylineViewer: React.FC<StorylineViewerProps> = ({ userId
     setHasViewed(!!data);
     
     const currentStory = stories[currentIndex];
-    if (currentStory.star_price > 0 && !data) {
-      if (userStarBalance === 0 || userStarBalance < currentStory.star_price) {
+    if (currentStory.star_price > 0 && !data && currentStory.user_id !== user.id) {
+      if (userStarBalance < currentStory.star_price) {
         setIsBlurred(true);
       } else {
         setIsBlurred(false);
@@ -340,15 +351,6 @@ export const EnhancedStorylineViewer: React.FC<StorylineViewerProps> = ({ userId
 
     const currentStory = stories[currentIndex];
     
-    if (userStarBalance === 0) {
-      toast({
-        title: 'No Stars Available',
-        description: 'You need to purchase stars to view premium stories.',
-        variant: 'destructive'
-      });
-      return;
-    }
-
     if (userStarBalance < currentStory.star_price) {
       toast({
         title: 'Insufficient Stars',
@@ -358,40 +360,8 @@ export const EnhancedStorylineViewer: React.FC<StorylineViewerProps> = ({ userId
       return;
     }
 
-    try {
-      const { data, error } = await supabase.rpc('process_story_view', {
-        p_story_id: currentStory.id,
-        p_viewer_id: user.id
-      });
-
-      if (error) throw error;
-
-      const result = data as any;
-      
-      if (result.success) {
-        setIsBlurred(false);
-        setHasViewed(true);
-        await loadUserStarBalance();
-        await loadViewers();
-        toast({
-          title: 'Story Unlocked!',
-          description: `You earned ₦${result.viewer_earn} cashback!`,
-        });
-      } else {
-        toast({
-          title: 'Error',
-          description: result.error || 'Failed to unlock story',
-          variant: 'destructive'
-        });
-      }
-    } catch (error) {
-      console.error('Error unlocking story:', error);
-      toast({
-        title: 'Error',
-        description: 'Failed to unlock story',
-        variant: 'destructive'
-      });
-    }
+    await processAutoPayment();
+    setIsBlurred(false);
   };
 
   const checkLikeStatus = async () => {
@@ -428,17 +398,26 @@ export const EnhancedStorylineViewer: React.FC<StorylineViewerProps> = ({ userId
       .select(`
         viewer_id,
         viewed_at,
-        stars_spent,
-        user_profiles:viewer_id (
-          username,
-          avatar_url
-        )
+        stars_spent
       `)
       .eq('story_id', stories[currentIndex].id)
       .order('viewed_at', { ascending: false });
     
-    if (!viewData) return;
+    if (!viewData || viewData.length === 0) {
+      setViewers([]);
+      return;
+    }
     
+    // Get viewer profiles
+    const viewerIds = viewData.map(v => v.viewer_id);
+    const { data: profilesData } = await supabase
+      .from('user_profiles')
+      .select('id, username, avatar_url')
+      .in('id', viewerIds);
+    
+    const profileMap = new Map(profilesData?.map(p => [p.id, p]) || []);
+    
+    // Get followers
     const { data: followersData } = await supabase
       .from('followers')
       .select('follower_id')
@@ -446,22 +425,21 @@ export const EnhancedStorylineViewer: React.FC<StorylineViewerProps> = ({ userId
     
     const followerIds = new Set(followersData?.map(f => f.follower_id) || []);
     
-    const sortedViewers = [...viewData].sort((a, b) => {
-      const aIsFollower = followerIds.has(a.viewer_id);
-      const bIsFollower = followerIds.has(b.viewer_id);
-      
-      if (aIsFollower && !bIsFollower) return -1;
-      if (!aIsFollower && bIsFollower) return 1;
-      
-      return new Date(b.viewed_at).getTime() - new Date(a.viewed_at).getTime();
-    });
-    
-    const viewersWithFollowerFlag = sortedViewers.map(viewer => ({
+    // Combine data
+    const viewersWithProfiles = viewData.map(viewer => ({
       ...viewer,
+      user_profiles: profileMap.get(viewer.viewer_id),
       isFollower: followerIds.has(viewer.viewer_id)
     }));
     
-    setViewers(viewersWithFollowerFlag);
+    // Sort by followers first
+    const sortedViewers = [...viewersWithProfiles].sort((a, b) => {
+      if (a.isFollower && !b.isFollower) return -1;
+      if (!a.isFollower && b.isFollower) return 1;
+      return new Date(b.viewed_at).getTime() - new Date(a.viewed_at).getTime();
+    });
+    
+    setViewers(sortedViewers);
   };
 
   const handleLike = async () => {
@@ -528,6 +506,8 @@ export const EnhancedStorylineViewer: React.FC<StorylineViewerProps> = ({ userId
   const goNext = () => {
     if (timerRef.current) clearInterval(timerRef.current);
     setImageTimer(null);
+    setPaymentProcessed(false);
+    setHasViewed(false);
     if (currentIndex < stories.length - 1) {
       setCurrentIndex(currentIndex + 1);
     } else {
@@ -538,6 +518,8 @@ export const EnhancedStorylineViewer: React.FC<StorylineViewerProps> = ({ userId
   const goPrev = () => {
     if (timerRef.current) clearInterval(timerRef.current);
     setImageTimer(null);
+    setPaymentProcessed(false);
+    setHasViewed(false);
     if (currentIndex > 0) {
       setCurrentIndex(currentIndex - 1);
     }
@@ -551,6 +533,7 @@ export const EnhancedStorylineViewer: React.FC<StorylineViewerProps> = ({ userId
   if (!stories[currentIndex]) return null;
 
   const currentStory = stories[currentIndex];
+  const isPaidStory = currentStory.star_price > 0 && currentStory.user_id !== user?.id;
 
   return (
     <>
@@ -575,14 +558,21 @@ export const EnhancedStorylineViewer: React.FC<StorylineViewerProps> = ({ userId
                   </div>
                 </div>
                 <div className="flex items-center gap-2">
-                  {imageTimer !== null && (
+                  {/* Timer display */}
+                  {imageTimer !== null && isPaidStory && !hasViewed && (
                     <Badge className="bg-primary text-primary-foreground animate-pulse">
+                      <Timer className="w-3 h-3 mr-1" />
                       {imageTimer}s
                     </Badge>
                   )}
                   {currentStory.star_price > 0 && (
                     <Badge className="bg-yellow-500 text-black neon-glow text-xs">
                       {currentStory.star_price}<Star className="h-3 w-3 ml-1 inline fill-current" />
+                    </Badge>
+                  )}
+                  {hasViewed && (
+                    <Badge variant="secondary" className="text-xs">
+                      ✓ Viewed
                     </Badge>
                   )}
                   <Button variant="ghost" size="icon" onClick={onClose} className="text-white hover:bg-white/20">
@@ -615,23 +605,32 @@ export const EnhancedStorylineViewer: React.FC<StorylineViewerProps> = ({ userId
                     <p className="text-lg">Pay {currentStory.star_price} ⭐ to view</p>
                     <p className="text-sm">You'll earn ₦{currentStory.star_price * 500 * 0.2} cashback!</p>
                     <p className="text-xs text-gray-300">Your balance: {userStarBalance} ⭐</p>
-                    <Button onClick={handleUnlockStory} size="lg" className="mt-4">
+                    <p className="text-red-400 text-sm">❌ You can't earn from this story without enough stars</p>
+                    <Button onClick={handleUnlockStory} size="lg" className="mt-4" disabled={isProcessingPayment}>
                       <Star className="mr-2" />
-                      Unlock Story
+                      {isProcessingPayment ? 'Processing...' : 'Unlock Story'}
                     </Button>
                   </div>
                 </div>
               ) : (
                 <>
                   {currentStory.media_type === 'video' ? (
-                    <video
-                      ref={videoRef}
-                      src={currentStory.media_url}
-                      controls
-                      className="max-h-full max-w-full"
-                      autoPlay
-                      onEnded={handleVideoEnd}
-                    />
+                    <div className="relative w-full h-full flex items-center justify-center">
+                      {isPaidStory && !hasViewed && (
+                        <Badge className="absolute top-16 right-2 bg-primary/80 text-primary-foreground z-10">
+                          <Timer className="w-3 h-3 mr-1" />
+                          Watch to earn
+                        </Badge>
+                      )}
+                      <video
+                        ref={videoRef}
+                        src={currentStory.media_url}
+                        controls
+                        className="max-h-full max-w-full"
+                        autoPlay
+                        onEnded={handleVideoEnd}
+                      />
+                    </div>
                   ) : (
                     <img
                       src={currentStory.media_url}
@@ -751,11 +750,11 @@ export const EnhancedStorylineViewer: React.FC<StorylineViewerProps> = ({ userId
                         <div className="flex items-center space-x-3">
                           <Avatar>
                             <AvatarImage src={viewer.user_profiles?.avatar_url} />
-                            <AvatarFallback>{viewer.user_profiles?.username?.[0]}</AvatarFallback>
+                            <AvatarFallback>{viewer.user_profiles?.username?.[0] || '?'}</AvatarFallback>
                           </Avatar>
                           <div>
                             <div className="flex items-center space-x-2">
-                              <p className="font-medium">{viewer.user_profiles?.username}</p>
+                              <p className="font-medium">{viewer.user_profiles?.username || 'Unknown'}</p>
                               <Badge variant="default" className="text-xs">Follower</Badge>
                             </div>
                             <p className="text-xs text-muted-foreground">
@@ -787,10 +786,10 @@ export const EnhancedStorylineViewer: React.FC<StorylineViewerProps> = ({ userId
                         <div className="flex items-center space-x-3">
                           <Avatar>
                             <AvatarImage src={viewer.user_profiles?.avatar_url} />
-                            <AvatarFallback>{viewer.user_profiles?.username?.[0]}</AvatarFallback>
+                            <AvatarFallback>{viewer.user_profiles?.username?.[0] || '?'}</AvatarFallback>
                           </Avatar>
                           <div>
-                            <p className="font-medium">{viewer.user_profiles?.username}</p>
+                            <p className="font-medium">{viewer.user_profiles?.username || 'Unknown'}</p>
                             <p className="text-xs text-muted-foreground">
                               {new Date(viewer.viewed_at).toLocaleString()}
                             </p>
