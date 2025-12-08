@@ -1,11 +1,11 @@
-import React, { useEffect, useState, useRef } from 'react';
+import React, { useEffect, useState, useRef, useCallback } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/integrations/supabase/client';
 import { Card, CardContent, CardHeader } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Badge } from '@/components/ui/badge';
-import { Heart, MessageCircle, Star, Home, History, X, Plus, Lock, Timer } from 'lucide-react';
+import { Heart, MessageCircle, Star, Home, History, X, Lock, Timer } from 'lucide-react';
 import { EnhancedStorylineViewer } from '@/components/Storyline/EnhancedStorylineViewer';
 import { CreateStoryline } from '@/components/Storyline/CreateStoryline';
 import { StorylineCard } from '@/components/Storyline/StorylineCard';
@@ -51,29 +51,35 @@ interface PostLike {
   post_id: string;
 }
 
-// Post view timer component
+// Post view timer component with improved logic
 const PostViewTimer: React.FC<{
   post: Post;
   isVideo: boolean;
   onComplete: () => void;
   videoEnded?: boolean;
-}> = ({ post, isVideo, onComplete, videoEnded }) => {
+  isProcessed: boolean;
+}> = ({ post, isVideo, onComplete, videoEnded, isProcessed }) => {
   const [timeLeft, setTimeLeft] = useState(isVideo ? null : 30);
   const timerRef = useRef<NodeJS.Timeout | null>(null);
+  const completedRef = useRef(false);
 
   useEffect(() => {
+    if (isProcessed || completedRef.current) return;
+
     if (isVideo) {
-      // For videos, wait for video to end
-      if (videoEnded) {
+      if (videoEnded && !completedRef.current) {
+        completedRef.current = true;
         onComplete();
       }
     } else {
-      // For images, start 30 second timer
       timerRef.current = setInterval(() => {
         setTimeLeft(prev => {
           if (prev === null || prev <= 1) {
             if (timerRef.current) clearInterval(timerRef.current);
-            onComplete();
+            if (!completedRef.current) {
+              completedRef.current = true;
+              onComplete();
+            }
             return null;
           }
           return prev - 1;
@@ -84,9 +90,18 @@ const PostViewTimer: React.FC<{
     return () => {
       if (timerRef.current) clearInterval(timerRef.current);
     };
-  }, [isVideo, videoEnded, onComplete]);
+  }, [isVideo, videoEnded, onComplete, isProcessed]);
 
-  if (isVideo) return null;
+  if (isProcessed) return null;
+
+  if (isVideo) {
+    return (
+      <Badge className="absolute top-2 right-2 bg-primary/80 text-primary-foreground z-10">
+        <Timer className="w-3 h-3 mr-1" />
+        Watch to earn
+      </Badge>
+    );
+  }
 
   return timeLeft ? (
     <Badge className="absolute top-2 right-2 bg-primary/80 text-primary-foreground animate-pulse z-10">
@@ -110,7 +125,6 @@ const Feed = () => {
   const [expandedComments, setExpandedComments] = useState<{ [key: string]: boolean }>({});
   const [fullscreenMedia, setFullscreenMedia] = useState<string | null>(null);
   const [storylineUser, setStorylineUser] = useState<string | null>(null);
-  const [userStories, setUserStories] = useState<{ [key: string]: number }>({});
   const [stories, setStories] = useState<any[]>([]);
   const [selectedStoryUserId, setSelectedStoryUserId] = useState<string | null>(null);
   const [showStoryViewer, setShowStoryViewer] = useState(false);
@@ -120,13 +134,13 @@ const Feed = () => {
   const [processedPosts, setProcessedPosts] = useState<Set<string>>(new Set());
   const [videoEndedMap, setVideoEndedMap] = useState<{ [key: string]: boolean }>({});
   const [userStarBalance, setUserStarBalance] = useState(0);
+  const [walletBalance, setWalletBalance] = useState(0);
   const { toast } = useToast();
 
   // Handle post ID from URL params
   useEffect(() => {
     const postId = searchParams.get('post');
     if (postId) {
-      // Scroll to post after loading
       setTimeout(() => {
         const element = document.getElementById(`post-${postId}`);
         if (element) {
@@ -139,7 +153,7 @@ const Feed = () => {
   useEffect(() => {
     if (user) {
       checkUserProfile();
-      loadUserStarBalance();
+      loadUserBalances();
     }
   }, [user]);
 
@@ -152,14 +166,42 @@ const Feed = () => {
     }
   }, [userProfile, showOldPosts]);
 
-  const loadUserStarBalance = async () => {
+  // Real-time wallet balance updates
+  useEffect(() => {
+    if (!user) return;
+
+    const channel = supabase
+      .channel('wallet-updates')
+      .on(
+        'postgres_changes',
+        {
+          event: 'UPDATE',
+          schema: 'public',
+          table: 'user_profiles',
+          filter: `id=eq.${user.id}`
+        },
+        (payload) => {
+          const newData = payload.new as any;
+          setUserStarBalance(newData.star_balance || 0);
+          setWalletBalance(newData.wallet_balance || 0);
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [user]);
+
+  const loadUserBalances = async () => {
     if (!user) return;
     const { data } = await supabase
       .from('user_profiles')
-      .select('star_balance')
+      .select('star_balance, wallet_balance')
       .eq('id', user.id)
       .single();
     setUserStarBalance(data?.star_balance || 0);
+    setWalletBalance(data?.wallet_balance || 0);
   };
 
   const loadCurrentUserProfile = async () => {
@@ -404,40 +446,25 @@ const Feed = () => {
     return (postLikes[postId] || []).map(like => users[like.user_id]?.username || 'Unknown').filter(Boolean);
   };
 
-  const processPostPayment = async (post: Post) => {
+  const processPostPayment = useCallback(async (post: Post) => {
     if (!user || processedPosts.has(post.id)) return;
     
-    // Mark as processed immediately to prevent double processing
+    // Mark as processed immediately
     setProcessedPosts(prev => new Set(prev).add(post.id));
 
     try {
-      // Check if already viewed
-      const { data: existingView } = await supabase
-        .from('post_views')
-        .select('id')
-        .eq('post_id', post.id)
-        .eq('user_id', user.id)
-        .maybeSingle();
-
-      if (existingView) return;
-
-      // If free post or own post, just record view
-      if (!post.star_price || post.star_price === 0 || post.user_id === user.id) {
-        await supabase.from('post_views').insert({ post_id: post.id, user_id: user.id });
-        return;
-      }
-
-      // Process paid view via RPC
+      // Process view via RPC (handles all logic including duplicate check)
       const { data, error } = await supabase.rpc('process_post_view', { 
         p_post_id: post.id, 
         p_viewer_id: user.id 
       });
 
       if (error) {
+        console.error('RPC Error:', error);
         if (error.message?.toLowerCase().includes('insufficient')) {
           toast({
-            title: "Insufficient Stars",
-            description: `You need ${post.star_price} stars to view this content.`,
+            title: "❌ Insufficient Stars",
+            description: `You need ${post.star_price} stars to earn from this content. You can't earn from this post.`,
             variant: "destructive"
           });
         }
@@ -445,17 +472,38 @@ const Feed = () => {
       }
 
       const result = data as any;
-      if (result?.success && result?.charged) {
-        await loadUserStarBalance();
+      
+      if (result?.success) {
+        await loadUserBalances();
+        
+        if (result.charged) {
+          toast({
+            title: '💰 Earned Cashback!',
+            description: `⭐ ${result.stars_spent} Stars deducted. You earned ₦${result.viewer_earn}!`,
+          });
+        } else if (result.already_viewed) {
+          toast({
+            title: "Already Viewed",
+            description: "You can't earn from this post again",
+          });
+        } else {
+          // Free post viewed
+          toast({
+            title: "Post Viewed",
+            description: "This is a free post - no earnings",
+          });
+        }
+      } else if (result?.error === 'Insufficient stars') {
         toast({
-          title: '💰 Earned Cashback!',
-          description: `You earned ₦${result.viewer_earn} for viewing this post!`,
+          title: "❌ Can't Earn",
+          description: `You need ${result.required} stars but have ${result.available}. You can't earn from this post.`,
+          variant: "destructive"
         });
       }
     } catch (error) {
       console.error('Error processing post payment:', error);
     }
-  };
+  }, [user, processedPosts, toast]);
 
   const handleProfileClick = (userId: string) => {
     navigate(`/profile/${userId}`);
@@ -503,7 +551,10 @@ const Feed = () => {
         <div className="text-center">
           <h1 className="text-2xl font-bold text-primary">SaveMore Community</h1>
           <p className="text-muted-foreground">Share your food experiences</p>
-          <Badge className="mt-2">⭐ {userStarBalance} Stars</Badge>
+          <div className="flex justify-center gap-2 mt-2">
+            <Badge className="bg-yellow-500 text-black">⭐ {userStarBalance} Stars</Badge>
+            <Badge variant="secondary">₦{walletBalance.toLocaleString()} Wallet</Badge>
+          </div>
         </div>
 
         <NewSearchBar />
@@ -577,6 +628,7 @@ const Feed = () => {
           const isVideo = hasMedia && (post.media_urls[0].match(/\.(mp4|webm|ogg)$/i) || post.media_urls[0].includes('video'));
           const isPaidPost = post.star_price && post.star_price > 0 && post.user_id !== user?.id;
           const insufficientStars = isPaidPost && userStarBalance < (post.star_price || 0);
+          const isProcessed = processedPosts.has(post.id);
           
           return (
             <Card key={post.id} id={`post-${post.id}`} className="overflow-hidden glass-card card-3d">
@@ -620,6 +672,9 @@ const Feed = () => {
                         {post.star_price}<Star className="w-3 h-3 ml-1 inline fill-current" />
                       </Badge>
                     )}
+                    {isProcessed && (
+                      <Badge variant="secondary" className="text-xs">✓ Viewed</Badge>
+                    )}
                     {post.boosted && <Badge variant="outline" className="text-xs">Boosted</Badge>}
                     <PostMenu postId={post.id} postOwnerId={post.user_id} onPostDeleted={fetchPosts} />
                   </div>
@@ -636,13 +691,14 @@ const Feed = () => {
                 {/* Media with payment timer */}
                 {hasMedia && (
                   <div className="mb-4 space-y-2 relative">
-                    {insufficientStars ? (
+                    {insufficientStars && !isProcessed ? (
                       <div className="relative">
                         <div className="absolute inset-0 backdrop-blur-lg bg-black/50 flex items-center justify-center z-10 rounded-lg">
                           <div className="text-center text-white p-4">
                             <Lock className="h-12 w-12 mx-auto mb-2" />
                             <p className="font-bold">Pay {post.star_price} Stars to view</p>
                             <p className="text-sm">You have {userStarBalance} stars</p>
+                            <p className="text-red-400 text-xs mt-2">❌ You can't earn from this post</p>
                           </div>
                         </div>
                         <div className="h-48 bg-muted rounded-lg" />
@@ -653,12 +709,13 @@ const Feed = () => {
                         
                         return (
                           <div key={index} className="relative" onClick={() => !isVideoUrl && setFullscreenMedia(url)}>
-                            {isPaidPost && !processedPosts.has(post.id) && (
+                            {isPaidPost && !isProcessed && (
                               <PostViewTimer
                                 post={post}
                                 isVideo={!!isVideoUrl}
                                 videoEnded={videoEndedMap[post.id]}
                                 onComplete={() => processPostPayment(post)}
+                                isProcessed={isProcessed}
                               />
                             )}
                             {isVideoUrl ? (

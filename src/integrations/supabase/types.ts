@@ -3020,6 +3020,7 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      archive_old_posts: { Args: never; Returns: undefined }
       deduct_voice_credits: { Args: { p_user_id: string }; Returns: Json }
       execute_admin_sql: { Args: { query: string }; Returns: Json }
       get_user_device_info: {
@@ -3060,6 +3061,8 @@ export type Database = {
         | { Args: { p_story_id: string; p_viewer_id: string }; Returns: Json }
       track_search: { Args: { search_keyword: string }; Returns: undefined }
       update_post_status: { Args: never; Returns: undefined }
+      use_ai_credit: { Args: { p_user_id: string }; Returns: Json }
+      use_voice_credit: { Args: { p_user_id: string }; Returns: Json }
     }
     Enums: {
       app_role: "admin" | "moderator" | "user"
