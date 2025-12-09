@@ -3021,6 +3021,7 @@ export type Database = {
     }
     Functions: {
       archive_old_posts: { Args: never; Returns: undefined }
+      auto_archive_old_posts: { Args: never; Returns: undefined }
       deduct_voice_credits: { Args: { p_user_id: string }; Returns: Json }
       execute_admin_sql: { Args: { query: string }; Returns: Json }
       get_user_device_info: {
@@ -3056,9 +3057,10 @@ export type Database = {
         Args: { p_post_id: string; p_viewer_id: string }
         Returns: Json
       }
-      process_story_view:
-        | { Args: { p_story_id: string; p_viewer_id: string }; Returns: Json }
-        | { Args: { p_story_id: string; p_viewer_id: string }; Returns: Json }
+      process_story_view: {
+        Args: { p_story_id: string; p_viewer_id: string }
+        Returns: Json
+      }
       track_search: { Args: { search_keyword: string }; Returns: undefined }
       update_post_status: { Args: never; Returns: undefined }
       use_ai_credit: { Args: { p_user_id: string }; Returns: Json }
