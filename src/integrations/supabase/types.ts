@@ -155,6 +155,36 @@ export type Database = {
         }
         Relationships: []
       }
+      admin_settings: {
+        Row: {
+          created_at: string | null
+          description: string | null
+          id: string
+          setting_key: string
+          setting_type: string | null
+          setting_value: string | null
+          updated_at: string | null
+        }
+        Insert: {
+          created_at?: string | null
+          description?: string | null
+          id?: string
+          setting_key: string
+          setting_type?: string | null
+          setting_value?: string | null
+          updated_at?: string | null
+        }
+        Update: {
+          created_at?: string | null
+          description?: string | null
+          id?: string
+          setting_key?: string
+          setting_type?: string | null
+          setting_value?: string | null
+          updated_at?: string | null
+        }
+        Relationships: []
+      }
       admin_user_messages: {
         Row: {
           created_at: string | null
@@ -567,6 +597,30 @@ export type Database = {
           follower_id?: string
           following_id?: string
           id?: string
+        }
+        Relationships: []
+      }
+      general_messages: {
+        Row: {
+          created_at: string | null
+          created_by: string | null
+          id: string
+          message: string
+          title: string
+        }
+        Insert: {
+          created_at?: string | null
+          created_by?: string | null
+          id?: string
+          message: string
+          title: string
+        }
+        Update: {
+          created_at?: string | null
+          created_by?: string | null
+          id?: string
+          message?: string
+          title?: string
         }
         Relationships: []
       }
@@ -1615,6 +1669,39 @@ export type Database = {
         }
         Relationships: []
       }
+      star_packages: {
+        Row: {
+          created_at: string | null
+          id: string
+          notes: string | null
+          price_naira: number
+          purchase_url: string | null
+          stars: number
+          status: string | null
+          updated_at: string | null
+        }
+        Insert: {
+          created_at?: string | null
+          id?: string
+          notes?: string | null
+          price_naira: number
+          purchase_url?: string | null
+          stars: number
+          status?: string | null
+          updated_at?: string | null
+        }
+        Update: {
+          created_at?: string | null
+          id?: string
+          notes?: string | null
+          price_naira?: number
+          purchase_url?: string | null
+          stars?: number
+          status?: string | null
+          updated_at?: string | null
+        }
+        Relationships: []
+      }
       star_rates: {
         Row: {
           created_at: string | null
@@ -2369,6 +2456,7 @@ export type Database = {
           updated_at: string
           username: string
           vip: boolean | null
+          vip_days: number | null
           vip_expires_at: string | null
           vip_post_count: number | null
           vip_started_at: string | null
@@ -2403,6 +2491,7 @@ export type Database = {
           updated_at?: string
           username: string
           vip?: boolean | null
+          vip_days?: number | null
           vip_expires_at?: string | null
           vip_post_count?: number | null
           vip_started_at?: string | null
@@ -2437,6 +2526,7 @@ export type Database = {
           updated_at?: string
           username?: string
           vip?: boolean | null
+          vip_days?: number | null
           vip_expires_at?: string | null
           vip_post_count?: number | null
           vip_started_at?: string | null

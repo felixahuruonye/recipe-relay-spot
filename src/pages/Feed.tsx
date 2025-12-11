@@ -5,7 +5,7 @@ import { Card, CardContent, CardHeader } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Badge } from '@/components/ui/badge';
-import { Heart, MessageCircle, Star, Home, History, X, Lock, Timer } from 'lucide-react';
+import { Heart, MessageCircle, Star, Home, History, X, Lock, Timer, UserPlus } from 'lucide-react';
 import { EnhancedStorylineViewer } from '@/components/Storyline/EnhancedStorylineViewer';
 import { CreateStoryline } from '@/components/Storyline/CreateStoryline';
 import { StorylineCard } from '@/components/Storyline/StorylineCard';
@@ -135,6 +135,7 @@ const Feed = () => {
   const [videoEndedMap, setVideoEndedMap] = useState<{ [key: string]: boolean }>({});
   const [userStarBalance, setUserStarBalance] = useState(0);
   const [walletBalance, setWalletBalance] = useState(0);
+  const [followingUsers, setFollowingUsers] = useState<Set<string>>(new Set());
   const { toast } = useToast();
 
   // Handle post ID from URL params
