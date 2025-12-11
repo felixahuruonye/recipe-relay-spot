@@ -7,7 +7,8 @@ import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
-import { Upload, Plus, X, Image, Video, Star } from 'lucide-react';
+import { Alert, AlertDescription } from '@/components/ui/alert';
+import { Upload, Plus, X, Image, Video, Star, Info } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 
 interface CreatePostProps {
@@ -32,9 +33,18 @@ const CreatePost: React.FC<CreatePostProps> = ({
   const [mediaPreviews, setMediaPreviews] = useState<string[]>([]);
   const [editPostId, setEditPostId] = useState<string | null>(null);
   const [starPrice, setStarPrice] = useState<number>(0);
+  const [userStarBalance, setUserStarBalance] = useState(0);
   const { toast } = useToast();
 
-  const starPriceOptions = [0, 20, 50, 100, 200, 500, 1000, 2000, 5000, 10000, 50000, 100000];
+  // New star pricing: 1-50 free, 100+ costs 40 stars
+  const starPriceOptions = [
+    0, 1, 2, 3, 4, 5, 10, 15, 20, 25, 30, 35, 40, 45, 50, // Free tier
+    100, 200, 300, 400, 500, 1000, 2000, 5000, 10000, 20000, 50000, 100000 // Paid tier (costs 40 stars)
+  ];
+
+  useEffect(() => {
+    if (user) loadUserBalance();
+  }, [user]);
 
   useEffect(() => {
     if (postToEdit) {
@@ -55,10 +65,24 @@ const CreatePost: React.FC<CreatePostProps> = ({
     }
   }, [postToEdit]);
 
+  const loadUserBalance = async () => {
+    if (!user) return;
+    const { data } = await supabase
+      .from('user_profiles')
+      .select('star_balance')
+      .eq('id', user.id)
+      .single();
+    setUserStarBalance(data?.star_balance || 0);
+  };
+
   const categories = [
     'Jollof Rice', 'Desserts', 'Equipment', 'For Sale', 'Tips & Tricks',
     'Restaurant Reviews', 'Recipes', 'Cooking Videos', 'General Discussion'
   ];
+
+  const isPaidTier = starPrice >= 100;
+  const postingFee = isPaidTier ? 40 : 0;
+  const canAffordFee = userStarBalance >= postingFee;
 
   const handleMediaChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = Array.from(e.target.files || []);
@@ -137,9 +161,31 @@ const CreatePost: React.FC<CreatePostProps> = ({
       return;
     }
 
+    // Check if user can afford posting fee for 100+ star posts
+    if (isPaidTier && !canAffordFee) {
+      toast({
+        title: "Insufficient Stars",
+        description: `You need ${postingFee} stars to post with ${starPrice}+ star rewards. You have ${userStarBalance} stars.`,
+        variant: "destructive"
+      });
+      return;
+    }
+
     setLoading(true);
 
     try {
+      // Deduct posting fee for 100+ star posts
+      if (isPaidTier && !editPostId) {
+        const { error: deductError } = await supabase
+          .from('user_profiles')
+          .update({ star_balance: userStarBalance - postingFee })
+          .eq('id', user.id);
+
+        if (deductError) {
+          throw new Error('Failed to deduct posting fee');
+        }
+      }
+
       let mediaUrls: string[] = [];
       
       if (mediaFiles.length > 0) {
@@ -182,7 +228,9 @@ const CreatePost: React.FC<CreatePostProps> = ({
 
         toast({
           title: "Success",
-          description: "Post created successfully!"
+          description: isPaidTier 
+            ? `Post created! ${postingFee} stars deducted for premium posting.`
+            : "Post created successfully!"
         });
       }
 
@@ -198,6 +246,8 @@ const CreatePost: React.FC<CreatePostProps> = ({
       if (onPostCreated) {
         onPostCreated();
       }
+      
+      loadUserBalance();
     } catch (error) {
       console.error('Error submitting post:', error);
       toast({
@@ -276,7 +326,7 @@ const CreatePost: React.FC<CreatePostProps> = ({
           <div className="space-y-2">
             <Label className="flex items-center gap-2">
               <Star className="w-4 h-4 text-yellow-500" />
-              Star Price (Optional - Set to charge viewers)
+              Star Price (Charge viewers to earn)
             </Label>
             <Select value={starPrice.toString()} onValueChange={(val) => setStarPrice(parseInt(val))}>
               <SelectTrigger>
@@ -285,16 +335,32 @@ const CreatePost: React.FC<CreatePostProps> = ({
               <SelectContent>
                 {starPriceOptions.map((price) => (
                   <SelectItem key={price} value={price.toString()}>
-                    {price === 0 ? 'Free' : `${price} Stars (₦${price * 500})`}
+                    {price === 0 ? 'Free' : `${price} Stars`}
+                    {price >= 100 ? ' (40⭐ fee)' : price > 0 ? ' (Free to post)' : ''}
                   </SelectItem>
                 ))}
               </SelectContent>
             </Select>
+
+            {/* Pricing info */}
+            <Alert className="bg-muted/50">
+              <Info className="h-4 w-4" />
+              <AlertDescription className="text-xs">
+                <strong>1-50 Stars:</strong> Free to post<br/>
+                <strong>100+ Stars:</strong> Pay 40⭐ posting fee (contributes to platform revenue)
+              </AlertDescription>
+            </Alert>
+
             {starPrice > 0 && (
               <div className="p-3 bg-muted rounded-lg space-y-1 text-sm">
                 <p className="font-semibold">💰 Viewers pay: ₦{starPrice * 500} (${(starPrice * 0.33).toFixed(2)})</p>
-                <p className="text-primary">✅ You earn: ₦{starPrice * 500 * 0.6} (60%)</p>
-                <p className="text-muted-foreground">🎁 Viewer gets: ₦{starPrice * 500 * 0.2} cashback (20%)</p>
+                <p className="text-primary">✅ You earn: ₦{starPrice * 500 * 0.4} (40%)</p>
+                <p className="text-muted-foreground">🎁 Viewer gets: ₦{starPrice * 500 * 0.35} cashback (35%)</p>
+                {isPaidTier && (
+                  <p className={`font-semibold ${canAffordFee ? 'text-yellow-600' : 'text-destructive'}`}>
+                    ⭐ Posting fee: {postingFee} Stars {canAffordFee ? '(will be deducted)' : `(You have ${userStarBalance})`}
+                  </p>
+                )}
               </div>
             )}
           </div>
@@ -373,7 +439,7 @@ const CreatePost: React.FC<CreatePostProps> = ({
             </Button>
             <Button 
               type="submit" 
-              disabled={loading || !title.trim() || !body.trim() || !category}
+              disabled={loading || !title.trim() || !body.trim() || !category || (isPaidTier && !canAffordFee)}
             >
               {loading ? (editPostId ? "Updating..." : "Creating...") : (editPostId ? "Update Post" : "Create Post")}
             </Button>
