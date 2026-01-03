@@ -197,9 +197,9 @@ export const CreateStoryline: React.FC<CreateStorylineProps> = ({ onCreated, use
 
             <div className="space-y-2">
               <p className="font-semibold">When a viewer unlocks your story:</p>
-              <p>• You instantly earn 60% in your wallet 💼</p>
-              <p>• The viewer receives 20% cashback as a thank-you bonus 🎁</p>
-              <p>• The platform keeps 20% for smooth operation ⚙️</p>
+              <p>• You instantly earn 40% in your wallet 💼</p>
+              <p>• The viewer receives 35% cashback as a thank-you bonus 🎁</p>
+              <p>• The platform keeps 25% for smooth operation ⚙️</p>
             </div>
 
             <div className="space-y-2">
@@ -330,13 +330,16 @@ export const CreateStoryline: React.FC<CreateStorylineProps> = ({ onCreated, use
               {starPrice > 0 && (
                 <div className="glass-card p-3 mt-2 space-y-1">
                   <p className="text-xs font-semibold">
-                    💰 Viewers pay: ₦{starPrice * 500} (${ (starPrice * 0.33).toFixed(2)})
+                    💰 Viewers pay: ₦{starPrice * 500} (${(starPrice * 0.33).toFixed(2)})
                   </p>
                   <p className="text-xs text-primary">
-                    ✅ You earn: ₦{starPrice * 500 * 0.6} (60%)
+                    ✅ You earn: ₦{starPrice * 500 * 0.4} (40%)
                   </p>
                   <p className="text-xs text-muted-foreground">
-                    🎁 Viewer gets: ₦{starPrice * 500 * 0.2} cashback (20%)
+                    🎁 Viewer gets: ₦{starPrice * 500 * 0.35} cashback (35%)
+                  </p>
+                  <p className="text-xs text-muted-foreground">
+                    ⚙️ Platform fee: ₦{starPrice * 500 * 0.25} (25%)
                   </p>
                 </div>
               )}

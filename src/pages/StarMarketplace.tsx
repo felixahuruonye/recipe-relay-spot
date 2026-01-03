@@ -84,10 +84,10 @@ const StarMarketplace = () => {
           <h1 className="text-3xl font-bold gradient-text">Star Marketplace</h1>
           <p className="text-muted-foreground">Purchase stars to unlock premium content</p>
         </div>
-      <Button variant="outline" onClick={() => navigate('/profile')}>
-        <Wallet className="w-4 h-4 mr-2" />
-        View Wallet
-      </Button>
+        <Button variant="outline" onClick={() => navigate('/wallet')}>
+          <Wallet className="w-4 h-4 mr-2" />
+          View Wallet
+        </Button>
       </div>
 
       {/* User Balance Card */}

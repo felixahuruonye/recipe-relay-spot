@@ -183,8 +183,14 @@ export const EnhancedStorylineViewer: React.FC<StorylineViewerProps> = ({ userId
         setHasViewed(true);
         await loadUserStarBalance();
         await loadViewers();
-        
-        if (result.charged) {
+
+        if (result.insufficient_stars) {
+          toast({
+            title: 'No Stars • No Earnings',
+            description: `You watched this story but didn't earn because you have ${result.available}⭐ (needs ${result.required}⭐).`,
+            variant: 'destructive'
+          });
+        } else if (result.charged) {
           toast({
             title: '💰 Story Unlocked!',
             description: `⭐ ${result.stars_spent} Stars deducted. You earned ₦${result.viewer_earn} cashback!`,
@@ -195,13 +201,6 @@ export const EnhancedStorylineViewer: React.FC<StorylineViewerProps> = ({ userId
             description: "You can't earn from this story again",
           });
         }
-      } else if (result.error === 'Insufficient stars') {
-        setIsBlurred(true);
-        toast({
-          title: '❌ Insufficient Stars',
-          description: `You need ${result.required} stars but have ${result.available}. You can't earn from this story.`,
-          variant: 'destructive'
-        });
       }
     } catch (error) {
       console.error('Error processing payment:', error);
@@ -333,17 +332,9 @@ export const EnhancedStorylineViewer: React.FC<StorylineViewerProps> = ({ userId
       .maybeSingle();
 
     setHasViewed(!!data);
-    
-    const currentStory = stories[currentIndex];
-    if (currentStory.star_price > 0 && !data && currentStory.user_id !== user.id) {
-      if (userStarBalance < currentStory.star_price) {
-        setIsBlurred(true);
-      } else {
-        setIsBlurred(false);
-      }
-    } else {
-      setIsBlurred(false);
-    }
+
+    // Viewing is always allowed; earnings depend on Stars (handled by RPC)
+    setIsBlurred(false);
   };
 
   const handleUnlockStory = async () => {
@@ -596,54 +587,37 @@ export const EnhancedStorylineViewer: React.FC<StorylineViewerProps> = ({ userId
 
             {/* Media */}
             <div className="flex-1 flex items-center justify-center relative">
-              {isBlurred ? (
-                <div className="relative w-full h-full flex items-center justify-center">
-                  <div className="absolute inset-0 backdrop-blur-3xl bg-black/50" />
-                  <div className="relative z-10 text-center text-white space-y-4 p-6">
-                    <Lock className="h-16 w-16 mx-auto" />
-                    <h3 className="text-2xl font-bold">Unlock this Story</h3>
-                    <p className="text-lg">Pay {currentStory.star_price} ⭐ to view</p>
-                    <p className="text-sm">You'll earn ₦{currentStory.star_price * 500 * 0.2} cashback!</p>
-                    <p className="text-xs text-gray-300">Your balance: {userStarBalance} ⭐</p>
-                    <p className="text-red-400 text-sm">❌ You can't earn from this story without enough stars</p>
-                    <Button onClick={handleUnlockStory} size="lg" className="mt-4" disabled={isProcessingPayment}>
-                      <Star className="mr-2" />
-                      {isProcessingPayment ? 'Processing...' : 'Unlock Story'}
-                    </Button>
-                  </div>
-                </div>
-              ) : (
-                <>
-                  {currentStory.media_type === 'video' ? (
-                    <div className="relative w-full h-full flex items-center justify-center">
-                      {isPaidStory && !hasViewed && (
-                        <Badge className="absolute top-16 right-2 bg-primary/80 text-primary-foreground z-10">
-                          <Timer className="w-3 h-3 mr-1" />
-                          Watch to earn
-                        </Badge>
-                      )}
-                      <video
-                        ref={videoRef}
-                        src={currentStory.media_url}
-                        controls
-                        className="max-h-full max-w-full"
-                        autoPlay
-                        onEnded={handleVideoEnd}
-                      />
-                    </div>
-                  ) : (
-                    <img
+              <>
+                {currentStory.media_type === 'video' ? (
+                  <div className="relative w-full h-full flex items-center justify-center">
+                    {isPaidStory && !hasViewed && (
+                      <Badge className="absolute top-16 right-2 bg-primary/80 text-primary-foreground z-10">
+                        <Timer className="w-3 h-3 mr-1" />
+                        Watch to earn
+                      </Badge>
+                    )}
+                    <video
+                      ref={videoRef}
                       src={currentStory.media_url}
-                      alt="Story"
-                      className="max-h-full max-w-full object-contain"
+                      controls
+                      className="max-h-full max-w-full"
+                      autoPlay
+                      onEnded={handleVideoEnd}
                     />
-                  )}
-                  
-                  {currentStory.music_url && (
-                    <audio src={currentStory.music_url} autoPlay loop className="hidden" />
-                  )}
-                </>
-              )}
+                  </div>
+                ) : (
+                  <img
+                    src={currentStory.media_url}
+                    alt="Story"
+                    className="max-h-full max-w-full object-contain"
+                    loading="lazy"
+                  />
+                )}
+
+                {currentStory.music_url && (
+                  <audio src={currentStory.music_url} autoPlay loop className="hidden" />
+                )}
+              </>
 
               {/* Navigation */}
               {currentIndex > 0 && (
@@ -671,11 +645,7 @@ export const EnhancedStorylineViewer: React.FC<StorylineViewerProps> = ({ userId
             {/* Caption */}
             {currentStory.caption && (
               <div className="absolute bottom-24 sm:bottom-28 left-0 right-0 px-3 sm:px-4 z-10">
-                <p className={`text-white p-3 rounded-lg ${
-                  isBlurred 
-                    ? 'bg-black/90 text-xl sm:text-2xl font-bold' 
-                    : 'bg-black/50 text-sm sm:text-base'
-                }`}>
+                <p className="text-white p-3 rounded-lg bg-black/50 text-sm sm:text-base">
                   {currentStory.caption}
                 </p>
               </div>
