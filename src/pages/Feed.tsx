@@ -301,7 +301,8 @@ const Feed = () => {
       let query = supabase
         .from('posts')
         .select('*')
-        .eq('status', 'approved');
+        .eq('status', 'approved')
+        .eq('disabled', false);
 
       if (showOldPosts) {
         query = query.eq('post_status', 'viewed');
@@ -449,58 +450,69 @@ const Feed = () => {
 
   const processPostPayment = useCallback(async (post: Post) => {
     if (!user || processedPosts.has(post.id)) return;
-    
+
     // Mark as processed immediately
     setProcessedPosts(prev => new Set(prev).add(post.id));
 
     try {
       // Process view via RPC (handles all logic including duplicate check)
-      const { data, error } = await supabase.rpc('process_post_view', { 
-        p_post_id: post.id, 
-        p_viewer_id: user.id 
+      const { data, error } = await supabase.rpc('process_post_view', {
+        p_post_id: post.id,
+        p_viewer_id: user.id
       });
 
       if (error) {
         console.error('RPC Error:', error);
-        if (error.message?.toLowerCase().includes('insufficient')) {
-          toast({
-            title: "❌ Insufficient Stars",
-            description: `You need ${post.star_price} stars to earn from this content. You can't earn from this post.`,
-            variant: "destructive"
-          });
-        }
+        toast({
+          title: 'Error',
+          description: 'Failed to process view. Please try again.',
+          variant: 'destructive'
+        });
         return;
       }
 
       const result = data as any;
-      
-      if (result?.success) {
-        await loadUserBalances();
-        
-        if (result.charged) {
-          toast({
-            title: '💰 Earned Cashback!',
-            description: `⭐ ${result.stars_spent} Stars deducted. You earned ₦${result.viewer_earn}!`,
-          });
-        } else if (result.already_viewed) {
-          toast({
-            title: "Already Viewed",
-            description: "You can't earn from this post again",
-          });
-        } else {
-          // Free post viewed
-          toast({
-            title: "Post Viewed",
-            description: "This is a free post - no earnings",
-          });
-        }
-      } else if (result?.error === 'Insufficient stars') {
+
+      if (!result?.success) {
         toast({
-          title: "❌ Can't Earn",
-          description: `You need ${result.required} stars but have ${result.available}. You can't earn from this post.`,
-          variant: "destructive"
+          title: "Can't Earn",
+          description: 'This view could not be processed.',
+          variant: 'destructive'
         });
+        return;
       }
+
+      await loadUserBalances();
+
+      if (result.insufficient_stars) {
+        toast({
+          title: 'No Stars • No Earnings',
+          description: `You watched this post but didn't earn because you have ${result.available}⭐ (needs ${result.required}⭐).`,
+          variant: 'destructive'
+        });
+        return;
+      }
+
+      if (result.charged) {
+        toast({
+          title: '💰 Earned Cashback!',
+          description: `⭐ ${result.stars_spent} Stars deducted. You earned ₦${result.viewer_earn}!`,
+        });
+        return;
+      }
+
+      if (result.already_viewed) {
+        toast({
+          title: 'Already Viewed',
+          description: "You can't earn from this post again",
+        });
+        return;
+      }
+
+      toast({
+        title: 'Post Viewed',
+        description: 'This is a free post - no earnings',
+      });
     } catch (error) {
       console.error('Error processing post payment:', error);
     }
@@ -692,50 +704,40 @@ const Feed = () => {
                 {/* Media with payment timer */}
                 {hasMedia && (
                   <div className="mb-4 space-y-2 relative">
-                    {insufficientStars && !isProcessed ? (
-                      <div className="relative">
-                        <div className="absolute inset-0 backdrop-blur-lg bg-black/50 flex items-center justify-center z-10 rounded-lg">
-                          <div className="text-center text-white p-4">
-                            <Lock className="h-12 w-12 mx-auto mb-2" />
-                            <p className="font-bold">Pay {post.star_price} Stars to view</p>
-                            <p className="text-sm">You have {userStarBalance} stars</p>
-                            <p className="text-red-400 text-xs mt-2">❌ You can't earn from this post</p>
-                          </div>
+                    {post.media_urls.map((url, index) => {
+                      const isVideoUrl = url.match(/\.(mp4|webm|ogg)$/i) || url.includes('video');
+
+                      return (
+                        <div key={index} className="relative" onClick={() => !isVideoUrl && setFullscreenMedia(url)}>
+                          {isPaidPost && !isProcessed && (
+                            <PostViewTimer
+                              post={post}
+                              isVideo={!!isVideoUrl}
+                              videoEnded={videoEndedMap[post.id]}
+                              onComplete={() => processPostPayment(post)}
+                              isProcessed={isProcessed}
+                            />
+                          )}
+
+                          {insufficientStars && isPaidPost && !isProcessed && (
+                            <Badge className="absolute left-2 top-2 bg-destructive/90 text-destructive-foreground z-10">
+                              No Stars • No earnings
+                            </Badge>
+                          )}
+
+                          {isVideoUrl ? (
+                            <VideoPlayer src={url} autoPlay onEnded={() => handleVideoEnd(post.id)} />
+                          ) : (
+                            <img
+                              src={url}
+                              alt={`Post media ${index + 1}`}
+                              className="w-full rounded-lg max-h-96 object-cover cursor-pointer hover:opacity-90 transition-opacity"
+                              loading="lazy"
+                            />
+                          )}
                         </div>
-                        <div className="h-48 bg-muted rounded-lg" />
-                      </div>
-                    ) : (
-                      post.media_urls.map((url, index) => {
-                        const isVideoUrl = url.match(/\.(mp4|webm|ogg)$/i) || url.includes('video');
-                        
-                        return (
-                          <div key={index} className="relative" onClick={() => !isVideoUrl && setFullscreenMedia(url)}>
-                            {isPaidPost && !isProcessed && (
-                              <PostViewTimer
-                                post={post}
-                                isVideo={!!isVideoUrl}
-                                videoEnded={videoEndedMap[post.id]}
-                                onComplete={() => processPostPayment(post)}
-                                isProcessed={isProcessed}
-                              />
-                            )}
-                            {isVideoUrl ? (
-                              <VideoPlayer 
-                                src={url} 
-                                autoPlay 
-                                onEnded={() => handleVideoEnd(post.id)}
-                              />
-                            ) : (
-                              <img 
-                                src={url} 
-                                alt={`Post media ${index + 1}`}
-                                className="w-full rounded-lg max-h-96 object-cover cursor-pointer hover:opacity-90 transition-opacity"
-                              />
-                            )}
-                          </div>
-                        );
-                      })
-                    )}
+                      );
+                    })}
                   </div>
                 )}
 

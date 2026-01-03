@@ -342,11 +342,13 @@ const Profile = () => {
                       <span className="text-xs text-muted-foreground">Stars</span>
                     </div>
                   </div>
-                  {profile.vip && (
-                    <div className="w-full max-w-xs mx-auto md:mx-0">
-                      <WithdrawalForm />
-                    </div>
-                  )}
+
+                  <div className="w-full max-w-xs mx-auto md:mx-0">
+                    <WithdrawalForm
+                      isVip={!!profile.vip}
+                      onUpgrade={() => navigate('/vip-subscription')}
+                    />
+                  </div>
                 </div>
               )}
             </div>
