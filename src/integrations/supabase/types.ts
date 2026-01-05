@@ -3110,6 +3110,23 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      admin_send_broadcast: {
+        Args: { p_message: string; p_title: string; p_type?: string }
+        Returns: Json
+      }
+      admin_set_user_balances: {
+        Args: {
+          p_reason?: string
+          p_star_balance?: number
+          p_user_id: string
+          p_wallet_balance?: number
+        }
+        Returns: Json
+      }
+      admin_update_payment_request: {
+        Args: { p_admin_notes?: string; p_request_id: string; p_status: string }
+        Returns: Json
+      }
       archive_old_posts: { Args: never; Returns: undefined }
       auto_archive_old_posts: { Args: never; Returns: undefined }
       deduct_voice_credits: { Args: { p_user_id: string }; Returns: Json }
