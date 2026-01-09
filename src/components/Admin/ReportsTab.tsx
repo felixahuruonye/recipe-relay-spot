@@ -41,7 +41,22 @@ export const ReportsTab = () => {
         .limit(50);
 
       if (error) throw error;
-      setReports(data || []);
+
+      const list = data || [];
+      // Attach reporter profiles (post_reports doesn't auto-join in this project)
+      const reporterIds = Array.from(new Set(list.map((r: any) => r.reporter_user_id).filter(Boolean)));
+      let reporterLookup: Record<string, any> = {};
+      if (reporterIds.length) {
+        const { data: reporters } = await supabase
+          .from('user_profiles')
+          .select('id, username, avatar_url')
+          .in('id', reporterIds);
+        (reporters || []).forEach((p: any) => {
+          reporterLookup[p.id] = p;
+        });
+      }
+
+      setReports(list.map((r: any) => ({ ...r, reporter: reporterLookup[r.reporter_user_id] })));
     } catch (error) {
       console.error('Error loading reports:', error);
     } finally {
@@ -51,16 +66,24 @@ export const ReportsTab = () => {
 
   const viewReportDetails = async (report: any) => {
     setSelectedReport(report);
-    
+
     // Fetch post details
     const { data: post } = await supabase
       .from('posts')
-      .select(`
-        *,
-        user:user_profiles(username, avatar_url)
-      `)
+      .select('*')
       .eq('id', report.post_id)
       .single();
+
+    if (post?.user_id) {
+      const { data: author } = await supabase
+        .from('user_profiles')
+        .select('username, avatar_url')
+        .eq('id', post.user_id)
+        .single();
+
+      setPostDetails({ ...post, user: author || null });
+      return;
+    }
 
     setPostDetails(post);
   };

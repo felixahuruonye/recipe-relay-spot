@@ -39,12 +39,15 @@ export const PrivateChat: React.FC<PrivateChatProps> = ({
   const { toast } = useToast();
 
   useEffect(() => {
-    if (user) {
-      fetchMessages();
-      setupRealtimeSubscription();
-      markMessagesAsRead();
-    }
-  }, [user, recipientId]);
+    if (!user) return;
+
+    fetchMessages();
+    const cleanup = setupRealtimeSubscription();
+    markMessagesAsRead();
+
+    return cleanup;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user?.id, recipientId]);
 
   useEffect(() => {
     scrollToBottom();
@@ -74,25 +77,38 @@ export const PrivateChat: React.FC<PrivateChatProps> = ({
   };
 
   const setupRealtimeSubscription = () => {
+    if (!user) return () => undefined;
+
     const channel = supabase
-      .channel('private-messages')
+      .channel(`private-messages-${user.id}-${recipientId}`)
       .on(
         'postgres_changes',
         {
           event: 'INSERT',
           schema: 'public',
-          table: 'private_messages'
+          table: 'private_messages',
+          filter: `to_user_id=eq.${user.id}`
         },
         (payload) => {
           const newMsg = payload.new as PrivateMessage;
-          if (
-            (newMsg.from_user_id === user?.id && newMsg.to_user_id === recipientId) ||
-            (newMsg.from_user_id === recipientId && newMsg.to_user_id === user?.id)
-          ) {
-            setMessages(prev => [...prev, newMsg]);
-            if (newMsg.from_user_id === recipientId) {
-              markMessagesAsRead();
-            }
+          if (newMsg.from_user_id === recipientId) {
+            setMessages((prev) => [...prev, newMsg]);
+            markMessagesAsRead();
+          }
+        }
+      )
+      .on(
+        'postgres_changes',
+        {
+          event: 'INSERT',
+          schema: 'public',
+          table: 'private_messages',
+          filter: `to_user_id=eq.${recipientId}`
+        },
+        (payload) => {
+          const newMsg = payload.new as PrivateMessage;
+          if (newMsg.from_user_id === user.id) {
+            setMessages((prev) => [...prev, newMsg]);
           }
         }
       )
@@ -102,7 +118,6 @@ export const PrivateChat: React.FC<PrivateChatProps> = ({
       supabase.removeChannel(channel);
     };
   };
-
   const markMessagesAsRead = async () => {
     if (!user) return;
 
@@ -118,24 +133,45 @@ export const PrivateChat: React.FC<PrivateChatProps> = ({
     e.preventDefault();
     if (!user || !newMessage.trim()) return;
 
+    const optimistic: PrivateMessage = {
+      id: `temp-${Date.now()}`,
+      from_user_id: user.id,
+      to_user_id: recipientId,
+      message: newMessage.trim(),
+      created_at: new Date().toISOString(),
+      read_at: null
+    };
+
+    setMessages((prev) => [...prev, optimistic]);
+    setNewMessage('');
+
     try {
-      const { error } = await supabase
+      const { data, error } = await supabase
         .from('private_messages')
         .insert({
           from_user_id: user.id,
           to_user_id: recipientId,
-          message: newMessage.trim()
-        });
+          message: optimistic.message
+        })
+        .select('*')
+        .single();
 
       if (error) throw error;
-      setNewMessage('');
+
+      // Replace optimistic message with real one
+      if (data?.id) {
+        setMessages((prev) => prev.map((m) => (m.id === optimistic.id ? (data as any as PrivateMessage) : m)));
+      }
     } catch (error) {
       console.error('Error sending message:', error);
       toast({
-        title: "Error",
-        description: "Failed to send message",
-        variant: "destructive"
+        title: 'Error',
+        description: 'Failed to send message',
+        variant: 'destructive'
       });
+      // Remove optimistic message
+      setMessages((prev) => prev.filter((m) => m.id !== optimistic.id));
+      setNewMessage(optimistic.message);
     }
   };
 

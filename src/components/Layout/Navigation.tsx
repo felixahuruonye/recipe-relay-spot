@@ -20,7 +20,6 @@ const Navigation = () => {
     { icon: ShoppingBag, label: 'Marketplace', path: '/marketplace' },
     { icon: Star, label: 'Star Market', path: '/star-marketplace' },
     { icon: Crown, label: 'VIP Subscription', path: '/vip-subscription' },
-    { icon: Star, label: 'Stickers', path: '/stickers' },
     { icon: Star, label: 'Wallet', path: '/wallet' },
     { icon: User, label: 'Profile', path: '/profile' },
     { icon: Settings, label: 'Settings', path: '/settings' },
