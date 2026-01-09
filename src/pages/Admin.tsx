@@ -10,6 +10,11 @@ import { Trash2, RefreshCw, Lock, ShieldAlert } from 'lucide-react';
 import { ReportsTab } from '@/components/Admin/ReportsTab';
 import { VIPManager } from '@/components/Admin/VIPManager';
 import { StoryManagement } from '@/components/Admin/StoryManagement';
+import { AdminChat } from '@/components/Admin/AdminChat';
+import { UserBalancesTab } from '@/components/Admin/UserBalancesTab';
+import { WithdrawalsTab } from '@/components/Admin/WithdrawalsTab';
+import { BroadcastTab } from '@/components/Admin/BroadcastTab';
+import { StarPackagesTab } from '@/components/Admin/StarPackagesTab';
 import { useAuth } from '@/contexts/AuthContext';
 import { useNavigate } from 'react-router-dom';
 
@@ -194,50 +199,78 @@ const AdminPanel = () => {
           </div>
         </div>
 
-        <Tabs defaultValue="users" className="w-full">
-          <TabsList className="grid w-full grid-cols-6">
-            <TabsTrigger value="users">Users</TabsTrigger>
-            <TabsTrigger value="posts">Posts</TabsTrigger>
-            <TabsTrigger value="tasks">Tasks</TabsTrigger>
-            <TabsTrigger value="reports">Reports</TabsTrigger>
-            <TabsTrigger value="vip">VIP Manager</TabsTrigger>
-            <TabsTrigger value="stories">Stories</TabsTrigger>
-          </TabsList>
+        <Tabs defaultValue="overview" className="w-full">
+          <div className="overflow-x-auto">
+            <TabsList className="inline-flex w-max gap-1">
+              <TabsTrigger value="overview">Overview</TabsTrigger>
+              <TabsTrigger value="balances">User Balances</TabsTrigger>
+              <TabsTrigger value="withdrawals">Withdrawals</TabsTrigger>
+              <TabsTrigger value="broadcast">Broadcast</TabsTrigger>
+              <TabsTrigger value="messages">Admin Messages</TabsTrigger>
+              <TabsTrigger value="posts">Posts</TabsTrigger>
+              <TabsTrigger value="tasks">Tasks</TabsTrigger>
+              <TabsTrigger value="reports">Reports</TabsTrigger>
+              <TabsTrigger value="vip">VIP</TabsTrigger>
+              <TabsTrigger value="stars">Star Packages</TabsTrigger>
+              <TabsTrigger value="stories">Stories</TabsTrigger>
+            </TabsList>
+          </div>
 
-          <TabsContent value="users">
+          <TabsContent value="overview">
+            <div className="grid gap-4 md:grid-cols-3">
+              <Card>
+                <CardHeader>
+                  <CardTitle>Quick Stats</CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-2 text-sm text-muted-foreground">
+                  <div>Users loaded: {users.length}</div>
+                  <div>Posts loaded: {posts.length}</div>
+                  <div>Tasks loaded: {tasks.length}</div>
+                </CardContent>
+              </Card>
+              <Card>
+                <CardHeader>
+                  <CardTitle>Common Actions</CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-2">
+                  <Button className="w-full" variant="outline" onClick={loadData} disabled={loading}>
+                    <RefreshCw className={`w-4 h-4 mr-2 ${loading ? 'animate-spin' : ''}`} />
+                    Refresh all
+                  </Button>
+                </CardContent>
+              </Card>
+              <Card>
+                <CardHeader>
+                  <CardTitle>Admin Tools</CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-2 text-sm text-muted-foreground">
+                  <div>Use “User Balances” to edit wallet/stars.</div>
+                  <div>Use “Withdrawals” to process requests.</div>
+                  <div>Use “Star Packages” to set purchase URLs.</div>
+                </CardContent>
+              </Card>
+            </div>
+          </TabsContent>
+
+          <TabsContent value="balances">
+            <UserBalancesTab />
+          </TabsContent>
+
+          <TabsContent value="withdrawals">
+            <WithdrawalsTab />
+          </TabsContent>
+
+          <TabsContent value="broadcast">
+            <BroadcastTab />
+          </TabsContent>
+
+          <TabsContent value="messages">
             <Card>
               <CardHeader>
-                <CardTitle>User Management ({users.length})</CardTitle>
+                <CardTitle>Admin → User Messages</CardTitle>
               </CardHeader>
               <CardContent>
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>Username</TableHead>
-                      <TableHead>Email</TableHead>
-                      <TableHead>VIP</TableHead>
-                      <TableHead>Stars</TableHead>
-                      <TableHead>Wallet</TableHead>
-                      <TableHead>Created</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {users.map((user: any) => (
-                      <TableRow key={user.id}>
-                        <TableCell className="font-medium">{user.username}</TableCell>
-                        <TableCell>{user.full_name || '-'}</TableCell>
-                        <TableCell>
-                          <Badge variant={user.vip ? "default" : "secondary"}>
-                            {user.vip ? 'VIP' : 'Regular'}
-                          </Badge>
-                        </TableCell>
-                        <TableCell>{user.star_balance || 0}</TableCell>
-                        <TableCell>₦{user.wallet_balance || 0}</TableCell>
-                        <TableCell>{new Date(user.created_at).toLocaleDateString()}</TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
+                <AdminChat />
               </CardContent>
             </Card>
           </TabsContent>
