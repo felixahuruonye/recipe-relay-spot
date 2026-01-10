@@ -12,7 +12,8 @@ import Feed from "./pages/Feed";
 import Chat from "./pages/Chat";
 import Groups from "./pages/Groups";
 import Marketplace from "./pages/Marketplace";
-import Stickers from "./pages/Stickers";
+import ContactAdmin from "./pages/ContactAdmin";
+import SharePlatform from "./pages/SharePlatform";
 import { WalletBalance } from "./components/Wallet/WalletBalance";
 import Explore from "./pages/Explore";
 import Profile from "./pages/Profile";
@@ -115,9 +116,14 @@ const App = () => (
                 <VIPSubscription />
               </ProtectedRoute>
             } />
-            <Route path="/stickers" element={
+            <Route path="/contact-admin" element={
               <ProtectedRoute>
-                <Stickers />
+                <ContactAdmin />
+              </ProtectedRoute>
+            } />
+            <Route path="/share" element={
+              <ProtectedRoute>
+                <SharePlatform />
               </ProtectedRoute>
             } />
             <Route path="/saved-searches" element={
