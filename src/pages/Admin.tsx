@@ -388,6 +388,10 @@ const AdminPanel = () => {
             <VIPManager />
           </TabsContent>
 
+          <TabsContent value="stars">
+            <StarPackagesTab />
+          </TabsContent>
+
           <TabsContent value="stories">
             <StoryManagement />
           </TabsContent>
