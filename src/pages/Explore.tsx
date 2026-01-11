@@ -3,9 +3,11 @@ import { supabase } from '@/integrations/supabase/client';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { TrendingUp, Flame, Clock, Calendar, Eye, Heart } from 'lucide-react';
+import { TrendingUp, Flame, Clock, Calendar, Eye, Heart, Plus } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
+import { useToast } from '@/hooks/use-toast';
+import { useAuth } from '@/contexts/AuthContext';
 
 interface TrendingPost {
   id: string;
@@ -21,6 +23,7 @@ interface TrendingPost {
 }
 
 interface TrendingKeyword {
+  id: string;
   keyword: string;
   search_count: number;
   last_search_at: string;
@@ -28,6 +31,8 @@ interface TrendingKeyword {
 
 const Explore = () => {
   const navigate = useNavigate();
+  const { toast } = useToast();
+  const { user } = useAuth();
   const [hotTopics, setHotTopics] = useState<TrendingPost[]>([]);
   const [trendingKeywords, setTrendingKeywords] = useState<TrendingKeyword[]>([]);
   const [timeWindow, setTimeWindow] = useState<'1h' | '24h' | '7d' | '30d'>('24h');
@@ -40,7 +45,6 @@ const Explore = () => {
   const fetchTrendingData = async () => {
     setLoading(true);
     try {
-      // Calculate time threshold
       const now = new Date();
       let threshold = new Date();
       switch (timeWindow) {
@@ -70,13 +74,14 @@ const Explore = () => {
 
       setHotTopics(posts || []);
 
-      // Fetch trending keywords
+      // Fetch trending keywords (searches with 3+ count are trending)
       const { data: keywords } = await supabase
         .from('search_trends')
         .select('*')
+        .gte('search_count', 3) // Show as trending after 3 searches
         .gte('last_search_at', threshold.toISOString())
         .order('search_count', { ascending: false })
-        .limit(10);
+        .limit(15);
 
       setTrendingKeywords(keywords || []);
     } catch (error) {
@@ -86,17 +91,12 @@ const Explore = () => {
     }
   };
 
-  const getTimeIcon = () => {
-    switch (timeWindow) {
-      case '1h':
-        return <Clock className="h-4 w-4" />;
-      case '24h':
-        return <Flame className="h-4 w-4" />;
-      case '7d':
-        return <TrendingUp className="h-4 w-4" />;
-      case '30d':
-        return <Calendar className="h-4 w-4" />;
-    }
+  const handleCreatePost = (keyword: string) => {
+    navigate(`/feed?createPost=true&title=${encodeURIComponent(keyword)}`);
+  };
+
+  const handleKeywordClick = (keyword: string) => {
+    navigate(`/?search=${encodeURIComponent(keyword)}`);
   };
 
   return (
@@ -167,7 +167,7 @@ const Explore = () => {
                 <Card 
                   key={post.id} 
                   className="hover:shadow-lg transition-all cursor-pointer glass-card"
-                  onClick={() => navigate(`/`)} // Navigate to feed where post is shown
+                  onClick={() => navigate(`/?post=${post.id}`)}
                 >
                   <CardHeader>
                     <div className="flex items-start justify-between">
@@ -223,23 +223,50 @@ const Explore = () => {
             <div className="grid gap-2">
               {trendingKeywords.map((item, index) => (
                 <Card 
-                  key={item.keyword}
-                  className="hover:shadow-md transition-all cursor-pointer"
-                  onClick={() => navigate(`/?search=${encodeURIComponent(item.keyword)}`)}
+                  key={item.id}
+                  className="hover:shadow-md transition-all"
                 >
                   <CardContent className="p-4 flex items-center justify-between">
-                    <div className="flex items-center gap-3">
+                    <div 
+                      className="flex items-center gap-3 cursor-pointer flex-1"
+                      onClick={() => handleKeywordClick(item.keyword)}
+                    >
                       <div className="flex items-center justify-center w-8 h-8 rounded-full bg-primary/10 text-primary font-bold">
                         {index + 1}
                       </div>
                       <div>
                         <p className="font-medium">{item.keyword}</p>
-                        <p className="text-xs text-muted-foreground">
-                          {item.search_count} searches
-                        </p>
+                        <div className="flex items-center gap-2">
+                          <p className="text-xs text-muted-foreground">
+                            {item.search_count} searches
+                          </p>
+                          {item.search_count >= 10 && (
+                            <Badge variant="destructive" className="text-xs">
+                              🔥 Hot
+                            </Badge>
+                          )}
+                          {item.search_count >= 3 && item.search_count < 10 && (
+                            <Badge variant="secondary" className="text-xs">
+                              📈 Trending
+                            </Badge>
+                          )}
+                        </div>
                       </div>
                     </div>
-                    <Flame className="h-5 w-5 text-orange-500" />
+                    <div className="flex items-center gap-2">
+                      <Flame className="h-5 w-5 text-orange-500" />
+                      <Button 
+                        size="sm" 
+                        variant="outline"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleCreatePost(item.keyword);
+                        }}
+                      >
+                        <Plus className="h-4 w-4 mr-1" />
+                        Create Post
+                      </Button>
+                    </div>
                   </CardContent>
                 </Card>
               ))}
@@ -249,7 +276,7 @@ const Explore = () => {
               <CardContent className="py-12 text-center">
                 <TrendingUp className="h-12 w-12 mx-auto mb-4 text-muted-foreground" />
                 <p className="text-muted-foreground">
-                  No trending searches in this time window yet.
+                  No trending searches yet. Search 3+ times for keywords to appear here!
                 </p>
               </CardContent>
             </Card>
