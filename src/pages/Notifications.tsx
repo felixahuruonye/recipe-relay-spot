@@ -5,7 +5,9 @@ import { useNavigate } from 'react-router-dom';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Badge } from '@/components/ui/badge';
-import { Bell, Heart, MessageCircle, AlertCircle } from 'lucide-react';
+import { Button } from '@/components/ui/button';
+import { Checkbox } from '@/components/ui/checkbox';
+import { Bell, Heart, MessageCircle, AlertCircle, Settings, Trash2, X } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 
 interface Notification {
@@ -26,6 +28,8 @@ const Notifications = () => {
   const { toast } = useToast();
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [loading, setLoading] = useState(true);
+  const [manageMode, setManageMode] = useState(false);
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
 
   useEffect(() => {
     if (user) {
@@ -53,7 +57,6 @@ const Notifications = () => {
     if (error) {
       console.error('Error loading notifications:', error);
     } else {
-      // Map to match our Notification interface
       const mappedData = (data || []).map(n => ({
         id: n.id,
         title: n.title,
@@ -119,6 +122,8 @@ const Notifications = () => {
   };
 
   const handleNotificationClick = async (notification: Notification) => {
+    if (manageMode) return;
+    
     await markAsRead(notification.id);
 
     if ((notification.notification_category === 'comment' || notification.notification_category === 'reaction') && notification.related_id) {
@@ -128,6 +133,44 @@ const Notifications = () => {
       if (data.type === 'vip') {
         navigate('/profile');
       }
+    }
+  };
+
+  const toggleSelect = (id: string) => {
+    setSelectedIds(prev => {
+      const newSet = new Set(prev);
+      if (newSet.has(id)) {
+        newSet.delete(id);
+      } else {
+        newSet.add(id);
+      }
+      return newSet;
+    });
+  };
+
+  const selectAll = () => {
+    if (selectedIds.size === notifications.length) {
+      setSelectedIds(new Set());
+    } else {
+      setSelectedIds(new Set(notifications.map(n => n.id)));
+    }
+  };
+
+  const deleteSelected = async () => {
+    if (selectedIds.size === 0) return;
+
+    const { error } = await supabase
+      .from('user_notifications')
+      .delete()
+      .in('id', Array.from(selectedIds));
+
+    if (error) {
+      toast({ title: 'Error', description: 'Failed to delete notifications', variant: 'destructive' });
+    } else {
+      toast({ title: 'Deleted', description: `${selectedIds.size} notification(s) removed` });
+      setNotifications(prev => prev.filter(n => !selectedIds.has(n.id)));
+      setSelectedIds(new Set());
+      setManageMode(false);
     }
   };
 
@@ -152,6 +195,7 @@ const Notifications = () => {
       case 'story_reaction':
         return <Heart className="h-5 w-5 text-red-500" />;
       case 'admin':
+      case 'broadcast':
         return <AlertCircle className="h-5 w-5 text-yellow-500" />;
       default:
         return <Bell className="h-5 w-5 text-gray-500" />;
@@ -170,15 +214,46 @@ const Notifications = () => {
     <div className="p-4 max-w-2xl mx-auto space-y-4">
       <Card>
         <CardHeader>
-          <CardTitle className="flex items-center space-x-2">
-            <Bell className="h-6 w-6" />
-            <span>Notifications</span>
-            {notifications.filter((n) => !n.is_read).length > 0 && (
-              <Badge variant="destructive">
-                {notifications.filter((n) => !n.is_read).length}
-              </Badge>
-            )}
-          </CardTitle>
+          <div className="flex items-center justify-between">
+            <CardTitle className="flex items-center space-x-2">
+              <Bell className="h-6 w-6" />
+              <span>Notifications</span>
+              {notifications.filter((n) => !n.is_read).length > 0 && (
+                <Badge variant="destructive">
+                  {notifications.filter((n) => !n.is_read).length}
+                </Badge>
+              )}
+            </CardTitle>
+            <div className="flex items-center gap-2">
+              {manageMode ? (
+                <>
+                  <Button size="sm" variant="outline" onClick={selectAll}>
+                    {selectedIds.size === notifications.length ? 'Deselect All' : 'Select All'}
+                  </Button>
+                  <Button 
+                    size="sm" 
+                    variant="destructive" 
+                    onClick={deleteSelected}
+                    disabled={selectedIds.size === 0}
+                  >
+                    <Trash2 className="w-4 h-4 mr-1" />
+                    Delete ({selectedIds.size})
+                  </Button>
+                  <Button size="sm" variant="ghost" onClick={() => {
+                    setManageMode(false);
+                    setSelectedIds(new Set());
+                  }}>
+                    <X className="w-4 h-4" />
+                  </Button>
+                </>
+              ) : (
+                <Button size="sm" variant="outline" onClick={() => setManageMode(true)}>
+                  <Settings className="w-4 h-4 mr-1" />
+                  Manage
+                </Button>
+              )}
+            </div>
+          </div>
         </CardHeader>
         <CardContent>
           {notifications.length === 0 ? (
@@ -195,9 +270,17 @@ const Notifications = () => {
                     notification.is_read
                       ? 'bg-background hover:bg-muted/50'
                       : 'bg-primary/5 hover:bg-primary/10 border-primary/20'
-                  }`}
+                  } ${selectedIds.has(notification.id) ? 'ring-2 ring-primary' : ''}`}
                 >
                   <div className="flex items-start space-x-3">
+                    {manageMode && (
+                      <Checkbox
+                        checked={selectedIds.has(notification.id)}
+                        onCheckedChange={() => toggleSelect(notification.id)}
+                        onClick={(e) => e.stopPropagation()}
+                        className="mt-1"
+                      />
+                    )}
                     <div className="flex-shrink-0 mt-1">
                       {renderNotificationIcon(notification)}
                     </div>
