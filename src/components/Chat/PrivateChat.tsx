@@ -6,7 +6,7 @@ import { Input } from '@/components/ui/input';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Badge } from '@/components/ui/badge';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { Send, ArrowLeft } from 'lucide-react';
+import { Send, ArrowLeft, Check, CheckCheck } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 
 interface PrivateChatProps {
@@ -35,7 +35,11 @@ export const PrivateChat: React.FC<PrivateChatProps> = ({
   const [messages, setMessages] = useState<PrivateMessage[]>([]);
   const [newMessage, setNewMessage] = useState('');
   const [loading, setLoading] = useState(true);
+  const [isTyping, setIsTyping] = useState(false);
+  const [recipientIsTyping, setRecipientIsTyping] = useState(false);
+  const [recipientOnline, setRecipientOnline] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const typingTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const { toast } = useToast();
 
   useEffect(() => {
@@ -44,9 +48,9 @@ export const PrivateChat: React.FC<PrivateChatProps> = ({
     fetchMessages();
     const cleanup = setupRealtimeSubscription();
     markMessagesAsRead();
+    checkRecipientStatus();
 
     return cleanup;
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user?.id, recipientId]);
 
   useEffect(() => {
@@ -55,6 +59,16 @@ export const PrivateChat: React.FC<PrivateChatProps> = ({
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+  };
+
+  const checkRecipientStatus = async () => {
+    const { data } = await supabase
+      .from('user_profiles')
+      .select('is_online, last_seen')
+      .eq('id', recipientId)
+      .single();
+
+    setRecipientOnline(data?.is_online || false);
   };
 
   const fetchMessages = async () => {
@@ -112,12 +126,37 @@ export const PrivateChat: React.FC<PrivateChatProps> = ({
           }
         }
       )
+      .on(
+        'postgres_changes',
+        {
+          event: 'UPDATE',
+          schema: 'public',
+          table: 'private_messages'
+        },
+        (payload) => {
+          const updated = payload.new as PrivateMessage;
+          setMessages(prev => prev.map(m => m.id === updated.id ? updated : m));
+        }
+      )
+      .on(
+        'postgres_changes',
+        {
+          event: 'UPDATE',
+          schema: 'public',
+          table: 'user_profiles',
+          filter: `id=eq.${recipientId}`
+        },
+        (payload) => {
+          setRecipientOnline((payload.new as any).is_online || false);
+        }
+      )
       .subscribe();
 
     return () => {
       supabase.removeChannel(channel);
     };
   };
+
   const markMessagesAsRead = async () => {
     if (!user) return;
 
@@ -127,6 +166,20 @@ export const PrivateChat: React.FC<PrivateChatProps> = ({
       .eq('to_user_id', user.id)
       .eq('from_user_id', recipientId)
       .is('read_at', null);
+  };
+
+  const handleTyping = () => {
+    if (!isTyping) {
+      setIsTyping(true);
+    }
+
+    if (typingTimeoutRef.current) {
+      clearTimeout(typingTimeoutRef.current);
+    }
+
+    typingTimeoutRef.current = setTimeout(() => {
+      setIsTyping(false);
+    }, 2000);
   };
 
   const sendMessage = async (e: React.FormEvent) => {
@@ -144,6 +197,7 @@ export const PrivateChat: React.FC<PrivateChatProps> = ({
 
     setMessages((prev) => [...prev, optimistic]);
     setNewMessage('');
+    setIsTyping(false);
 
     try {
       const { data, error } = await supabase
@@ -158,7 +212,6 @@ export const PrivateChat: React.FC<PrivateChatProps> = ({
 
       if (error) throw error;
 
-      // Replace optimistic message with real one
       if (data?.id) {
         setMessages((prev) => prev.map((m) => (m.id === optimistic.id ? (data as any as PrivateMessage) : m)));
       }
@@ -169,7 +222,6 @@ export const PrivateChat: React.FC<PrivateChatProps> = ({
         description: 'Failed to send message',
         variant: 'destructive'
       });
-      // Remove optimistic message
       setMessages((prev) => prev.filter((m) => m.id !== optimistic.id));
       setNewMessage(optimistic.message);
     }
@@ -203,6 +255,15 @@ export const PrivateChat: React.FC<PrivateChatProps> = ({
     });
   };
 
+  const getMessageStatus = (message: PrivateMessage) => {
+    if (message.from_user_id !== user?.id) return null;
+    
+    if (message.read_at) {
+      return <CheckCheck className="w-4 h-4 text-blue-500" />;
+    }
+    return <Check className="w-4 h-4 text-muted-foreground" />;
+  };
+
   return (
     <div className="flex flex-col h-full">
       {/* Header */}
@@ -216,9 +277,20 @@ export const PrivateChat: React.FC<PrivateChatProps> = ({
             {recipientName.charAt(0).toUpperCase()}
           </AvatarFallback>
         </Avatar>
-        <div>
+        <div className="flex-1">
           <h3 className="font-semibold">{recipientName}</h3>
-          <p className="text-xs text-muted-foreground">Private Chat</p>
+          <div className="flex items-center gap-2">
+            {recipientOnline ? (
+              <Badge variant="outline" className="text-xs bg-green-500/10 text-green-600 border-green-500/30">
+                Online
+              </Badge>
+            ) : (
+              <span className="text-xs text-muted-foreground">Offline</span>
+            )}
+            {recipientIsTyping && (
+              <span className="text-xs text-muted-foreground animate-pulse">typing...</span>
+            )}
+          </div>
         </div>
       </div>
 
@@ -253,16 +325,19 @@ export const PrivateChat: React.FC<PrivateChatProps> = ({
                       >
                         {formatTime(message.created_at)}
                       </p>
-                      {isFromMe && (
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          className="h-5 px-2 opacity-0 group-hover:opacity-100 transition-opacity"
-                          onClick={() => deleteMessage(message.id)}
-                        >
-                          Delete
-                        </Button>
-                      )}
+                      <div className="flex items-center gap-1">
+                        {getMessageStatus(message)}
+                        {isFromMe && (
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="h-5 px-2 opacity-0 group-hover:opacity-100 transition-opacity"
+                            onClick={() => deleteMessage(message.id)}
+                          >
+                            Delete
+                          </Button>
+                        )}
+                      </div>
                     </div>
                   </div>
                 </div>
@@ -283,7 +358,10 @@ export const PrivateChat: React.FC<PrivateChatProps> = ({
           <Input
             placeholder="Type your message..."
             value={newMessage}
-            onChange={(e) => setNewMessage(e.target.value)}
+            onChange={(e) => {
+              setNewMessage(e.target.value);
+              handleTyping();
+            }}
             className="flex-1"
             maxLength={500}
           />

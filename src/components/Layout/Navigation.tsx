@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
-import { Home, MessageCircle, ShoppingBag, User, Users, Bell, Settings, TrendingUp, Menu, X, Star, Crown } from 'lucide-react';
+import { Home, MessageCircle, ShoppingBag, User, Users, Bell, Settings, TrendingUp, Menu, Star, Crown, Mail, Share2 } from 'lucide-react';
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from '@/components/ui/sheet';
 import { Button } from '@/components/ui/button';
 
@@ -22,6 +22,8 @@ const Navigation = () => {
     { icon: Crown, label: 'VIP Subscription', path: '/vip-subscription' },
     { icon: Star, label: 'Wallet', path: '/wallet' },
     { icon: User, label: 'Profile', path: '/profile' },
+    { icon: Mail, label: 'Contact Admin', path: '/contact-admin' },
+    { icon: Share2, label: 'Share SaveMore', path: '/share' },
     { icon: Settings, label: 'Settings', path: '/settings' },
   ];
 
