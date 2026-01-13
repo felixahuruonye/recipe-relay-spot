@@ -8,9 +8,10 @@ import { Badge } from '@/components/ui/badge';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Plus, Users, Lock, Globe, Search, Crown } from 'lucide-react';
+import { Plus, Users, Lock, Globe, Search, Crown, Star, Settings } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { GroupChat } from '@/components/Groups/GroupChat';
+import { GroupSettings } from '@/components/Groups/GroupSettings';
 
 interface Group {
   id: string;
@@ -22,6 +23,7 @@ interface Group {
   owner_id: string;
   created_at: string;
   is_suspended: boolean;
+  entry_fee_stars?: number;
 }
 
 interface GroupMember {
@@ -31,32 +33,41 @@ interface GroupMember {
   role: 'owner' | 'admin' | 'member';
   status: 'active' | 'pending' | 'banned';
   joined_at: string;
-  user_profiles?: {
-    username: string;
-    avatar_url: string;
-    vip: boolean;
-  };
 }
 
 const Groups = () => {
   const { user } = useAuth();
   const [groups, setGroups] = useState<Group[]>([]);
   const [myGroups, setMyGroups] = useState<Group[]>([]);
+  const [userStars, setUserStars] = useState(0);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
   const [showCreateDialog, setShowCreateDialog] = useState(false);
   const [newGroupName, setNewGroupName] = useState('');
   const [newGroupDescription, setNewGroupDescription] = useState('');
   const [newGroupType, setNewGroupType] = useState<'public' | 'private'>('public');
+  const [newGroupFee, setNewGroupFee] = useState('0');
   const [selectedGroup, setSelectedGroup] = useState<Group | null>(null);
+  const [showSettings, setShowSettings] = useState(false);
   const { toast } = useToast();
 
   useEffect(() => {
     if (user) {
       fetchGroups();
       fetchMyGroups();
+      fetchUserStars();
     }
   }, [user]);
+
+  const fetchUserStars = async () => {
+    if (!user) return;
+    const { data } = await supabase
+      .from('user_profiles')
+      .select('star_balance')
+      .eq('id', user.id)
+      .single();
+    setUserStars(data?.star_balance || 0);
+  };
 
   const fetchGroups = async () => {
     try {
@@ -108,21 +119,22 @@ const Groups = () => {
     if (!user || !newGroupName.trim()) return;
 
     try {
-      // Create the group
+      const entryFee = parseInt(newGroupFee) || 0;
+
       const { data: group, error: groupError } = await supabase
         .from('groups')
         .insert({
           name: newGroupName.trim(),
           description: newGroupDescription.trim(),
           owner_id: user.id,
-          group_type: newGroupType
+          group_type: newGroupType,
+          entry_fee_stars: entryFee
         })
         .select()
         .single();
 
       if (groupError) throw groupError;
 
-      // Add creator as group owner
       const { error: memberError } = await supabase
         .from('group_members')
         .insert({
@@ -139,13 +151,12 @@ const Groups = () => {
         description: `${newGroupName} has been created successfully.`
       });
 
-      // Reset form and close dialog
       setNewGroupName('');
       setNewGroupDescription('');
       setNewGroupType('public');
+      setNewGroupFee('0');
       setShowCreateDialog(false);
       
-      // Refresh groups
       fetchGroups();
       fetchMyGroups();
     } catch (error) {
@@ -158,22 +169,65 @@ const Groups = () => {
     }
   };
 
-  const joinGroup = async (groupId: string, groupType: 'public' | 'private') => {
+  const joinGroup = async (group: Group) => {
     if (!user) return;
 
+    const entryFee = group.entry_fee_stars || 0;
+
+    // Check if user has enough stars
+    if (entryFee > 0 && userStars < entryFee) {
+      toast({
+        title: "Insufficient Stars",
+        description: `You need ${entryFee}⭐ to join this group. You have ${userStars}⭐.`,
+        variant: "destructive"
+      });
+      return;
+    }
+
     try {
-      const status = groupType === 'public' ? 'active' : 'pending';
+      const status = group.group_type === 'public' ? 'active' : 'pending';
       
+      // If there's an entry fee, deduct stars
+      if (entryFee > 0 && group.group_type === 'public') {
+        // Deduct stars from user
+        const { error: deductError } = await supabase
+          .from('user_profiles')
+          .update({ star_balance: userStars - entryFee })
+          .eq('id', user.id);
+
+        if (deductError) throw deductError;
+
+        // Credit 80% to group owner
+        const ownerEarnings = Math.floor(entryFee * 0.8);
+        const { data: ownerProfile } = await supabase
+          .from('user_profiles')
+          .select('star_balance, wallet_balance')
+          .eq('id', group.owner_id)
+          .single();
+
+        if (ownerProfile) {
+          await supabase
+            .from('user_profiles')
+            .update({ 
+              star_balance: (ownerProfile.star_balance || 0) + ownerEarnings,
+              wallet_balance: (ownerProfile.wallet_balance || 0) + (ownerEarnings * 500)
+            })
+            .eq('id', group.owner_id);
+        }
+
+        setUserStars(userStars - entryFee);
+      }
+
       const { error } = await supabase
         .from('group_members')
         .insert({
-          group_id: groupId,
+          group_id: group.id,
           user_id: user.id,
           status: status
         });
 
       if (error) {
-        if (error.code === '23505') { // Unique constraint violation
+        if (error.code === '23505') {
           toast({
             title: "Already a member",
             description: "You're already a member of this group.",
@@ -185,9 +239,9 @@ const Groups = () => {
       }
 
       toast({
-        title: groupType === 'public' ? "Joined group!" : "Request sent!",
-        description: groupType === 'public' 
-          ? "You've successfully joined the group." 
+        title: group.group_type === 'public' ? "Joined group!" : "Request sent!",
+        description: group.group_type === 'public' 
+          ? `You've successfully joined the group${entryFee > 0 ? ` (${entryFee}⭐ paid)` : ''}.` 
           : "Your join request has been sent to the group owner."
       });
 
@@ -211,6 +265,23 @@ const Groups = () => {
     return myGroups.some(group => group.id === groupId);
   };
 
+  const isGroupOwner = (group: Group) => {
+    return group.owner_id === user?.id;
+  };
+
+  if (showSettings && selectedGroup) {
+    return (
+      <GroupSettings
+        groupId={selectedGroup.id}
+        groupName={selectedGroup.name}
+        onBack={() => {
+          setShowSettings(false);
+          setSelectedGroup(null);
+        }}
+      />
+    );
+  }
+
   return (
     <div className="p-4 max-w-6xl mx-auto space-y-6">
       {/* Header */}
@@ -218,6 +289,10 @@ const Groups = () => {
         <div>
           <h1 className="text-2xl font-bold">Groups</h1>
           <p className="text-muted-foreground">Join communities and connect with others</p>
+          <Badge variant="outline" className="mt-1">
+            <Star className="w-3 h-3 mr-1" />
+            {userStars} Stars
+          </Badge>
         </div>
         
         <Dialog open={showCreateDialog} onOpenChange={setShowCreateDialog}>
@@ -275,6 +350,21 @@ const Groups = () => {
                   </Button>
                 </div>
               </div>
+
+              <div>
+                <label className="text-sm font-medium">Entry Fee (Stars)</label>
+                <Input
+                  type="number"
+                  placeholder="0 for free"
+                  value={newGroupFee}
+                  onChange={(e) => setNewGroupFee(e.target.value)}
+                  min="0"
+                  max="500000"
+                />
+                <p className="text-xs text-muted-foreground mt-1">
+                  You earn 80% of entry fees. Platform takes 20%.
+                </p>
+              </div>
               
               <div className="flex justify-end space-x-2">
                 <Button variant="outline" onClick={() => setShowCreateDialog(false)}>
@@ -327,7 +417,13 @@ const Groups = () => {
                 <Card key={group.id} className="hover:shadow-lg transition-shadow">
                   <CardHeader className="pb-3">
                     <div className="flex items-center justify-between">
-                      <CardTitle className="text-lg">{group.name}</CardTitle>
+                      <div className="flex items-center gap-2">
+                        <Avatar className="w-10 h-10">
+                          <AvatarImage src={group.avatar_url} />
+                          <AvatarFallback>{group.name[0]}</AvatarFallback>
+                        </Avatar>
+                        <CardTitle className="text-lg">{group.name}</CardTitle>
+                      </div>
                       {group.group_type === 'private' ? (
                         <Lock className="w-4 h-4 text-muted-foreground" />
                       ) : (
@@ -348,19 +444,29 @@ const Groups = () => {
                         <span>{group.member_count} members</span>
                       </div>
                       
-                      <Badge variant={group.group_type === 'public' ? 'default' : 'secondary'}>
-                        {group.group_type}
-                      </Badge>
+                      <div className="flex items-center gap-2">
+                        {group.entry_fee_stars && group.entry_fee_stars > 0 ? (
+                          <Badge variant="secondary">
+                            <Star className="w-3 h-3 mr-1" />
+                            {group.entry_fee_stars}
+                          </Badge>
+                        ) : null}
+                        <Badge variant={group.group_type === 'public' ? 'default' : 'secondary'}>
+                          {group.group_type}
+                        </Badge>
+                      </div>
                     </div>
                     
                     <Button
                       className="w-full"
-                      onClick={() => joinGroup(group.id, group.group_type)}
+                      onClick={() => joinGroup(group)}
                       disabled={isGroupMember(group.id)}
                       variant={isGroupMember(group.id) ? 'outline' : 'default'}
                     >
                       {isGroupMember(group.id) 
                         ? 'Already Joined' 
+                        : group.entry_fee_stars && group.entry_fee_stars > 0
+                        ? `Join (${group.entry_fee_stars}⭐)`
                         : group.group_type === 'public' 
                         ? 'Join Group' 
                         : 'Request to Join'
@@ -390,9 +496,15 @@ const Groups = () => {
                 <Card key={group.id} className="hover:shadow-lg transition-shadow">
                   <CardHeader className="pb-3">
                     <div className="flex items-center justify-between">
-                      <CardTitle className="text-lg">{group.name}</CardTitle>
+                      <div className="flex items-center gap-2">
+                        <Avatar className="w-10 h-10">
+                          <AvatarImage src={group.avatar_url} />
+                          <AvatarFallback>{group.name[0]}</AvatarFallback>
+                        </Avatar>
+                        <CardTitle className="text-lg">{group.name}</CardTitle>
+                      </div>
                       <div className="flex items-center space-x-1">
-                        {group.owner_id === user?.id && (
+                        {isGroupOwner(group) && (
                           <Crown className="w-4 h-4 text-yellow-500" />
                         )}
                         {group.group_type === 'private' ? (
@@ -421,9 +533,23 @@ const Groups = () => {
                       </Badge>
                     </div>
                     
-                    <Button className="w-full" onClick={() => setSelectedGroup(group)}>
-                      Open Chat
-                    </Button>
+                    <div className="flex gap-2">
+                      <Button className="flex-1" onClick={() => setSelectedGroup(group)}>
+                        Open Chat
+                      </Button>
+                      {isGroupOwner(group) && (
+                        <Button 
+                          variant="outline" 
+                          size="icon"
+                          onClick={() => {
+                            setSelectedGroup(group);
+                            setShowSettings(true);
+                          }}
+                        >
+                          <Settings className="w-4 h-4" />
+                        </Button>
+                      )}
+                    </div>
                   </CardContent>
                 </Card>
               ))}
@@ -438,7 +564,7 @@ const Groups = () => {
         </TabsContent>
       </Tabs>
 
-      {selectedGroup && (
+      {selectedGroup && !showSettings && (
         <div className="fixed inset-0 bg-background z-50">
           <GroupChat
             groupId={selectedGroup.id}

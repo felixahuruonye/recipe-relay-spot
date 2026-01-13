@@ -8,9 +8,8 @@ import { Badge } from '@/components/ui/badge';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Textarea } from '@/components/ui/textarea';
-import { Plus, ShoppingBag, Star, Crown, Package, Search, Upload } from 'lucide-react';
+import { Plus, ShoppingBag, Star, Crown, Package, Search, Upload, Edit2, Trash2, Eye, MousePointer, Copy, Share2 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 
 interface Product {
@@ -25,6 +24,7 @@ interface Product {
   seller_contact: string;
   created_at: string;
   seller_user_id: string;
+  status: string;
   user_profiles?: {
     username: string;
     avatar_url: string;
@@ -40,6 +40,10 @@ const Marketplace = () => {
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
   const [showCreateDialog, setShowCreateDialog] = useState(false);
+  const [showEditDialog, setShowEditDialog] = useState(false);
+  const [editingProduct, setEditingProduct] = useState<Product | null>(null);
+  const [productAnalytics, setProductAnalytics] = useState<Record<string, { views: number; clicks: number }>>({});
+  const [paymentUrls, setPaymentUrls] = useState<Record<string, string>>({});
   const [newProduct, setNewProduct] = useState({
     title: '',
     description: '',
@@ -56,6 +60,7 @@ const Marketplace = () => {
       fetchUserProfile();
       fetchProducts();
       fetchMyProducts();
+      fetchPaymentUrls();
     }
   }, [user]);
 
@@ -76,10 +81,26 @@ const Marketplace = () => {
     }
   };
 
+  const fetchPaymentUrls = async () => {
+    const { data } = await supabase
+      .from('admin_settings')
+      .select('setting_key, setting_value')
+      .like('setting_key', 'product_payment_url_%');
+
+    const urls: Record<string, string> = {};
+    data?.forEach(item => {
+      const productId = item.setting_key.replace('product_payment_url_', '');
+      urls[productId] = item.setting_value || '';
+    });
+    setPaymentUrls(urls);
+  };
+
   const fetchProducts = async () => {
     const { data, error } = await supabase
       .from('products')
       .select('*')
+      .eq('status', 'active')
+      .order('featured', { ascending: false })
       .order('created_at', { ascending: false });
 
     if (error) {
@@ -88,7 +109,6 @@ const Marketplace = () => {
       return;
     }
 
-    // Fetch user profiles
     const userIds = [...new Set(data?.map(p => p.seller_user_id) || [])];
     const { data: profiles } = await supabase
       .from('user_profiles')
@@ -105,10 +125,12 @@ const Marketplace = () => {
     setProducts(productsWithProfiles);
     setLoading(false);
 
-    // Setup realtime
     const channel = supabase
       .channel('products-updates')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'products' }, fetchProducts)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'products' }, () => {
+        fetchProducts();
+        fetchMyProducts();
+      })
       .subscribe();
 
     return () => { supabase.removeChannel(channel); };
@@ -126,6 +148,22 @@ const Marketplace = () => {
 
       if (error) throw error;
       setMyProducts(data || []);
+
+      // Fetch analytics for my products
+      const analytics: Record<string, { views: number; clicks: number }> = {};
+      for (const product of data || []) {
+        // Get view count from post_views or a dedicated table
+        const { count: viewCount } = await supabase
+          .from('post_views')
+          .select('*', { count: 'exact', head: true })
+          .eq('post_id', product.id);
+
+        analytics[product.id] = {
+          views: viewCount || 0,
+          clicks: 0 // Would need a dedicated click tracking table
+        };
+      }
+      setProductAnalytics(analytics);
     } catch (error) {
       console.error('Error fetching my products:', error);
     }
@@ -190,7 +228,8 @@ const Marketplace = () => {
           stock: parseInt(newProduct.stock) || 1,
           delivery_options: newProduct.delivery_options.trim(),
           seller_contact: newProduct.seller_contact.trim(),
-          images: imageUrls
+          images: imageUrls,
+          status: 'active'
         });
 
       if (error) throw error;
@@ -200,7 +239,6 @@ const Marketplace = () => {
         description: "Your product has been added to the marketplace"
       });
 
-      // Reset form
       setNewProduct({
         title: '',
         description: '',
@@ -224,16 +262,110 @@ const Marketplace = () => {
     }
   };
 
+  const updateProduct = async () => {
+    if (!editingProduct) return;
+
+    try {
+      const { error } = await supabase
+        .from('products')
+        .update({
+          title: editingProduct.title,
+          description: editingProduct.description,
+          price_ngn: editingProduct.price_ngn,
+          stock: editingProduct.stock,
+          delivery_options: editingProduct.delivery_options,
+          seller_contact: editingProduct.seller_contact
+        })
+        .eq('id', editingProduct.id);
+
+      if (error) throw error;
+
+      toast({
+        title: "Product updated!",
+        description: "Your changes have been saved"
+      });
+
+      setShowEditDialog(false);
+      setEditingProduct(null);
+      fetchMyProducts();
+    } catch (error) {
+      console.error('Error updating product:', error);
+      toast({
+        title: "Error",
+        description: "Failed to update product",
+        variant: "destructive"
+      });
+    }
+  };
+
+  const deleteProduct = async (productId: string) => {
+    try {
+      const { error } = await supabase
+        .from('products')
+        .delete()
+        .eq('id', productId);
+
+      if (error) throw error;
+
+      toast({
+        title: "Product deleted",
+        description: "Your product has been removed from the marketplace"
+      });
+
+      fetchMyProducts();
+      fetchProducts();
+    } catch (error) {
+      console.error('Error deleting product:', error);
+      toast({
+        title: "Error",
+        description: "Failed to delete product",
+        variant: "destructive"
+      });
+    }
+  };
+
   const buyProduct = (product: Product) => {
+    // Check if there's a custom payment URL set by admin
+    const customUrl = paymentUrls[product.id];
+    if (customUrl) {
+      window.open(customUrl, '_blank');
+      return;
+    }
+
+    // Default behavior
     const metadata = `user_id:${user?.id}|product_id:${product.id}`;
     const paystackUrl = `https://paystack.com/pay/product-purchase?metadata=${encodeURIComponent(metadata)}&amount=${product.price_ngn * 100}`;
     window.open(paystackUrl, '_blank');
   };
 
+  const copyProductLink = (product: Product) => {
+    const link = `${window.location.origin}/marketplace?product=${product.id}`;
+    navigator.clipboard.writeText(link);
+    toast({
+      title: "Link copied!",
+      description: "Product link copied to clipboard"
+    });
+  };
+
+  const shareProduct = (product: Product) => {
+    const link = `${window.location.origin}/marketplace?product=${product.id}`;
+    const text = `🛒 Check out "${product.title}" on SaveMore Community!\n💰 ₦${product.price_ngn.toLocaleString()}\n\n${link}`;
+    
+    if (navigator.share) {
+      navigator.share({
+        title: product.title,
+        text: `${product.description.slice(0, 100)}...`,
+        url: link
+      });
+    } else {
+      window.open(`https://wa.me/?text=${encodeURIComponent(text)}`, '_blank');
+    }
+  };
+
   const handleImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = Array.from(e.target.files || []);
     const validFiles = files.filter(file => {
-      if (file.size > 5 * 1024 * 1024) { // 5MB limit
+      if (file.size > 5 * 1024 * 1024) {
         toast({
           title: "File too large",
           description: `${file.name} is larger than 5MB`,
@@ -270,7 +402,7 @@ const Marketplace = () => {
             <ShoppingBag className="w-6 h-6 mr-2" />
             Marketplace
           </h1>
-          <p className="text-muted-foreground">Buy and sell food-related products</p>
+          <p className="text-muted-foreground">Buy and sell products</p>
         </div>
         
         {userProfile?.vip ? (
@@ -392,11 +524,11 @@ const Marketplace = () => {
             </DialogContent>
           </Dialog>
         ) : (
-          <div className="text-center p-4 bg-yellow-50 border border-yellow-200 rounded-lg">
+          <div className="text-center p-4 bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 rounded-lg">
             <Crown className="w-8 h-8 mx-auto mb-2 text-yellow-600" />
-            <p className="text-sm font-medium text-yellow-800">VIP Required</p>
-            <p className="text-xs text-yellow-600">Only VIP members can sell on the marketplace</p>
-            <Button size="sm" className="mt-2" onClick={() => window.open(`https://paystack.com/pay/vip-subscription?metadata=user_id:${user?.id}|type:vip`, '_blank')}>
+            <p className="text-sm font-medium">VIP Required</p>
+            <p className="text-xs text-muted-foreground">Only VIP members can sell on the marketplace</p>
+            <Button size="sm" className="mt-2" onClick={() => window.location.href = '/vip-subscription'}>
               Upgrade to VIP
             </Button>
           </div>
@@ -442,7 +574,6 @@ const Marketplace = () => {
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
               {filteredProducts.map((product) => (
                 <Card key={product.id} className="hover:shadow-lg transition-shadow overflow-hidden">
-                  {/* Product Image */}
                   {product.images && product.images.length > 0 ? (
                     <div className="h-48 overflow-hidden">
                       <img 
@@ -531,22 +662,74 @@ const Marketplace = () => {
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                 {myProducts.map((product) => (
                   <Card key={product.id} className="hover:shadow-lg transition-shadow">
+                    {product.images && product.images.length > 0 ? (
+                      <div className="h-32 overflow-hidden">
+                        <img 
+                          src={product.images[0]} 
+                          alt={product.title}
+                          className="w-full h-full object-cover"
+                        />
+                      </div>
+                    ) : null}
                     <CardHeader>
                       <CardTitle className="text-lg line-clamp-2">{product.title}</CardTitle>
+                      <div className="flex items-center gap-4 text-sm text-muted-foreground">
+                        <div className="flex items-center gap-1">
+                          <Eye className="w-4 h-4" />
+                          {productAnalytics[product.id]?.views || 0} views
+                        </div>
+                        <div className="flex items-center gap-1">
+                          <MousePointer className="w-4 h-4" />
+                          {productAnalytics[product.id]?.clicks || 0} clicks
+                        </div>
+                      </div>
                     </CardHeader>
                     <CardContent className="space-y-4">
-                      <p className="text-sm text-muted-foreground line-clamp-3">
+                      <p className="text-sm text-muted-foreground line-clamp-2">
                         {product.description}
                       </p>
                       
                       <div className="flex justify-between items-center">
                         <span className="text-xl font-bold">₦{product.price_ngn.toLocaleString()}</span>
-                        <Badge variant="outline">Stock: {product.stock}</Badge>
+                        <Badge variant={product.status === 'active' ? 'default' : 'secondary'}>
+                          {product.status}
+                        </Badge>
                       </div>
                       
-                      <div className="flex space-x-2">
-                        <Button variant="outline" className="flex-1">Edit</Button>
-                        <Button variant="outline" className="flex-1">Delete</Button>
+                      <div className="flex gap-2">
+                        <Button 
+                          variant="outline" 
+                          size="sm"
+                          className="flex-1"
+                          onClick={() => {
+                            setEditingProduct(product);
+                            setShowEditDialog(true);
+                          }}
+                        >
+                          <Edit2 className="w-4 h-4 mr-1" />
+                          Edit
+                        </Button>
+                        <Button 
+                          variant="outline" 
+                          size="sm"
+                          onClick={() => copyProductLink(product)}
+                        >
+                          <Copy className="w-4 h-4" />
+                        </Button>
+                        <Button 
+                          variant="outline" 
+                          size="sm"
+                          onClick={() => shareProduct(product)}
+                        >
+                          <Share2 className="w-4 h-4" />
+                        </Button>
+                        <Button 
+                          variant="destructive" 
+                          size="sm"
+                          onClick={() => deleteProduct(product.id)}
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </Button>
                       </div>
                     </CardContent>
                   </Card>
@@ -562,6 +745,70 @@ const Marketplace = () => {
           </TabsContent>
         )}
       </Tabs>
+
+      {/* Edit Product Dialog */}
+      <Dialog open={showEditDialog} onOpenChange={setShowEditDialog}>
+        <DialogContent className="sm:max-w-lg">
+          <DialogHeader>
+            <DialogTitle>Edit Product</DialogTitle>
+          </DialogHeader>
+          {editingProduct && (
+            <div className="space-y-4">
+              <div>
+                <label className="text-sm font-medium">Product Title</label>
+                <Input
+                  value={editingProduct.title}
+                  onChange={(e) => setEditingProduct({ ...editingProduct, title: e.target.value })}
+                />
+              </div>
+              <div>
+                <label className="text-sm font-medium">Description</label>
+                <Textarea
+                  value={editingProduct.description}
+                  onChange={(e) => setEditingProduct({ ...editingProduct, description: e.target.value })}
+                  rows={3}
+                />
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="text-sm font-medium">Price (₦)</label>
+                  <Input
+                    type="number"
+                    value={editingProduct.price_ngn}
+                    onChange={(e) => setEditingProduct({ ...editingProduct, price_ngn: parseFloat(e.target.value) })}
+                  />
+                </div>
+                <div>
+                  <label className="text-sm font-medium">Stock</label>
+                  <Input
+                    type="number"
+                    value={editingProduct.stock}
+                    onChange={(e) => setEditingProduct({ ...editingProduct, stock: parseInt(e.target.value) })}
+                  />
+                </div>
+              </div>
+              <div>
+                <label className="text-sm font-medium">Delivery Options</label>
+                <Input
+                  value={editingProduct.delivery_options || ''}
+                  onChange={(e) => setEditingProduct({ ...editingProduct, delivery_options: e.target.value })}
+                />
+              </div>
+              <div>
+                <label className="text-sm font-medium">Contact</label>
+                <Input
+                  value={editingProduct.seller_contact || ''}
+                  onChange={(e) => setEditingProduct({ ...editingProduct, seller_contact: e.target.value })}
+                />
+              </div>
+              <div className="flex justify-end gap-2">
+                <Button variant="outline" onClick={() => setShowEditDialog(false)}>Cancel</Button>
+                <Button onClick={updateProduct}>Save Changes</Button>
+              </div>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };

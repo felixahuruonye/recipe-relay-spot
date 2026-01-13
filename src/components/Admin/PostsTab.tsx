@@ -5,7 +5,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { useToast } from '@/hooks/use-toast';
-import { Trash2, RefreshCw, Eye, Ban, Check } from 'lucide-react';
+import { Trash2, RefreshCw, Eye, Ban, Check, Heart, MessageCircle } from 'lucide-react';
 
 interface Post {
   id: string;
@@ -37,10 +37,13 @@ export const PostsTab: React.FC = () => {
   useEffect(() => {
     loadPosts();
     
-    // Real-time updates
+    // Real-time updates for posts, likes, and comments
     const channel = supabase
-      .channel('admin-posts')
+      .channel('admin-posts-realtime')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'posts' }, () => loadPosts())
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'post_likes' }, () => loadPosts())
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'post_comments' }, () => loadPosts())
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'post_views' }, () => loadPosts())
       .subscribe();
 
     return () => {
@@ -51,6 +54,7 @@ export const PostsTab: React.FC = () => {
   const loadPosts = async () => {
     setLoading(true);
 
+    // Fetch all posts
     const { data, error } = await supabase
       .from('posts')
       .select('*')
@@ -63,7 +67,35 @@ export const PostsTab: React.FC = () => {
       return;
     }
 
-    setPosts(data || []);
+    // Fetch real-time counts for each post
+    const postsWithCounts = await Promise.all((data || []).map(async (post) => {
+      // Get likes count
+      const { count: likesCount } = await supabase
+        .from('post_likes')
+        .select('*', { count: 'exact', head: true })
+        .eq('post_id', post.id);
+
+      // Get comments count
+      const { count: commentsCount } = await supabase
+        .from('post_comments')
+        .select('*', { count: 'exact', head: true })
+        .eq('post_id', post.id);
+
+      // Get views count
+      const { count: viewsCount } = await supabase
+        .from('post_views')
+        .select('*', { count: 'exact', head: true })
+        .eq('post_id', post.id);
+
+      return {
+        ...post,
+        likes_count: likesCount || post.likes_count || 0,
+        comments_count: commentsCount || post.comments_count || 0,
+        view_count: viewsCount || post.view_count || 0
+      };
+    }));
+
+    setPosts(postsWithCounts);
 
     // Fetch user profiles
     const userIds = [...new Set((data || []).map(p => p.user_id))];
@@ -146,9 +178,24 @@ export const PostsTab: React.FC = () => {
                   <TableHead>Author</TableHead>
                   <TableHead>Category</TableHead>
                   <TableHead>Status</TableHead>
-                  <TableHead>Views</TableHead>
-                  <TableHead>Likes</TableHead>
-                  <TableHead>Comments</TableHead>
+                  <TableHead>
+                    <div className="flex items-center gap-1">
+                      <Eye className="w-3 h-3" />
+                      Views
+                    </div>
+                  </TableHead>
+                  <TableHead>
+                    <div className="flex items-center gap-1">
+                      <Heart className="w-3 h-3" />
+                      Likes
+                    </div>
+                  </TableHead>
+                  <TableHead>
+                    <div className="flex items-center gap-1">
+                      <MessageCircle className="w-3 h-3" />
+                      Comments
+                    </div>
+                  </TableHead>
                   <TableHead>Created</TableHead>
                   <TableHead className="text-right">Actions</TableHead>
                 </TableRow>
@@ -183,13 +230,23 @@ export const PostsTab: React.FC = () => {
                         )}
                       </TableCell>
                       <TableCell>
-                        <div className="flex items-center gap-1">
-                          <Eye className="w-3 h-3" />
-                          {post.view_count || 0}
+                        <div className="flex items-center gap-1 font-medium">
+                          <Eye className="w-4 h-4 text-muted-foreground" />
+                          {post.view_count}
                         </div>
                       </TableCell>
-                      <TableCell>{post.likes_count || 0}</TableCell>
-                      <TableCell>{post.comments_count || 0}</TableCell>
+                      <TableCell>
+                        <div className="flex items-center gap-1 font-medium text-red-500">
+                          <Heart className="w-4 h-4" />
+                          {post.likes_count}
+                        </div>
+                      </TableCell>
+                      <TableCell>
+                        <div className="flex items-center gap-1 font-medium text-blue-500">
+                          <MessageCircle className="w-4 h-4" />
+                          {post.comments_count}
+                        </div>
+                      </TableCell>
                       <TableCell>{new Date(post.created_at).toLocaleDateString()}</TableCell>
                       <TableCell className="text-right">
                         <div className="flex justify-end gap-1 flex-wrap">
