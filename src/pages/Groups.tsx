@@ -273,10 +273,15 @@ const Groups = () => {
     return (
       <GroupSettings
         groupId={selectedGroup.id}
-        groupName={selectedGroup.name}
-        onBack={() => {
+        group={selectedGroup}
+        isOwner={selectedGroup.owner_id === user?.id}
+        onClose={() => {
           setShowSettings(false);
           setSelectedGroup(null);
+        }}
+        onUpdate={() => {
+          fetchGroups();
+          fetchMyGroups();
         }}
       />
     );
