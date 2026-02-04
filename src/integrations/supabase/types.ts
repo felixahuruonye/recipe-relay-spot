@@ -3168,6 +3168,10 @@ export type Database = {
         Args: { p_story_id: string; p_viewer_id: string }
         Returns: Json
       }
+      spend_stars: {
+        Args: { p_amount: number; p_meta?: Json; p_type: string }
+        Returns: Json
+      }
       track_search: { Args: { search_keyword: string }; Returns: undefined }
       update_post_status: { Args: never; Returns: undefined }
       use_ai_credit: { Args: { p_user_id: string }; Returns: Json }
