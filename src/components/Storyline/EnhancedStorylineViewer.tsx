@@ -10,6 +10,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { useToast } from '@/hooks/use-toast';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { useNavigate } from 'react-router-dom';
+import { ensureUserProfile } from '@/lib/ensureUserProfile';
 
 interface Story {
   id: string;
@@ -140,25 +141,51 @@ export const EnhancedStorylineViewer: React.FC<StorylineViewerProps> = ({ userId
     setPaymentProcessed(true);
     
     try {
+      const ensured = await ensureUserProfile(supabase as any, { id: user.id, email: user.email });
+      if (!ensured.ok) {
+        console.warn('ensureUserProfile failed (story free view):', ensured.error);
+      }
+
       // Use RPC to handle view (it handles duplicate check internally)
       const { data, error } = await supabase.rpc('process_story_view', {
         p_story_id: currentStory.id,
         p_viewer_id: user.id
       });
 
-      if (!error && data) {
-        setHasViewed(true);
-        await loadViewers();
-        
-        if ((data as any).already_viewed) {
-          toast({
-            title: "Already Viewed",
-            description: "You've already viewed this story",
-          });
-        }
+      if (error) {
+        console.error('process_story_view error (free):', error);
+        setPaymentProcessed(false);
+        toast({
+          title: 'Error',
+          description: error.message || 'Failed to process story view',
+          variant: 'destructive'
+        });
+        return;
+      }
+
+      const result = data as any;
+      if (!result?.success) {
+        setPaymentProcessed(false);
+        toast({
+          title: 'Error',
+          description: result?.message || 'Failed to process story view',
+          variant: 'destructive'
+        });
+        return;
+      }
+
+      setHasViewed(true);
+      await loadViewers();
+
+      if (result.already_viewed) {
+        toast({
+          title: 'Already Viewed',
+          description: "You've already viewed this story",
+        });
       }
     } catch (error) {
       console.error('Error recording view:', error);
+      setPaymentProcessed(false);
     }
   }, [user, stories, currentIndex, hasViewed, paymentProcessed, toast]);
 
@@ -170,45 +197,64 @@ export const EnhancedStorylineViewer: React.FC<StorylineViewerProps> = ({ userId
     const currentStory = stories[currentIndex];
     
     try {
+      const ensured = await ensureUserProfile(supabase as any, { id: user.id, email: user.email });
+      if (!ensured.ok) {
+        console.warn('ensureUserProfile failed (story payment):', ensured.error);
+      }
+
       const { data, error } = await supabase.rpc('process_story_view', {
         p_story_id: currentStory.id,
         p_viewer_id: user.id
       });
 
-      if (error) throw error;
+      if (error) {
+        console.error('process_story_view error (paid):', error);
+        setPaymentProcessed(false);
+        toast({
+          title: 'Error',
+          description: error.message || 'Failed to process story view',
+          variant: 'destructive'
+        });
+        return;
+      }
 
       const result = data as any;
+      if (!result?.success) {
+        setPaymentProcessed(false);
+        toast({
+          title: 'Error',
+          description: result?.message || 'Failed to process story view',
+          variant: 'destructive'
+        });
+        return;
+      }
       
-      if (result.success) {
-        setHasViewed(true);
-        await loadUserStarBalance();
-        await loadViewers();
+      // Any successful result means the view was processed/recorded.
+      setHasViewed(true);
+      await loadUserStarBalance();
+      await loadViewers();
 
-        if (result.insufficient_stars) {
-          toast({
-            title: 'No Stars • No Earnings',
-            description: `You watched this story but didn't earn because you have ${result.available}⭐ (needs ${result.required}⭐).`,
-            variant: 'destructive'
-          });
-        } else if (result.charged) {
-          toast({
-            title: '💰 Story Unlocked!',
-            description: `⭐ ${result.stars_spent} Stars deducted. You earned ₦${result.viewer_earn} cashback!`,
-          });
-        } else if (result.already_viewed) {
-          toast({
-            title: "Already Viewed",
-            description: "You can't earn from this story again",
-          });
-        }
+      if (result.insufficient_stars) {
+        toast({
+          title: 'No Stars • No Earnings',
+          description: `You watched this story but didn't earn because you have ${result.available}⭐ (needs ${result.required}⭐).`,
+          variant: 'destructive'
+        });
+      } else if (result.charged) {
+        toast({
+          title: '💰 Story Unlocked!',
+          description: `⭐ ${result.stars_spent} Stars deducted. You earned ₦${result.viewer_earn} cashback!`,
+        });
+      } else if (result.already_viewed) {
+        toast({
+          title: 'Already Viewed',
+          description: "You can't earn from this story again",
+        });
       }
     } catch (error) {
       console.error('Error processing payment:', error);
-      toast({
-        title: 'Error',
-        description: 'Failed to process story view',
-        variant: 'destructive'
-      });
+      setPaymentProcessed(false);
+      toast({ title: 'Error', description: 'Failed to process story view', variant: 'destructive' });
     } finally {
       setIsProcessingPayment(false);
     }
