@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
@@ -32,25 +32,58 @@ export const GroupChat: React.FC<GroupChatProps> = ({ groupId, groupName, onBack
   const [messages, setMessages] = useState<Message[]>([]);
   const [newMessage, setNewMessage] = useState('');
   const [loading, setLoading] = useState(false);
-  const scrollRef = useRef<HTMLDivElement>(null);
+  const bottomRef = useRef<HTMLDivElement | null>(null);
+  const [memberStatus, setMemberStatus] = useState<'checking' | 'none' | 'pending' | 'active'>('checking');
 
   useEffect(() => {
-    loadMessages();
-    const channel = setupRealtimeSubscription();
-    return () => {
-      supabase.removeChannel(channel);
+    let channel: ReturnType<typeof supabase.channel> | null = null;
+
+    const run = async () => {
+      if (!user) {
+        setMemberStatus('none');
+        return;
+      }
+
+      setMemberStatus('checking');
+      const { data, error } = await supabase
+        .from('group_members')
+        .select('status')
+        .eq('group_id', groupId)
+        .eq('user_id', user.id)
+        .maybeSingle();
+
+      if (error) {
+        console.error('Error checking membership:', error);
+        setMemberStatus('none');
+        return;
+      }
+
+      const status = (data?.status as any) || 'none';
+      if (status === 'active') {
+        setMemberStatus('active');
+        await loadMessages();
+        channel = setupRealtimeSubscription();
+      } else if (status === 'pending') {
+        setMemberStatus('pending');
+        setMessages([]);
+      } else {
+        setMemberStatus('none');
+        setMessages([]);
+      }
     };
-  }, [groupId]);
+
+    run();
+
+    return () => {
+      if (channel) supabase.removeChannel(channel);
+    };
+  }, [groupId, user?.id]);
 
   useEffect(() => {
-    scrollToBottom();
-  }, [messages]);
+    bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
+  }, [messages.length]);
 
-  const scrollToBottom = () => {
-    if (scrollRef.current) {
-      scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
-    }
-  };
+  const canChat = useMemo(() => memberStatus === 'active', [memberStatus]);
 
   const loadMessages = async () => {
     const { data, error } = await supabase
@@ -62,17 +95,25 @@ export const GroupChat: React.FC<GroupChatProps> = ({ groupId, groupName, onBack
 
     if (error) {
       console.error('Error loading messages:', error);
+      toast({
+        title: 'Unable to load messages',
+        description: error.message,
+        variant: 'destructive',
+      });
       return;
     }
 
     // Fetch user profiles separately
     const userIds = [...new Set(data?.map(m => m.user_id) || [])];
-    const { data: profiles } = await supabase
-      .from('user_profiles')
-      .select('id, username, avatar_url')
-      .in('id', userIds);
-
-    const profileMap = new Map(profiles?.map(p => [p.id, p]));
+    let profileMap = new Map<string, any>();
+    if (userIds.length > 0) {
+      const { data: profiles, error: profilesError } = await supabase
+        .from('user_profiles')
+        .select('id, username, avatar_url')
+        .in('id', userIds);
+      if (profilesError) console.error('Error loading profiles:', profilesError);
+      profileMap = new Map((profiles || []).map(p => [p.id, p]));
+    }
 
     const messagesWithProfiles = data?.map(msg => ({
       ...msg,
@@ -113,7 +154,7 @@ export const GroupChat: React.FC<GroupChatProps> = ({ groupId, groupName, onBack
   };
 
   const sendMessage = async () => {
-    if (!user || !newMessage.trim()) return;
+    if (!user || !newMessage.trim() || !canChat) return;
 
     setLoading(true);
     try {
@@ -165,52 +206,68 @@ export const GroupChat: React.FC<GroupChatProps> = ({ groupId, groupName, onBack
       </div>
 
       {/* Messages */}
-      <ScrollArea ref={scrollRef} className="flex-1 p-4">
-        <div className="space-y-4">
-          {messages.map((msg) => {
-            const isOwnMessage = msg.user_id === user?.id;
-            return (
-              <div
-                key={msg.id}
-                className={`flex items-start space-x-2 ${isOwnMessage ? 'flex-row-reverse space-x-reverse' : ''}`}
-              >
-                <Avatar className="w-8 h-8">
-                  <AvatarImage src={msg.user_profiles?.avatar_url} />
-                  <AvatarFallback>{msg.user_profiles?.username?.[0]}</AvatarFallback>
-                </Avatar>
-                <div className={`flex flex-col ${isOwnMessage ? 'items-end' : 'items-start'}`}>
-                  {!isOwnMessage && (
-                    <span className="text-xs text-muted-foreground mb-1">
-                      {msg.user_profiles?.username}
-                    </span>
-                  )}
-                  <div
-                    className={`rounded-lg px-4 py-2 max-w-xs break-words ${
-                      isOwnMessage
-                        ? 'bg-primary text-primary-foreground'
-                        : 'bg-muted'
-                    }`}
-                  >
-                    {msg.message}
-                  </div>
-                  <span className="text-xs text-muted-foreground mt-1">
-                    {new Date(msg.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                  </span>
-                  {isOwnMessage && (
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      className="h-6 px-2 text-xs mt-1"
-                      onClick={() => deleteMessage(msg.id)}
+      <ScrollArea className="flex-1 p-4">
+        {memberStatus === 'checking' ? (
+          <div className="text-sm text-muted-foreground">Loading…</div>
+        ) : memberStatus === 'pending' ? (
+          <div className="text-sm text-muted-foreground">
+            Your join request is pending approval by the group owner.
+          </div>
+        ) : memberStatus === 'none' ? (
+          <div className="text-sm text-muted-foreground">
+            You’re not an active member of this group yet.
+          </div>
+        ) : (
+          <div className="space-y-4">
+            {messages.length === 0 ? (
+              <div className="text-sm text-muted-foreground">No messages yet. Say hi.</div>
+            ) : null}
+            {messages.map((msg) => {
+              const isOwnMessage = msg.user_id === user?.id;
+              return (
+                <div
+                  key={msg.id}
+                  className={`flex items-start space-x-2 ${isOwnMessage ? 'flex-row-reverse space-x-reverse' : ''}`}
+                >
+                  <Avatar className="w-8 h-8">
+                    <AvatarImage src={msg.user_profiles?.avatar_url} />
+                    <AvatarFallback>{msg.user_profiles?.username?.[0]}</AvatarFallback>
+                  </Avatar>
+                  <div className={`flex flex-col ${isOwnMessage ? 'items-end' : 'items-start'}`}>
+                    {!isOwnMessage && (
+                      <span className="text-xs text-muted-foreground mb-1">
+                        {msg.user_profiles?.username}
+                      </span>
+                    )}
+                    <div
+                      className={`rounded-lg px-4 py-2 max-w-xs break-words ${
+                        isOwnMessage
+                          ? 'bg-primary text-primary-foreground'
+                          : 'bg-muted'
+                      }`}
                     >
-                      Delete
-                    </Button>
-                  )}
+                      {msg.message}
+                    </div>
+                    <span className="text-xs text-muted-foreground mt-1">
+                      {new Date(msg.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                    </span>
+                    {isOwnMessage && (
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="h-6 px-2 text-xs mt-1"
+                        onClick={() => deleteMessage(msg.id)}
+                      >
+                        Delete
+                      </Button>
+                    )}
+                  </div>
                 </div>
-              </div>
-            );
-          })}
-        </div>
+              );
+            })}
+            <div ref={bottomRef} />
+          </div>
+        )}
       </ScrollArea>
 
       {/* Input */}
@@ -221,9 +278,9 @@ export const GroupChat: React.FC<GroupChatProps> = ({ groupId, groupName, onBack
             onChange={(e) => setNewMessage(e.target.value)}
             placeholder="Type a message..."
             onKeyDown={(e) => e.key === 'Enter' && !e.shiftKey && sendMessage()}
-            disabled={loading}
+            disabled={loading || !canChat}
           />
-          <Button onClick={sendMessage} disabled={!newMessage.trim() || loading}>
+          <Button onClick={sendMessage} disabled={!newMessage.trim() || loading || !canChat}>
             <Send className="h-4 w-4" />
           </Button>
         </div>

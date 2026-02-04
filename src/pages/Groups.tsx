@@ -214,56 +214,47 @@ const Groups = () => {
 
     try {
       const status = group.group_type === 'public' ? 'active' : 'pending';
-      
-      // If there's an entry fee, deduct stars
-      if (entryFee > 0 && group.group_type === 'public') {
-        // Deduct stars from user
-        const { error: deductError } = await supabase
-          .from('user_profiles')
-          .update({ star_balance: userStars - entryFee })
-          .eq('id', user.id);
 
-        if (deductError) throw deductError;
-
-        // Credit 80% to group owner
-        const ownerEarnings = Math.floor(entryFee * 0.8);
-        const { data: ownerProfile } = await supabase
-          .from('user_profiles')
-          .select('star_balance, wallet_balance')
-          .eq('id', group.owner_id)
-          .single();
-
-        if (ownerProfile) {
-          await supabase
-            .from('user_profiles')
-            .update({ 
-              star_balance: (ownerProfile.star_balance || 0) + ownerEarnings,
-              wallet_balance: (ownerProfile.wallet_balance || 0) + (ownerEarnings * 500)
-            })
-            .eq('id', group.owner_id);
-        }
-
-        setUserStars(userStars - entryFee);
-      }
-
-      const { error } = await supabase
-        .from('group_members')
-        .insert({
-          group_id: group.id,
-          user_id: user.id,
-          status: status
+      // IMPORTANT:
+      // Never update protected balance fields (star_balance / wallet_balance) from the client.
+      // For public groups, use the SECURITY DEFINER RPC that applies fees/earnings safely.
+      if (group.group_type === 'public') {
+        const { data, error } = await supabase.rpc('join_group_with_fee', {
+          p_group_id: group.id,
+          p_user_id: user.id,
+          p_entry_fee: entryFee
         });
 
-      if (error) {
-        if (error.code === '23505') {
+        if (error) throw error;
+        if (data && (data as any).success === false) {
           toast({
-            title: "Already a member",
-            description: "You're already a member of this group.",
-            variant: "destructive"
+            title: 'Unable to join',
+            description: (data as any).error || 'Failed to join group',
+            variant: 'destructive'
           });
           return;
         }
-        throw error;
+      } else {
+        // Private groups: create a pending membership request (fee is not charged here).
+        const { error } = await supabase
+          .from('group_members')
+          .insert({
+            group_id: group.id,
+            user_id: user.id,
+            status
+          });
+
+        if (error) {
+          if (error.code === '23505') {
+            toast({
+              title: 'Already requested',
+              description: "You're already a member (or have a pending request) for this group.",
+              variant: 'destructive'
+            });
+            return;
+          }
+          throw error;
+        }
       }
 
       toast({
@@ -273,12 +264,12 @@ const Groups = () => {
           : "Your join request has been sent to the group owner."
       });
 
-      fetchMyGroups();
+      await Promise.all([fetchGroups(), fetchMyGroups(), fetchUserStars()]);
     } catch (error) {
       console.error('Error joining group:', error);
       toast({
         title: "Error",
-        description: "Failed to join group. Please try again.",
+        description: (error as any)?.message || "Failed to join group. Please try again.",
         variant: "destructive"
       });
     }

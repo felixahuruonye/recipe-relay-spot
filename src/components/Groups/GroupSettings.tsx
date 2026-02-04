@@ -147,11 +147,22 @@ export const GroupSettings: React.FC<GroupSettingsProps> = ({ groupId, group, is
       return;
     }
 
-    // Deduct stars
-    await supabase
-      .from('user_profiles')
-      .update({ star_balance: (profile.star_balance || 0) - 50 })
-      .eq('id', user.id);
+    // Deduct stars via server-side RPC (cannot update protected fields from client)
+    const { data, error } = await supabase.rpc('spend_stars' as any, {
+      p_amount: 50,
+      p_type: 'group_analytics_unlock',
+      p_meta: { group_id: groupId }
+    } as any);
+
+    if (error) {
+      toast({ title: 'Error', description: error.message, variant: 'destructive' });
+      return;
+    }
+
+    if (data && (data as any).success === false) {
+      toast({ title: 'Insufficient Stars', description: (data as any).error || 'Not enough stars', variant: 'destructive' });
+      return;
+    }
 
     setAnalyticsUnlocked(true);
     setShowAnalytics(true);
