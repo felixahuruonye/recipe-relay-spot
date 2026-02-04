@@ -22,7 +22,7 @@ interface Group {
   member_count: number;
   owner_id: string;
   created_at: string;
-  is_suspended: boolean;
+  is_suspended: boolean | null;
   entry_fee_stars?: number;
 }
 
@@ -74,14 +74,18 @@ const Groups = () => {
       const { data, error } = await supabase
         .from('groups')
         .select('*')
-        .eq('is_suspended', false)
+        // new rows may have is_suspended = NULL; treat as not suspended
+        .or('is_suspended.is.null,is_suspended.eq.false')
         .order('member_count', { ascending: false });
 
       if (error) throw error;
-      setGroups((data || []).map(group => ({
-        ...group,
-        group_type: group.group_type as 'public' | 'private'
-      })));
+      setGroups(
+        (data || []).map((group: any) => ({
+          ...group,
+          member_count: group.member_count ?? 0,
+          group_type: group.group_type as 'public' | 'private',
+        }))
+      );
     } catch (error) {
       console.error('Error fetching groups:', error);
       toast({
@@ -93,6 +97,30 @@ const Groups = () => {
       setLoading(false);
     }
   };
+
+  // Realtime refresh for groups + membership changes (so lists update without refresh)
+  useEffect(() => {
+    if (!user) return;
+
+    const channel = supabase
+      .channel('groups-realtime')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'groups' }, () => {
+        fetchGroups();
+        fetchMyGroups();
+      })
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'group_members', filter: `user_id=eq.${user.id}` },
+        () => {
+          fetchMyGroups();
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [user?.id]);
 
   const fetchMyGroups = async () => {
     if (!user) return;

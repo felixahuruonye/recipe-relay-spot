@@ -19,6 +19,7 @@ import { VideoPlayer } from '@/components/Feed/VideoPlayer';
 import { ShareMenu } from '@/components/Feed/ShareMenu';
 import { PostMenu } from '@/components/Feed/PostMenu';
 import { Dialog, DialogContent } from '@/components/ui/dialog';
+import { ensureUserProfile } from '@/lib/ensureUserProfile';
 
 interface Post {
   id: string;
@@ -133,6 +134,7 @@ const Feed = () => {
   const [isCreatePostOpen, setisCreatePostOpen] = useState(false);
   const [processedPosts, setProcessedPosts] = useState<Set<string>>(new Set());
   const [videoEndedMap, setVideoEndedMap] = useState<{ [key: string]: boolean }>({});
+  const processingPostsRef = useRef<Set<string>>(new Set());
   const [userStarBalance, setUserStarBalance] = useState(0);
   const [walletBalance, setWalletBalance] = useState(0);
   const [followingUsers, setFollowingUsers] = useState<Set<string>>(new Set());
@@ -450,11 +452,15 @@ const Feed = () => {
 
   const processPostPayment = useCallback(async (post: Post) => {
     if (!user || processedPosts.has(post.id)) return;
-
-    // Mark as processed immediately
-    setProcessedPosts(prev => new Set(prev).add(post.id));
+    if (processingPostsRef.current.has(post.id)) return;
+    processingPostsRef.current.add(post.id);
 
     try {
+      const ensured = await ensureUserProfile(supabase as any, { id: user.id, email: user.email });
+      if (!ensured.ok) {
+        console.warn('ensureUserProfile failed (post view):', ensured.error);
+      }
+
       // Process view via RPC (handles all logic including duplicate check)
       const { data, error } = await supabase.rpc('process_post_view', {
         p_post_id: post.id,
@@ -465,7 +471,7 @@ const Feed = () => {
         console.error('RPC Error:', error);
         toast({
           title: 'Error',
-          description: 'Failed to process view. Please try again.',
+          description: error.message || 'Failed to process view. Please try again.',
           variant: 'destructive'
         });
         return;
@@ -476,11 +482,14 @@ const Feed = () => {
       if (!result?.success) {
         toast({
           title: "Can't Earn",
-          description: 'This view could not be processed.',
+          description: result?.message || 'This view could not be processed.',
           variant: 'destructive'
         });
         return;
       }
+
+      // Mark as processed only after RPC confirms it handled/recorded the view.
+      setProcessedPosts(prev => new Set(prev).add(post.id));
 
       await loadUserBalances();
 
@@ -515,6 +524,13 @@ const Feed = () => {
       });
     } catch (error) {
       console.error('Error processing post payment:', error);
+      toast({
+        title: 'Error',
+        description: 'Failed to process view. Please try again.',
+        variant: 'destructive'
+      });
+    } finally {
+      processingPostsRef.current.delete(post.id);
     }
   }, [user, processedPosts, toast]);
 
