@@ -8,7 +8,7 @@ import { Badge } from '@/components/ui/badge';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Plus, Users, Lock, Globe, Search, Crown, Star, Settings } from 'lucide-react';
+import { Plus, Users, Lock, Globe, Search, Crown, Star, Settings, Trash2 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { GroupChat } from '@/components/Groups/GroupChat';
 import { GroupSettings } from '@/components/Groups/GroupSettings';
@@ -562,16 +562,35 @@ const Groups = () => {
                         Open Chat
                       </Button>
                       {isGroupOwner(group) && (
-                        <Button 
-                          variant="outline" 
-                          size="icon"
-                          onClick={() => {
-                            setSelectedGroup(group);
-                            setShowSettings(true);
-                          }}
-                        >
-                          <Settings className="w-4 h-4" />
-                        </Button>
+                        <>
+                          <Button 
+                            variant="outline" 
+                            size="icon"
+                            onClick={() => {
+                              setSelectedGroup(group);
+                              setShowSettings(true);
+                            }}
+                          >
+                            <Settings className="w-4 h-4" />
+                          </Button>
+                          <Button
+                            variant="destructive"
+                            size="icon"
+                            onClick={async () => {
+                              if (!confirm(`Delete group "${group.name}"? This cannot be undone.`)) return;
+                              const { data, error } = await supabase.rpc('delete_own_group', { p_group_id: group.id });
+                              if (error) {
+                                toast({ title: 'Error', description: error.message, variant: 'destructive' });
+                              } else {
+                                toast({ title: 'Group Deleted', description: `"${group.name}" has been deleted.` });
+                                fetchGroups();
+                                fetchMyGroups();
+                              }
+                            }}
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </Button>
+                        </>
                       )}
                     </div>
                   </CardContent>
