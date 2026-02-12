@@ -3110,6 +3110,7 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      admin_delete_user: { Args: { p_target_user_id: string }; Returns: Json }
       admin_send_broadcast: {
         Args: { p_message: string; p_title: string; p_type?: string }
         Returns: Json
@@ -3130,6 +3131,7 @@ export type Database = {
       archive_old_posts: { Args: never; Returns: undefined }
       auto_archive_old_posts: { Args: never; Returns: undefined }
       deduct_voice_credits: { Args: { p_user_id: string }; Returns: Json }
+      delete_own_group: { Args: { p_group_id: string }; Returns: Json }
       execute_admin_sql: { Args: { query: string }; Returns: Json }
       get_user_device_info: {
         Args: { user_agent_string: string }

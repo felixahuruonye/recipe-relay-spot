@@ -45,6 +45,38 @@ export const GroupChat: React.FC<GroupChatProps> = ({ groupId, groupName, onBack
       }
 
       setMemberStatus('checking');
+
+      // First check if user is the group owner (always active)
+      const { data: groupData } = await supabase
+        .from('groups')
+        .select('owner_id')
+        .eq('id', groupId)
+        .single();
+
+      if (groupData?.owner_id === user.id) {
+        // Owner is always active — ensure membership row exists
+        const { data: existingMember } = await supabase
+          .from('group_members')
+          .select('id')
+          .eq('group_id', groupId)
+          .eq('user_id', user.id)
+          .maybeSingle();
+
+        if (!existingMember) {
+          await supabase.from('group_members').insert({
+            group_id: groupId,
+            user_id: user.id,
+            role: 'owner',
+            status: 'active',
+          });
+        }
+
+        setMemberStatus('active');
+        await loadMessages();
+        channel = setupRealtimeSubscription();
+        return;
+      }
+
       const { data, error } = await supabase
         .from('group_members')
         .select('status')
@@ -196,7 +228,7 @@ export const GroupChat: React.FC<GroupChatProps> = ({ groupId, groupName, onBack
   };
 
   return (
-    <div className="flex flex-col h-full">
+    <div className="flex flex-col h-screen max-h-screen">
       {/* Header */}
       <div className="flex items-center space-x-3 p-4 border-b">
         <Button variant="ghost" size="icon" onClick={onBack}>
@@ -206,7 +238,7 @@ export const GroupChat: React.FC<GroupChatProps> = ({ groupId, groupName, onBack
       </div>
 
       {/* Messages */}
-      <ScrollArea className="flex-1 p-4">
+      <ScrollArea className="flex-1 p-4 min-h-0">
         {memberStatus === 'checking' ? (
           <div className="text-sm text-muted-foreground">Loading…</div>
         ) : memberStatus === 'pending' ? (
