@@ -6,7 +6,7 @@ import { Input } from '@/components/ui/input';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Badge } from '@/components/ui/badge';
 import { useToast } from '@/hooks/use-toast';
-import { Trash2, Search, AlertTriangle, Loader2 } from 'lucide-react';
+import { Trash2, Search, AlertTriangle, Loader2, Copy } from 'lucide-react';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -65,16 +65,17 @@ export const DeleteUsersTab: React.FC = () => {
   const deleteUser = async (userId: string) => {
     setDeletingId(userId);
     try {
-      const { data, error } = await supabase.rpc('admin_delete_user', {
-        p_target_user_id: userId,
+      const { data: sessionData } = await supabase.auth.getSession();
+      const token = sessionData?.session?.access_token;
+      if (!token) throw new Error('Not authenticated');
+
+      const res = await supabase.functions.invoke('delete-user', {
+        body: { target_user_id: userId },
       });
 
-      if (error) throw error;
-
-      const result = data as any;
-      if (result?.success === false) {
-        throw new Error(result.error || 'Deletion failed');
-      }
+      if (res.error) throw new Error(res.error.message);
+      const result = res.data;
+      if (result?.success === false) throw new Error(result.error || 'Deletion failed');
 
       toast({ title: 'User Deleted', description: 'User and all their data have been permanently removed.' });
       setUsers((prev) => prev.filter((u) => u.id !== userId));
@@ -85,6 +86,11 @@ export const DeleteUsersTab: React.FC = () => {
       setDeletingId(null);
       setConfirmUser(null);
     }
+  };
+
+  const copyUuid = (id: string) => {
+    navigator.clipboard.writeText(id);
+    toast({ title: 'Copied', description: 'User UUID copied to clipboard' });
   };
 
   const filtered = users.filter(
@@ -104,7 +110,7 @@ export const DeleteUsersTab: React.FC = () => {
         <div className="relative mt-2">
           <Search className="absolute left-3 top-3 w-4 h-4 text-muted-foreground" />
           <Input
-            placeholder="Search by username, name, or ID..."
+            placeholder="Search by username, name, or UUID..."
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             className="pl-10"
@@ -135,6 +141,13 @@ export const DeleteUsersTab: React.FC = () => {
                     <p className="text-xs text-muted-foreground truncate">
                       {u.full_name || 'No name'} · {new Date(u.created_at).toLocaleDateString()}
                     </p>
+                    <button
+                      onClick={() => copyUuid(u.id)}
+                      className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground mt-0.5"
+                    >
+                      <Copy className="w-3 h-3" />
+                      <span className="truncate max-w-[140px]">{u.id}</span>
+                    </button>
                     <div className="flex gap-1 mt-1 flex-wrap">
                       {u.is_vip && <Badge variant="secondary" className="text-xs">VIP</Badge>}
                       <Badge variant="outline" className="text-xs">⭐ {u.star_balance ?? 0}</Badge>
@@ -167,10 +180,13 @@ export const DeleteUsersTab: React.FC = () => {
               <AlertTriangle className="w-5 h-5 text-destructive" />
               Delete User Permanently?
             </AlertDialogTitle>
-            <AlertDialogDescription>
-              This will permanently delete <strong>{confirmUser?.username}</strong> from Supabase
-              authentication and remove ALL their data (posts, messages, groups, balances, etc.).
-              This action cannot be undone.
+            <AlertDialogDescription className="space-y-2">
+              <span>
+                This will permanently delete <strong>{confirmUser?.username}</strong> from Supabase
+                authentication and remove ALL their data (posts, messages, groups, balances, etc.).
+                This action cannot be undone.
+              </span>
+              <span className="block text-xs font-mono text-muted-foreground">UUID: {confirmUser?.id}</span>
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
