@@ -558,6 +558,10 @@ const Profile = () => {
                   <p className="text-sm font-medium">Email</p>
                   <p className="text-sm text-muted-foreground">{user?.email}</p>
                 </div>
+                <div>
+                  <p className="text-sm font-medium">User ID</p>
+                  <p className="text-xs text-muted-foreground font-mono break-all">{profile.id}</p>
+                </div>
                 {profile.vip && (
                   <div>
                     <p className="text-sm font-medium">VIP Status</p>
@@ -567,6 +571,46 @@ const Profile = () => {
                   </div>
                 )}
               </div>
+            </CardContent>
+          </Card>
+
+          {/* Delete Account */}
+          <Card className="border-destructive mt-4">
+            <CardHeader>
+              <CardTitle className="text-destructive text-lg">Delete Account</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              <p className="text-sm text-muted-foreground">
+                This will permanently delete your account, all posts, messages, groups, balances, and
+                remove you from Supabase authentication. This cannot be undone.
+              </p>
+              <Button
+                variant="destructive"
+                className="w-full"
+                onClick={async () => {
+                  if (!confirm('Are you ABSOLUTELY sure? This will permanently delete your entire account and all your data. This cannot be undone.')) return;
+                  if (!confirm('Last chance — type OK in the next prompt to confirm.')) return;
+                  const confirmText = prompt('Type DELETE to permanently remove your account:');
+                  if (confirmText !== 'DELETE') {
+                    toast({ title: 'Cancelled', description: 'Account deletion cancelled.' });
+                    return;
+                  }
+                  try {
+                    const res = await supabase.functions.invoke('delete-user', {
+                      body: { target_user_id: user?.id, self_delete: true },
+                    });
+                    if (res.error) throw new Error(res.error.message);
+                    if (res.data?.success === false) throw new Error(res.data.error);
+                    toast({ title: 'Account Deleted', description: 'Your account has been permanently removed.' });
+                    await signOut();
+                  } catch (err: any) {
+                    toast({ title: 'Error', description: err.message, variant: 'destructive' });
+                  }
+                }}
+              >
+                <Settings className="w-4 h-4 mr-2" />
+                Delete My Account Permanently
+              </Button>
             </CardContent>
           </Card>
         </TabsContent>
