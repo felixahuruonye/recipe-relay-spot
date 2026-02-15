@@ -6,7 +6,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Crown, Star, ShoppingBag, Settings, LogOut, Edit, Heart, MessageCircle, UserPlus, Send } from 'lucide-react';
+import { Crown, Star, ShoppingBag, Settings, LogOut, Edit, Heart, MessageCircle, UserPlus, Send, Eye } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { useParams, useNavigate } from 'react-router-dom';
 import { VideoPlayer } from '@/components/Feed/VideoPlayer';
@@ -15,6 +15,8 @@ import { ShareMenu } from '@/components/Feed/ShareMenu';
 import { PostMenu } from '@/components/Feed/PostMenu';
 import { EditProfile } from '@/components/Profile/EditProfile';
 import { WithdrawalForm } from '@/components/Profile/WithdrawalForm';
+import { FollowersList } from '@/components/Profile/FollowersList';
+import { PostViewers } from '@/components/Profile/PostViewers';
 
 interface UserProfile {
   id: string;
@@ -44,6 +46,8 @@ const Profile = () => {
   const [expandedComments, setExpandedComments] = useState<{ [key: string]: boolean }>({});
   const [isFollowing, setIsFollowing] = useState(false);
   const [editProfileOpen, setEditProfileOpen] = useState(false);
+  const [showFollowers, setShowFollowers] = useState(false);
+  const [showFollowing, setShowFollowing] = useState(false);
   const { toast } = useToast();
 
   const profileId = userId || user?.id;
@@ -63,66 +67,28 @@ const Profile = () => {
   const setupRealtimeSubscription = () => {
     const channel = supabase
       .channel(`profile-${profileId}`)
-      .on(
-        'postgres_changes',
-        {
-          event: '*',
-          schema: 'public',
-          table: 'post_likes',
-        },
-        () => {
-          fetchUserPosts();
-        }
-      )
-      .on(
-        'postgres_changes',
-        {
-          event: '*',
-          schema: 'public',
-          table: 'posts',
-        },
-        () => {
-          fetchUserPosts();
-          fetchProfile();
-        }
-      )
-      .on(
-        'postgres_changes',
-        {
-          event: '*',
-          schema: 'public',
-          table: 'post_comments',
-        },
-        () => {
-          fetchUserPosts();
-        }
-      )
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'post_likes' }, () => fetchUserPosts())
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'posts' }, () => { fetchUserPosts(); fetchProfile(); })
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'post_comments' }, () => fetchUserPosts())
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'followers' }, () => fetchProfile())
       .subscribe();
 
-    return () => {
-      supabase.removeChannel(channel);
-    };
+    return () => { supabase.removeChannel(channel); };
   };
 
   const fetchProfile = async () => {
     if (!profileId) return;
-
     try {
       const { data, error } = await supabase
         .from('user_profiles')
         .select('*')
         .eq('id', profileId)
         .single();
-
       if (error) throw error;
       setProfile(data);
     } catch (error) {
       console.error('Error fetching profile:', error);
-      toast({
-        title: "Error",
-        description: "Failed to load profile",
-        variant: "destructive"
-      });
+      toast({ title: "Error", description: "Failed to load profile", variant: "destructive" });
     } finally {
       setLoading(false);
     }
@@ -130,7 +96,6 @@ const Profile = () => {
 
   const fetchUserPosts = async () => {
     if (!profileId) return;
-
     try {
       const { data: postsData, error } = await supabase
         .from('posts')
@@ -138,7 +103,6 @@ const Profile = () => {
         .eq('user_id', profileId)
         .eq('status', 'approved')
         .order('created_at', { ascending: false });
-
       if (error) throw error;
 
       let likesLookup: { [key: string]: any[] } = {};
@@ -150,16 +114,13 @@ const Profile = () => {
 
         likesLookup = {};
         likesData?.forEach(like => {
-          if (!likesLookup[like.post_id]) {
-            likesLookup[like.post_id] = [];
-          }
+          if (!likesLookup[like.post_id]) likesLookup[like.post_id] = [];
           likesLookup[like.post_id].push(like);
         });
       }
 
       setPostLikes(likesLookup);
 
-      // Load comment counts per post
       const postsWithCounts = await Promise.all(
         (postsData || []).map(async (p: any) => {
           const { count } = await (supabase as any)
@@ -178,10 +139,8 @@ const Profile = () => {
 
   const handleLike = async (postId: string) => {
     if (!user) return;
-
     const postLikesList = postLikes[postId] || [];
     const existingLike = postLikesList.find(like => like.user_id === user.id);
-
     try {
       if (existingLike) {
         await supabase.from('post_likes').delete().eq('id', existingLike.id);
@@ -196,54 +155,37 @@ const Profile = () => {
 
   const isPostLiked = (postId: string): boolean => {
     if (!user) return false;
-    const postLikesList = postLikes[postId] || [];
-    return postLikesList.some(like => like.user_id === user.id);
+    return (postLikes[postId] || []).some(like => like.user_id === user.id);
   };
 
   const handleVipUpgrade = () => {
-    // Open Paystack VIP link
     window.open(`https://paystack.com/pay/vip-subscription?metadata=user_id:${user?.id}|type:vip`, '_blank');
   };
 
   const handleBuyStars = () => {
-    // Open Paystack Stars purchase link
     window.open(`https://paystack.com/pay/buy-stars?metadata=user_id:${user?.id}|type:stars`, '_blank');
   };
 
   const checkFollowStatus = async () => {
     if (!user || !profileId) return;
-
     const { data } = await supabase
       .from('followers')
       .select('id')
       .eq('follower_id', user.id)
       .eq('following_id', profileId)
       .single();
-
     setIsFollowing(!!data);
   };
 
   const handleFollow = async () => {
     if (!user || !profileId) return;
-
     try {
       if (isFollowing) {
-        await supabase
-          .from('followers')
-          .delete()
-          .eq('follower_id', user.id)
-          .eq('following_id', profileId);
-        
+        await supabase.from('followers').delete().eq('follower_id', user.id).eq('following_id', profileId);
         setIsFollowing(false);
         toast({ title: "Unfollowed successfully" });
       } else {
-        await supabase
-          .from('followers')
-          .insert({
-            follower_id: user.id,
-            following_id: profileId
-          });
-        
+        await supabase.from('followers').insert({ follower_id: user.id, following_id: profileId });
         setIsFollowing(true);
         toast({ title: "Following successfully" });
       }
@@ -254,14 +196,10 @@ const Profile = () => {
   };
 
   const handleMessage = () => {
-    if (profileId) {
-      navigate('/chat', { state: { recipientId: profileId } });
-    }
+    if (profileId) navigate('/chat', { state: { recipientId: profileId } });
   };
 
-  const handleLogout = async () => {
-    await signOut();
-  };
+  const handleLogout = async () => { await signOut(); };
 
   if (loading) {
     return (
@@ -275,11 +213,7 @@ const Profile = () => {
   }
 
   if (!profile) {
-    return (
-      <div className="p-4 text-center">
-        <p>Profile not found</p>
-      </div>
-    );
+    return <div className="p-4 text-center"><p>Profile not found</p></div>;
   }
 
   return (
@@ -306,19 +240,18 @@ const Profile = () => {
                 )}
               </div>
               
-              {profile.full_name && (
-                <p className="text-muted-foreground">{profile.full_name}</p>
-              )}
-              
-              {profile.bio && (
-                <p className="text-sm">{profile.bio}</p>
-              )}
+              {profile.full_name && <p className="text-muted-foreground">{profile.full_name}</p>}
+              {profile.bio && <p className="text-sm">{profile.bio}</p>}
               
               <div className="flex flex-wrap items-center justify-center md:justify-start gap-4 pt-2">
-                <div className="text-center">
+                <button className="text-center hover:opacity-70 transition-opacity" onClick={() => setShowFollowers(true)}>
                   <div className="text-lg font-bold">{profile.follower_count || 0}</div>
                   <div className="text-xs text-muted-foreground">Followers</div>
-                </div>
+                </button>
+                <button className="text-center hover:opacity-70 transition-opacity" onClick={() => setShowFollowing(true)}>
+                  <div className="text-lg font-bold">{profile.following_count || 0}</div>
+                  <div className="text-xs text-muted-foreground">Following</div>
+                </button>
                 <div className="text-center">
                   <div className="text-lg font-bold">{profile.post_count || 0}</div>
                   <div className="text-xs text-muted-foreground">Posts</div>
@@ -342,12 +275,8 @@ const Profile = () => {
                       <span className="text-xs text-muted-foreground">Stars</span>
                     </div>
                   </div>
-
                   <div className="w-full max-w-xs mx-auto md:mx-0">
-                    <WithdrawalForm
-                      isVip={!!profile.vip}
-                      onUpgrade={() => navigate('/vip-subscription')}
-                    />
+                    <WithdrawalForm isVip={!!profile.vip} onUpgrade={() => navigate('/vip-subscription')} />
                   </div>
                 </div>
               )}
@@ -357,39 +286,28 @@ const Profile = () => {
               {isOwnProfile ? (
                 <>
                   <Button variant="outline" size="sm" onClick={() => setEditProfileOpen(true)}>
-                    <Edit className="w-4 h-4 mr-2" />
-                    Edit Profile
+                    <Edit className="w-4 h-4 mr-2" />Edit Profile
                   </Button>
                   <Button variant="outline" size="sm" onClick={() => navigate('/marketplace')}>
-                    <ShoppingBag className="w-4 h-4 mr-2" />
-                    Marketplace
+                    <ShoppingBag className="w-4 h-4 mr-2" />Marketplace
                   </Button>
                   <Button variant="outline" size="sm" onClick={handleLogout}>
-                    <LogOut className="w-4 h-4 mr-2" />
-                    Logout
+                    <LogOut className="w-4 h-4 mr-2" />Logout
                   </Button>
                 </>
               ) : (
                 <>
-                  <Button 
-                    variant={isFollowing ? "outline" : "default"} 
-                    size="sm"
-                    onClick={handleFollow}
-                  >
-                    <UserPlus className="w-4 h-4 mr-2" />
-                    {isFollowing ? 'Following' : 'Follow'}
+                  <Button variant={isFollowing ? "outline" : "default"} size="sm" onClick={handleFollow}>
+                    <UserPlus className="w-4 h-4 mr-2" />{isFollowing ? 'Following' : 'Follow'}
                   </Button>
                   <Button variant="outline" size="sm" onClick={handleMessage}>
-                    <Send className="w-4 h-4 mr-2" />
-                    Message
+                    <Send className="w-4 h-4 mr-2" />Message
                   </Button>
                   <Button variant="outline" size="sm" onClick={() => navigate('/marketplace')}>
-                    <ShoppingBag className="w-4 h-4 mr-2" />
-                    Marketplace
+                    <ShoppingBag className="w-4 h-4 mr-2" />Marketplace
                   </Button>
                   <Button variant="outline" size="sm" onClick={handleBuyStars}>
-                    <Star className="w-4 h-4 mr-2" />
-                    Buy Star
+                    <Star className="w-4 h-4 mr-2" />Buy Star
                   </Button>
                 </>
               )}
@@ -398,13 +316,12 @@ const Profile = () => {
         </CardContent>
       </Card>
 
-      {/* VIP Section - Only for own profile */}
+      {/* VIP Section */}
       {isOwnProfile && !profile.vip && (
         <Card className="border-yellow-200 bg-yellow-50">
           <CardHeader>
             <CardTitle className="text-yellow-800 flex items-center">
-              <Crown className="w-5 h-5 mr-2" />
-              Upgrade to VIP
+              <Crown className="w-5 h-5 mr-2" />Upgrade to VIP
             </CardTitle>
           </CardHeader>
           <CardContent>
@@ -417,33 +334,30 @@ const Profile = () => {
                 <p><strong>✅ Exclusive Contests</strong> - VIP-only challenges</p>
               </div>
               <Button onClick={handleVipUpgrade} className="w-full bg-yellow-600 hover:bg-yellow-700">
-                <Crown className="w-4 h-4 mr-2" />
-                Become VIP
+                <Crown className="w-4 h-4 mr-2" />Become VIP
               </Button>
             </div>
           </CardContent>
         </Card>
       )}
 
-      {/* Star Balance Section - Only for own profile */}
+      {/* Star Balance Section */}
       {isOwnProfile && (
         <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center">
-            <Star className="w-5 h-5 mr-2 text-yellow-500" />
-            Star Balance: {profile.star_balance}
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
-          <p className="text-sm text-muted-foreground mb-4">
-            Stars are used to access premium content in private groups and purchase exclusive items.
-          </p>
-          <Button onClick={handleBuyStars} variant="outline">
-            <Star className="w-4 h-4 mr-2" />
-            Buy Stars
-          </Button>
-        </CardContent>
-      </Card>
+          <CardHeader>
+            <CardTitle className="flex items-center">
+              <Star className="w-5 h-5 mr-2 text-yellow-500" />Star Balance: {profile.star_balance}
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <p className="text-sm text-muted-foreground mb-4">
+              Stars are used to access premium content in private groups and purchase exclusive items.
+            </p>
+            <Button onClick={handleBuyStars} variant="outline">
+              <Star className="w-4 h-4 mr-2" />Buy Stars
+            </Button>
+          </CardContent>
+        </Card>
       )}
 
       {/* Tabs for Posts */}
@@ -468,11 +382,7 @@ const Profile = () => {
                           <h3 className="font-semibold mb-2">{post.title}</h3>
                           <Badge variant="outline" className="text-xs">{post.category}</Badge>
                         </div>
-                        <PostMenu 
-                          postId={post.id} 
-                          postOwnerId={post.user_id}
-                          onPostDeleted={fetchUserPosts}
-                        />
+                        <PostMenu postId={post.id} postOwnerId={post.user_id} onPostDeleted={fetchUserPosts} />
                       </div>
                     </CardHeader>
                     
@@ -486,12 +396,7 @@ const Profile = () => {
                             return isVideo ? (
                               <VideoPlayer key={index} src={url} />
                             ) : (
-                              <img 
-                                key={index}
-                                src={url} 
-                                alt={`Post media ${index + 1}`}
-                                className="w-full rounded-lg max-h-96 object-cover"
-                              />
+                              <img key={index} src={url} alt={`Post media ${index + 1}`} className="w-full rounded-lg max-h-96 object-cover" />
                             );
                           })}
                         </div>
@@ -501,9 +406,7 @@ const Profile = () => {
                         <div className="flex items-center space-x-4">
                           <button
                             onClick={() => handleLike(post.id)}
-                            className={`flex items-center space-x-2 ${
-                              currentUserLiked ? 'text-red-500' : 'text-muted-foreground'
-                            } hover:text-red-500 transition-colors`}
+                            className={`flex items-center space-x-2 ${currentUserLiked ? 'text-red-500' : 'text-muted-foreground'} hover:text-red-500 transition-colors`}
                           >
                             <Heart className={`h-5 w-5 ${currentUserLiked ? 'fill-current' : ''}`} />
                             <span className="text-sm font-medium">{likesCount}</span>
@@ -516,9 +419,12 @@ const Profile = () => {
                             <MessageCircle className="h-5 w-5" />
                             <span className="text-sm">{post.comments_count || 0}</span>
                           </button>
+
+                          {/* Eye icon for post viewers */}
+                          <PostViewers postId={post.id} viewCount={post.view_count || 0} />
                         </div>
 
-                        <ShareMenu postId={post.id} postTitle={post.title} />
+                        <ShareMenu postId={post.id} postTitle={post.title} postImage={post.media_urls?.[0]} postDescription={post.body} />
                       </div>
 
                       {expandedComments[post.id] && (
@@ -542,78 +448,71 @@ const Profile = () => {
 
         {isOwnProfile && (
           <TabsContent value="settings">
-          <Card>
-            <CardHeader>
-              <CardTitle>Account Settings</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="space-y-4">
-                <div>
-                  <p className="text-sm font-medium">Account Created</p>
-                  <p className="text-sm text-muted-foreground">
-                    {new Date(profile.created_at).toLocaleDateString()}
-                  </p>
-                </div>
-                <div>
-                  <p className="text-sm font-medium">Email</p>
-                  <p className="text-sm text-muted-foreground">{user?.email}</p>
-                </div>
-                <div>
-                  <p className="text-sm font-medium">User ID</p>
-                  <p className="text-xs text-muted-foreground font-mono break-all">{profile.id}</p>
-                </div>
-                {profile.vip && (
+            <Card>
+              <CardHeader><CardTitle>Account Settings</CardTitle></CardHeader>
+              <CardContent>
+                <div className="space-y-4">
                   <div>
-                    <p className="text-sm font-medium">VIP Status</p>
-                    <p className="text-sm text-muted-foreground">
-                      Expires: {new Date(profile.vip_expires_at).toLocaleDateString()}
-                    </p>
+                    <p className="text-sm font-medium">Account Created</p>
+                    <p className="text-sm text-muted-foreground">{new Date(profile.created_at).toLocaleDateString()}</p>
                   </div>
-                )}
-              </div>
-            </CardContent>
-          </Card>
+                  <div>
+                    <p className="text-sm font-medium">Email</p>
+                    <p className="text-sm text-muted-foreground">{user?.email}</p>
+                  </div>
+                  <div>
+                    <p className="text-sm font-medium">User ID</p>
+                    <p className="text-xs text-muted-foreground font-mono break-all">{profile.id}</p>
+                  </div>
+                  {profile.vip && (
+                    <div>
+                      <p className="text-sm font-medium">VIP Status</p>
+                      <p className="text-sm text-muted-foreground">Expires: {new Date(profile.vip_expires_at).toLocaleDateString()}</p>
+                    </div>
+                  )}
+                </div>
+              </CardContent>
+            </Card>
 
-          {/* Delete Account */}
-          <Card className="border-destructive mt-4">
-            <CardHeader>
-              <CardTitle className="text-destructive text-lg">Delete Account</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-3">
-              <p className="text-sm text-muted-foreground">
-                This will permanently delete your account, all posts, messages, groups, balances, and
-                remove you from Supabase authentication. This cannot be undone.
-              </p>
-              <Button
-                variant="destructive"
-                className="w-full"
-                onClick={async () => {
-                  if (!confirm('Are you ABSOLUTELY sure? This will permanently delete your entire account and all your data. This cannot be undone.')) return;
-                  if (!confirm('Last chance — type OK in the next prompt to confirm.')) return;
-                  const confirmText = prompt('Type DELETE to permanently remove your account:');
-                  if (confirmText !== 'DELETE') {
-                    toast({ title: 'Cancelled', description: 'Account deletion cancelled.' });
-                    return;
-                  }
-                  try {
-                    const res = await supabase.functions.invoke('delete-user', {
-                      body: { target_user_id: user?.id, self_delete: true },
-                    });
-                    if (res.error) throw new Error(res.error.message);
-                    if (res.data?.success === false) throw new Error(res.data.error);
-                    toast({ title: 'Account Deleted', description: 'Your account has been permanently removed.' });
-                    await signOut();
-                  } catch (err: any) {
-                    toast({ title: 'Error', description: err.message, variant: 'destructive' });
-                  }
-                }}
-              >
-                <Settings className="w-4 h-4 mr-2" />
-                Delete My Account Permanently
-              </Button>
-            </CardContent>
-          </Card>
-        </TabsContent>
+            {/* Delete Account */}
+            <Card className="border-destructive mt-4">
+              <CardHeader>
+                <CardTitle className="text-destructive text-lg">Delete Account</CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-3">
+                <p className="text-sm text-muted-foreground">
+                  This will permanently delete your account, all posts, messages, groups, balances, and
+                  remove you from Supabase authentication. This cannot be undone.
+                </p>
+                <Button
+                  variant="destructive"
+                  className="w-full"
+                  onClick={async () => {
+                    if (!confirm('Are you ABSOLUTELY sure? This will permanently delete your entire account and all your data. This cannot be undone.')) return;
+                    const confirmText = prompt('Type DELETE to permanently remove your account:');
+                    if (confirmText !== 'DELETE') {
+                      toast({ title: 'Cancelled', description: 'Account deletion cancelled.' });
+                      return;
+                    }
+                    try {
+                      const res = await supabase.functions.invoke('delete-user', {
+                        body: { target_user_id: user?.id, self_delete: true },
+                      });
+                      if (res.error) throw new Error(res.error.message);
+                      if (res.data?.success === false) throw new Error(res.data.error);
+                      toast({ title: 'Account Deleted', description: 'Your account has been permanently removed.' });
+                      await signOut();
+                    } catch (err: any) {
+                      toast({ title: 'Error', description: err.message, variant: 'destructive' });
+                    }
+                  }}
+                >
+                  <Settings className="w-4 h-4 mr-2" />
+                  Delete My Account Permanently
+                </Button>
+              </CardContent>
+            </Card>
+          </TabsContent>
         )}
       </Tabs>
 
@@ -622,14 +521,14 @@ const Profile = () => {
         <EditProfile
           open={editProfileOpen}
           onOpenChange={setEditProfileOpen}
-          currentProfile={{
-            username: profile.username,
-            bio: profile.bio,
-            avatar_url: profile.avatar_url
-          }}
+          currentProfile={{ username: profile.username, bio: profile.bio, avatar_url: profile.avatar_url }}
           onProfileUpdated={fetchProfile}
         />
       )}
+
+      {/* Followers/Following Dialogs */}
+      <FollowersList userId={profileId!} type="followers" open={showFollowers} onOpenChange={setShowFollowers} count={profile.follower_count || 0} />
+      <FollowersList userId={profileId!} type="following" open={showFollowing} onOpenChange={setShowFollowing} count={profile.following_count || 0} />
     </div>
   );
 };
