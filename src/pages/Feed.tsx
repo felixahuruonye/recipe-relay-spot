@@ -18,6 +18,8 @@ import { CommentSection } from '@/components/Feed/CommentSection';
 import { VideoPlayer } from '@/components/Feed/VideoPlayer';
 import { ShareMenu } from '@/components/Feed/ShareMenu';
 import { PostMenu } from '@/components/Feed/PostMenu';
+import { ProductCard } from '@/components/Feed/ProductCard';
+import { SuggestedUsers } from '@/components/Feed/SuggestedUsers';
 import { Dialog, DialogContent } from '@/components/ui/dialog';
 import { ensureUserProfile } from '@/lib/ensureUserProfile';
 
@@ -52,7 +54,22 @@ interface PostLike {
   post_id: string;
 }
 
-// Post view timer component with improved logic
+interface MarketProduct {
+  id: string;
+  title: string;
+  description: string;
+  price_ngn: number;
+  images: string[];
+  featured: boolean;
+  seller_user_id: string;
+  user_profiles?: {
+    username: string;
+    avatar_url: string;
+    vip: boolean;
+  };
+}
+
+// Post view timer component
 const PostViewTimer: React.FC<{
   post: Post;
   isVideo: boolean;
@@ -138,6 +155,7 @@ const Feed = () => {
   const [userStarBalance, setUserStarBalance] = useState(0);
   const [walletBalance, setWalletBalance] = useState(0);
   const [followingUsers, setFollowingUsers] = useState<Set<string>>(new Set());
+  const [marketProducts, setMarketProducts] = useState<MarketProduct[]>([]);
   const { toast } = useToast();
 
   // Handle post ID from URL params
@@ -157,6 +175,8 @@ const Feed = () => {
     if (user) {
       checkUserProfile();
       loadUserBalances();
+      loadFollowing();
+      loadMarketProducts();
     }
   }, [user]);
 
@@ -195,6 +215,53 @@ const Feed = () => {
       supabase.removeChannel(channel);
     };
   }, [user]);
+
+  const loadFollowing = async () => {
+    if (!user) return;
+    const { data } = await supabase
+      .from('followers')
+      .select('following_id')
+      .eq('follower_id', user.id);
+    setFollowingUsers(new Set(data?.map(f => f.following_id) || []));
+  };
+
+  const handleFollow = async (targetId: string) => {
+    if (!user) return;
+    try {
+      if (followingUsers.has(targetId)) {
+        await supabase.from('followers').delete().eq('follower_id', user.id).eq('following_id', targetId);
+        setFollowingUsers(prev => { const n = new Set(prev); n.delete(targetId); return n; });
+      } else {
+        await supabase.from('followers').insert({ follower_id: user.id, following_id: targetId });
+        setFollowingUsers(prev => new Set(prev).add(targetId));
+      }
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
+  const loadMarketProducts = async () => {
+    const { data } = await supabase
+      .from('products')
+      .select('*')
+      .eq('status', 'active')
+      .order('created_at', { ascending: false })
+      .limit(10);
+
+    if (data && data.length > 0) {
+      const sellerIds = [...new Set(data.map(p => p.seller_user_id))];
+      const { data: profiles } = await supabase
+        .from('user_profiles')
+        .select('id, username, avatar_url, vip')
+        .in('id', sellerIds);
+
+      const profileMap = new Map(profiles?.map(p => [p.id, p]) || []);
+      setMarketProducts(data.map(p => ({
+        ...p,
+        user_profiles: profileMap.get(p.seller_user_id)
+      })) as MarketProduct[]);
+    }
+  };
 
   const loadUserBalances = async () => {
     if (!user) return;
@@ -461,7 +528,6 @@ const Feed = () => {
         console.warn('ensureUserProfile failed (post view):', ensured.error);
       }
 
-      // Process view via RPC (handles all logic including duplicate check)
       const { data, error } = await supabase.rpc('process_post_view', {
         p_post_id: post.id,
         p_viewer_id: user.id
@@ -488,9 +554,7 @@ const Feed = () => {
         return;
       }
 
-      // Mark as processed only after RPC confirms it handled/recorded the view.
       setProcessedPosts(prev => new Set(prev).add(post.id));
-
       await loadUserBalances();
 
       if (result.insufficient_stars) {
@@ -546,6 +610,42 @@ const Feed = () => {
     setVideoEndedMap(prev => ({ ...prev, [postId]: true }));
   };
 
+  // Build interleaved feed items: posts + marketplace products after every 2 posts
+  const buildFeedItems = () => {
+    const items: { type: 'post' | 'product' | 'suggestions'; data: any }[] = [];
+    let productIndex = 0;
+    let suggestionsInserted = false;
+
+    if (posts.length === 0 && marketProducts.length > 0) {
+      // No posts - show suggestions first then products
+      items.push({ type: 'suggestions', data: null });
+      marketProducts.forEach(p => items.push({ type: 'product', data: p }));
+      return items;
+    }
+
+    posts.forEach((post, index) => {
+      items.push({ type: 'post', data: post });
+
+      // After 2nd post, insert suggestions card
+      if (index === 1 && !suggestionsInserted) {
+        items.push({ type: 'suggestions', data: null });
+        suggestionsInserted = true;
+      }
+
+      // After every 2 posts, insert a marketplace product
+      if ((index + 1) % 2 === 0 && productIndex < marketProducts.length) {
+        items.push({ type: 'product', data: marketProducts[productIndex] });
+        productIndex++;
+      }
+    });
+
+    if (!suggestionsInserted) {
+      items.splice(1, 0, { type: 'suggestions', data: null });
+    }
+
+    return items;
+  };
+
   if (needsProfileSetup) {
     return <ProfileSetup onComplete={() => { setNeedsProfileSetup(false); checkUserProfile(); }} />;
   }
@@ -572,6 +672,8 @@ const Feed = () => {
       </div>
     );
   }
+
+  const feedItems = buildFeedItems();
 
   return (
     <div className="max-w-2xl mx-auto p-4 space-y-6">
@@ -647,9 +749,18 @@ const Feed = () => {
         </Button>
       </div>
 
-      {/* Posts */}
+      {/* Feed Items (Posts + Products + Suggestions interspersed) */}
       <div className="space-y-3 sm:space-y-4">
-        {posts.map((post) => {
+        {feedItems.map((item, idx) => {
+          if (item.type === 'suggestions') {
+            return <SuggestedUsers key={`suggestions-${idx}`} />;
+          }
+
+          if (item.type === 'product') {
+            return <ProductCard key={`product-${item.data.id}`} product={item.data} />;
+          }
+
+          const post = item.data as Post;
           const postUser = users[post.user_id];
           const likedUsernames = getUsernamesWhoLiked(post.id);
           const currentUserLiked = isPostLiked(post.id);
@@ -658,6 +769,8 @@ const Feed = () => {
           const isPaidPost = post.star_price && post.star_price > 0 && post.user_id !== user?.id;
           const insufficientStars = isPaidPost && userStarBalance < (post.star_price || 0);
           const isProcessed = processedPosts.has(post.id);
+          const isFollowingUser = followingUsers.has(post.user_id);
+          const isOwnPost = post.user_id === user?.id;
           
           return (
             <Card key={post.id} id={`post-${post.id}`} className="overflow-hidden glass-card card-3d">
@@ -696,6 +809,17 @@ const Feed = () => {
                     </div>
                   </button>
                   <div className="flex items-center space-x-2">
+                    {!isOwnPost && (
+                      <Button
+                        variant={isFollowingUser ? 'outline' : 'default'}
+                        size="sm"
+                        className="h-7 text-xs"
+                        onClick={() => handleFollow(post.user_id)}
+                      >
+                        <UserPlus className="w-3 h-3 mr-1" />
+                        {isFollowingUser ? 'Following' : 'Follow'}
+                      </Button>
+                    )}
                     {isPaidPost && (
                       <Badge className="bg-yellow-500 text-black">
                         {post.star_price}<Star className="w-3 h-3 ml-1 inline fill-current" />
@@ -782,7 +906,12 @@ const Feed = () => {
                         <span className="text-xs font-medium">{post.comments_count || 0}</span>
                       </Button>
                     </div>
-                    <ShareMenu postId={post.id} postTitle={post.title} />
+                    <ShareMenu
+                      postId={post.id}
+                      postTitle={post.title}
+                      postImage={hasMedia ? post.media_urls[0] : undefined}
+                      postDescription={post.body}
+                    />
                   </div>
 
                   {expandedComments[post.id] && (
@@ -797,7 +926,7 @@ const Feed = () => {
         })}
       </div>
 
-      {posts.length === 0 && (
+      {posts.length === 0 && marketProducts.length === 0 && (
         <div className="text-center py-12">
           <p className="text-muted-foreground">
             {showOldPosts ? 'No viewed posts yet.' : 'No new posts yet. Be the first to share!'}
