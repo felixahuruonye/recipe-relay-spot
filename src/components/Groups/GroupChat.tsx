@@ -269,7 +269,7 @@ export const GroupChat: React.FC<GroupChatProps> = ({ groupId, groupName, onBack
   };
 
   return (
-    <div className="flex flex-col h-full" style={{ height: '100dvh' }}>
+    <div className="flex flex-col h-full" style={{ height: 'calc(100dvh - 4rem)' }}>
       {/* Header */}
       <div className="flex items-center space-x-3 p-4 border-b shrink-0">
         <Button variant="ghost" size="icon" onClick={onBack}>

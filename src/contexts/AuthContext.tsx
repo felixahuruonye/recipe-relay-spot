@@ -36,6 +36,17 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         setSession(session);
         setUser(session?.user ?? null);
         setLoading(false);
+
+        // Update online status
+        if (session?.user) {
+          setTimeout(() => {
+            supabase
+              .from('user_profiles')
+              .update({ is_online: true, last_seen: new Date().toISOString() })
+              .eq('id', session.user.id)
+              .then();
+          }, 0);
+        }
       }
     );
 
@@ -44,9 +55,46 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       setSession(session);
       setUser(session?.user ?? null);
       setLoading(false);
+
+      if (session?.user) {
+        supabase
+          .from('user_profiles')
+          .update({ is_online: true, last_seen: new Date().toISOString() })
+          .eq('id', session.user.id)
+          .then();
+      }
     });
 
-    return () => subscription.unsubscribe();
+    // Heartbeat to keep online status active
+    const heartbeat = setInterval(() => {
+      supabase.auth.getSession().then(({ data: { session } }) => {
+        if (session?.user) {
+          supabase
+            .from('user_profiles')
+            .update({ is_online: true, last_seen: new Date().toISOString() })
+            .eq('id', session.user.id)
+            .then();
+        }
+      });
+    }, 60000); // every 60 seconds
+
+    // Set offline on page unload
+    const handleBeforeUnload = () => {
+      if (user) {
+        navigator.sendBeacon && supabase
+          .from('user_profiles')
+          .update({ is_online: false, last_seen: new Date().toISOString() })
+          .eq('id', user.id)
+          .then();
+      }
+    };
+    window.addEventListener('beforeunload', handleBeforeUnload);
+
+    return () => {
+      subscription.unsubscribe();
+      clearInterval(heartbeat);
+      window.removeEventListener('beforeunload', handleBeforeUnload);
+    };
   }, []);
 
   const signUp = async (email: string, password: string, userData?: any) => {
@@ -90,6 +138,13 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   const signOut = async () => {
+    // Set offline before signing out
+    if (user) {
+      await supabase
+        .from('user_profiles')
+        .update({ is_online: false, last_seen: new Date().toISOString() })
+        .eq('id', user.id);
+    }
     const { error } = await supabase.auth.signOut();
     if (error) {
       toast({

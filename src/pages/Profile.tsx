@@ -163,7 +163,7 @@ const Profile = () => {
   };
 
   const handleBuyStars = () => {
-    window.open(`https://paystack.com/pay/buy-stars?metadata=user_id:${user?.id}|type:stars`, '_blank');
+    navigate('/star-marketplace');
   };
 
   const checkFollowStatus = async () => {

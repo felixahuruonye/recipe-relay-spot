@@ -46,17 +46,18 @@ export const SuggestedUsers: React.FC = () => {
     const followingIds = new Set(following?.map(f => f.following_id) || []);
     setFollowingSet(followingIds);
 
-    // Get newest users we don't follow
+    // Get all users
     const { data: users } = await supabase
       .from('user_profiles')
       .select('id, username, avatar_url, vip, full_name')
       .neq('id', user.id)
       .order('created_at', { ascending: false })
-      .limit(50);
+      .limit(1000);
 
-    const filtered = (users || []).filter(u => !followingIds.has(u.id));
-    setSuggestions(filtered.slice(0, 10));
-    setAllUsers(filtered);
+    const allUsersList = users || [];
+    const notFollowing = allUsersList.filter(u => !followingIds.has(u.id));
+    setSuggestions(notFollowing.slice(0, 10));
+    setAllUsers(allUsersList);
     setLoading(false);
   };
 
@@ -127,11 +128,9 @@ export const SuggestedUsers: React.FC = () => {
               ))}
             </div>
           </div>
-          {allUsers.length > 10 && (
-            <Button variant="ghost" size="sm" className="w-full" onClick={() => setShowAll(true)}>
-              View More <ChevronRight className="w-4 h-4 ml-1" />
-            </Button>
-          )}
+          <Button variant="ghost" size="sm" className="w-full" onClick={() => setShowAll(true)}>
+            View More <ChevronRight className="w-4 h-4 ml-1" />
+          </Button>
         </CardContent>
       </Card>
 
