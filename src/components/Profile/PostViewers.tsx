@@ -22,6 +22,26 @@ export const PostViewers: React.FC<PostViewersProps> = ({ postId, viewCount }) =
   const [open, setOpen] = useState(false);
   const [viewers, setViewers] = useState<Viewer[]>([]);
   const [loading, setLoading] = useState(false);
+  const [liveViewCount, setLiveViewCount] = useState(viewCount);
+
+  // Sync prop changes
+  useEffect(() => {
+    setLiveViewCount(viewCount);
+  }, [viewCount]);
+
+  // Real-time subscription for view count updates
+  useEffect(() => {
+    const channel = supabase
+      .channel(`post-views-${postId}`)
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'post_views', filter: `post_id=eq.${postId}` }, () => {
+        setLiveViewCount(prev => prev + 1);
+        // If dialog is open, reload viewers
+        if (open) loadViewers();
+      })
+      .subscribe();
+
+    return () => { supabase.removeChannel(channel); };
+  }, [postId, open]);
 
   const loadViewers = async () => {
     setLoading(true);
@@ -46,6 +66,7 @@ export const PostViewers: React.FC<PostViewersProps> = ({ postId, viewCount }) =
           avatar_url: profileMap.get(v.user_id)?.avatar_url || null,
           viewed_at: v.viewed_at,
         })));
+        setLiveViewCount(data.length);
       } else {
         setViewers([]);
       }
@@ -68,7 +89,7 @@ export const PostViewers: React.FC<PostViewersProps> = ({ postId, viewCount }) =
         className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors"
       >
         <Eye className="w-4 h-4" />
-        <span>{viewCount || 0}</span>
+        <span>{liveViewCount || 0}</span>
       </button>
 
       <Dialog open={open} onOpenChange={setOpen}>
