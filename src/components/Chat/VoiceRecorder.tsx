@@ -20,28 +20,35 @@ export const VoiceRecorder: React.FC<VoiceRecorderProps> = ({ onVoiceSent }) => 
   const startRecording = async () => {
     if (!user) return;
 
-    // Check voice credits
-    const { data: profile } = await supabase
-      .from('user_profiles')
-      .select('voice_credits, star_balance')
-      .eq('id', user.id)
-      .single();
-
-    const credits = profile?.voice_credits ?? 10;
-    if (credits <= 0) {
-      const stars = profile?.star_balance ?? 0;
-      if (stars < 20) {
-        toast({ title: 'No Voice Credits', description: 'You need 20 Stars to get 10 more recordings.', variant: 'destructive' });
-        return;
-      }
-      await supabase.from('user_profiles').update({
-        star_balance: stars - 20,
-        voice_credits: 10,
-      }).eq('id', user.id);
-      toast({ title: 'Voice Credits Recharged', description: '20 Stars deducted. 10 recordings added!' });
-    }
-
+    // Check voice credits via RPC for proper star deduction
     try {
+      const { data: profile } = await supabase
+        .from('user_profiles')
+        .select('voice_credits, star_balance')
+        .eq('id', user.id)
+        .single();
+
+      const credits = profile?.voice_credits ?? 10;
+      if (credits <= 0) {
+        const stars = profile?.star_balance ?? 0;
+        if (stars < 20) {
+          toast({ title: 'No Voice Credits', description: 'You need 20 Stars to get 10 more recordings.', variant: 'destructive' });
+          return;
+        }
+        // Use RPC for safe star deduction
+        const { data, error } = await supabase.rpc('deduct_voice_credits', { p_user_id: user.id });
+        if (error) {
+          toast({ title: 'Error', description: error.message, variant: 'destructive' });
+          return;
+        }
+        const result = data as any;
+        if (result?.success === false) {
+          toast({ title: 'Error', description: result.error || 'Could not recharge voice credits', variant: 'destructive' });
+          return;
+        }
+        toast({ title: 'Voice Credits Recharged', description: '20 Stars deducted. 10 recordings added!' });
+      }
+
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
       const mediaRecorder = new MediaRecorder(stream);
       mediaRecorderRef.current = mediaRecorder;
@@ -59,8 +66,8 @@ export const VoiceRecorder: React.FC<VoiceRecorderProps> = ({ onVoiceSent }) => 
 
       mediaRecorder.start();
       setRecording(true);
-    } catch {
-      toast({ title: 'Mic Error', description: 'Could not access microphone.', variant: 'destructive' });
+    } catch (err: any) {
+      toast({ title: 'Mic Error', description: err.message || 'Could not access microphone.', variant: 'destructive' });
     }
   };
 
@@ -72,32 +79,27 @@ export const VoiceRecorder: React.FC<VoiceRecorderProps> = ({ onVoiceSent }) => 
   const uploadVoice = async (blob: Blob) => {
     if (!user) return;
     setUploading(true);
-    const fileName = `voice/${user.id}/${Date.now()}.webm`;
-    const { error } = await supabase.storage.from('post-media').upload(fileName, blob, { contentType: 'audio/webm' });
+    try {
+      const fileName = `voice/${user.id}/${Date.now()}.webm`;
+      const { error } = await supabase.storage.from('post-media').upload(fileName, blob, { contentType: 'audio/webm' });
 
-    if (error) {
-      toast({ title: 'Upload Error', description: error.message, variant: 'destructive' });
+      if (error) {
+        toast({ title: 'Upload Error', description: error.message, variant: 'destructive' });
+        setUploading(false);
+        return;
+      }
+
+      const { data: urlData } = supabase.storage.from('post-media').getPublicUrl(fileName);
+
+      // Deduct voice credit via RPC
+      await supabase.rpc('deduct_voice_credits', { p_user_id: user.id });
+
+      onVoiceSent(urlData.publicUrl);
+    } catch (err: any) {
+      toast({ title: 'Upload Error', description: err.message || 'Failed to upload voice', variant: 'destructive' });
+    } finally {
       setUploading(false);
-      return;
     }
-
-    const { data: urlData } = supabase.storage.from('post-media').getPublicUrl(fileName);
-
-    // Deduct voice credit
-    const { data: currentProfile } = await supabase
-      .from('user_profiles')
-      .select('voice_credits')
-      .eq('id', user.id)
-      .single();
-
-    if (currentProfile) {
-      await supabase.from('user_profiles').update({
-        voice_credits: Math.max(0, (currentProfile.voice_credits ?? 10) - 1)
-      }).eq('id', user.id);
-    }
-
-    onVoiceSent(urlData.publicUrl);
-    setUploading(false);
   };
 
   return (

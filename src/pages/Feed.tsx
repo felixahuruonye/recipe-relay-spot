@@ -18,6 +18,7 @@ import { CommentSection } from '@/components/Feed/CommentSection';
 import { VideoPlayer } from '@/components/Feed/VideoPlayer';
 import { ShareMenu } from '@/components/Feed/ShareMenu';
 import { PostMenu } from '@/components/Feed/PostMenu';
+import { PostViewers } from '@/components/Profile/PostViewers';
 import { ProductCard } from '@/components/Feed/ProductCard';
 import { SuggestedUsers } from '@/components/Feed/SuggestedUsers';
 import { Dialog, DialogContent } from '@/components/ui/dialog';
@@ -906,12 +907,15 @@ const Feed = () => {
                         <span className="text-xs font-medium">{post.comments_count || 0}</span>
                       </Button>
                     </div>
-                    <ShareMenu
-                      postId={post.id}
-                      postTitle={post.title}
-                      postImage={hasMedia ? post.media_urls[0] : undefined}
-                      postDescription={post.body}
-                    />
+                    <div className="flex items-center gap-3">
+                      <PostViewers postId={post.id} viewCount={post.view_count || 0} />
+                      <ShareMenu
+                        postId={post.id}
+                        postTitle={post.title}
+                        postImage={hasMedia ? post.media_urls[0] : undefined}
+                        postDescription={post.body}
+                      />
+                    </div>
                   </div>
 
                   {expandedComments[post.id] && (

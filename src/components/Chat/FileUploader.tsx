@@ -19,32 +19,42 @@ export const FileUploader: React.FC<FileUploaderProps> = ({ onFileUploaded }) =>
     const file = e.target.files?.[0];
     if (!file || !user) return;
 
-    if (file.size > 20 * 1024 * 1024) {
-      toast({ title: 'File Too Large', description: 'Max file size is 20MB.', variant: 'destructive' });
+    // Allow up to 500MB
+    const maxSize = 500 * 1024 * 1024;
+    if (file.size > maxSize) {
+      toast({ title: 'File Too Large', description: 'Max file size is 500MB.', variant: 'destructive' });
       return;
     }
 
     setUploading(true);
-    const ext = file.name.split('.').pop();
-    const fileName = `chat-files/${user.id}/${Date.now()}.${ext}`;
-    const { error } = await supabase.storage.from('post-media').upload(fileName, file);
+    try {
+      const ext = file.name.split('.').pop();
+      const fileName = `chat-files/${user.id}/${Date.now()}.${ext}`;
+      const { error } = await supabase.storage.from('post-media').upload(fileName, file, {
+        cacheControl: '3600',
+        upsert: false,
+      });
 
-    if (error) {
-      toast({ title: 'Upload Error', description: error.message, variant: 'destructive' });
+      if (error) {
+        toast({ title: 'Upload Error', description: error.message, variant: 'destructive' });
+        setUploading(false);
+        return;
+      }
+
+      const { data: urlData } = supabase.storage.from('post-media').getPublicUrl(fileName);
+      const fileType = file.type.startsWith('image/') ? 'image' : file.type.startsWith('video/') ? 'video' : 'document';
+      onFileUploaded(urlData.publicUrl, fileType);
+    } catch (err: any) {
+      toast({ title: 'Upload Error', description: err.message || 'Failed to upload file', variant: 'destructive' });
+    } finally {
       setUploading(false);
-      return;
+      if (inputRef.current) inputRef.current.value = '';
     }
-
-    const { data: urlData } = supabase.storage.from('post-media').getPublicUrl(fileName);
-    const fileType = file.type.startsWith('image/') ? 'image' : file.type.startsWith('video/') ? 'video' : 'document';
-    onFileUploaded(urlData.publicUrl, fileType);
-    setUploading(false);
-    if (inputRef.current) inputRef.current.value = '';
   };
 
   return (
     <>
-      <input ref={inputRef} type="file" className="hidden" accept="image/*,video/*,.pdf,.doc,.docx" onChange={handleFileSelect} />
+      <input ref={inputRef} type="file" className="hidden" accept="image/*,video/*,.pdf,.doc,.docx,.txt,.zip,.rar" onChange={handleFileSelect} />
       {uploading ? (
         <Button variant="ghost" size="icon" disabled className="shrink-0">
           <Loader2 className="w-4 h-4 animate-spin" />

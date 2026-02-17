@@ -145,8 +145,16 @@ export const GroupChat: React.FC<GroupChatProps> = ({ groupId, groupName, onBack
 
   const leaveGroup = async () => {
     if (!user) return;
+    if (!confirm('Leave this group? Your messages will be removed.')) return;
+    
+    // Delete all user's messages in the group
+    await supabase.from('group_messages').delete().eq('group_id', groupId).eq('user_id', user.id);
+    // Remove membership
     await supabase.from('group_members').delete().eq('group_id', groupId).eq('user_id', user.id);
-    toast({ title: 'Left Group' });
+    // Decrement member count
+    await supabase.from('groups').update({ member_count: Math.max(0, memberCount - 1) }).eq('id', groupId);
+    
+    toast({ title: 'Left Group', description: 'You have left the group and your messages were removed.' });
     onBack();
   };
 
