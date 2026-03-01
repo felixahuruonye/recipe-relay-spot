@@ -23,7 +23,7 @@ interface Message {
   message: string;
   media_url?: string;
   created_at: string;
-  user_profiles?: { username: string; avatar_url: string };
+  user_profiles?: { username: string; avatar_url: string; is_online?: boolean };
 }
 
 interface GroupChatProps {
@@ -52,6 +52,7 @@ export const GroupChat: React.FC<GroupChatProps> = ({ groupId, groupName, onBack
   const [readReceipts, setReadReceipts] = useState<ReadReceipt[]>([]);
   const [readReceiptsLoading, setReadReceiptsLoading] = useState(false);
   const [isOwner, setIsOwner] = useState(false);
+  const [onlineMembers, setOnlineMembers] = useState<Set<string>>(new Set());
 
   useEffect(() => {
     let channel: ReturnType<typeof supabase.channel> | null = null;
@@ -71,6 +72,7 @@ export const GroupChat: React.FC<GroupChatProps> = ({ groupId, groupName, onBack
         setMemberStatus('active');
         await loadMessages();
         await loadMemberCount();
+        await loadOnlineMembers();
         channel = setupRealtimeSubscription();
         return;
       }
@@ -81,6 +83,7 @@ export const GroupChat: React.FC<GroupChatProps> = ({ groupId, groupName, onBack
         setMemberStatus('active');
         await loadMessages();
         await loadMemberCount();
+        await loadOnlineMembers();
         channel = setupRealtimeSubscription();
       } else if (status === 'pending') {
         setMemberStatus('pending');
@@ -96,6 +99,23 @@ export const GroupChat: React.FC<GroupChatProps> = ({ groupId, groupName, onBack
 
   const canChat = useMemo(() => memberStatus === 'active', [memberStatus]);
 
+  const loadOnlineMembers = async () => {
+    const { data: members } = await supabase.from('group_members').select('user_id').eq('group_id', groupId).eq('status', 'active');
+    if (!members) return;
+    const memberIds = members.map(m => m.user_id);
+    const { data: profiles } = await supabase.from('user_profiles').select('id, is_online, last_seen').in('id', memberIds);
+    const now = Date.now();
+    const online = new Set<string>();
+    profiles?.forEach(p => {
+      // Only show online if last_seen within 2 minutes (active usage)
+      const lastSeen = p.last_seen ? new Date(p.last_seen).getTime() : 0;
+      if (p.is_online && (now - lastSeen) < 120000) {
+        online.add(p.id);
+      }
+    });
+    setOnlineMembers(online);
+  };
+
   const loadMemberCount = async () => {
     const { count } = await supabase.from('group_members').select('*', { count: 'exact', head: true }).eq('group_id', groupId).eq('status', 'active');
     setMemberCount(count || 0);
@@ -105,7 +125,7 @@ export const GroupChat: React.FC<GroupChatProps> = ({ groupId, groupName, onBack
     const { data } = await supabase.from('group_messages').select('*').eq('group_id', groupId).order('created_at', { ascending: true }).limit(200);
     if (!data) return;
     const userIds = [...new Set(data.map(m => m.user_id))];
-    const { data: profiles } = await supabase.from('user_profiles').select('id, username, avatar_url').in('id', userIds);
+    const { data: profiles } = await supabase.from('user_profiles').select('id, username, avatar_url, is_online, last_seen').in('id', userIds);
     const profileMap = new Map((profiles || []).map(p => [p.id, p]));
     setMessages(data.map(msg => ({ ...msg, user_profiles: profileMap.get(msg.user_id) })));
   };
@@ -114,13 +134,24 @@ export const GroupChat: React.FC<GroupChatProps> = ({ groupId, groupName, onBack
     const channel = supabase
       .channel(`group-${groupId}`)
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'group_messages', filter: `group_id=eq.${groupId}` }, async (payload) => {
-        const { data: profile } = await supabase.from('user_profiles').select('username, avatar_url').eq('id', payload.new.user_id).single();
+        const { data: profile } = await supabase.from('user_profiles').select('username, avatar_url, is_online').eq('id', payload.new.user_id).single();
         setMessages(prev => [...prev, { ...payload.new, user_profiles: profile } as Message]);
       })
       .on('postgres_changes', { event: 'DELETE', schema: 'public', table: 'group_messages', filter: `group_id=eq.${groupId}` }, (payload) => {
         setMessages(prev => prev.filter(m => m.id !== payload.old.id));
       })
       .subscribe();
+
+    // Refresh online members every 30 seconds
+    const onlineInterval = setInterval(loadOnlineMembers, 30000);
+    
+    const origCleanup = () => {
+      supabase.removeChannel(channel);
+      clearInterval(onlineInterval);
+    };
+    
+    // Store cleanup via a hack - return channel but setup interval cleanup
+    (channel as any).__onlineInterval = onlineInterval;
     return channel;
   };
 
@@ -146,14 +177,9 @@ export const GroupChat: React.FC<GroupChatProps> = ({ groupId, groupName, onBack
   const leaveGroup = async () => {
     if (!user) return;
     if (!confirm('Leave this group? Your messages will be removed.')) return;
-    
-    // Delete all user's messages in the group
     await supabase.from('group_messages').delete().eq('group_id', groupId).eq('user_id', user.id);
-    // Remove membership
     await supabase.from('group_members').delete().eq('group_id', groupId).eq('user_id', user.id);
-    // Decrement member count
     await supabase.from('groups').update({ member_count: Math.max(0, memberCount - 1) }).eq('id', groupId);
-    
     toast({ title: 'Left Group', description: 'You have left the group and your messages were removed.' });
     onBack();
   };
@@ -191,13 +217,13 @@ export const GroupChat: React.FC<GroupChatProps> = ({ groupId, groupName, onBack
   const navigateToProfile = (userId: string) => navigate(`/profile/${userId}`);
 
   return (
-    <div className="flex flex-col" style={{ height: 'calc(100dvh - 4rem)' }}>
+    <div className="flex flex-col" style={{ height: 'calc(100dvh - 5.5rem)' }}>
       {/* Header */}
       <div className="flex items-center space-x-3 p-3 border-b shrink-0">
         <Button variant="ghost" size="icon" onClick={onBack}><ArrowLeft className="h-5 w-5" /></Button>
         <div className="flex-1 min-w-0">
           <h2 className="font-semibold text-sm truncate">{groupName}</h2>
-          <p className="text-xs text-muted-foreground">{memberCount} members</p>
+          <p className="text-xs text-muted-foreground">{memberCount} members · {onlineMembers.size} active</p>
         </div>
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
@@ -229,12 +255,18 @@ export const GroupChat: React.FC<GroupChatProps> = ({ groupId, groupName, onBack
             {messages.length === 0 && <div className="text-sm text-muted-foreground text-center py-8">No messages yet. Say hi! 👋</div>}
             {messages.map((msg) => {
               const isOwn = msg.user_id === user?.id;
+              const isActive = onlineMembers.has(msg.user_id);
               return (
                 <div key={msg.id} className={`flex items-end gap-2 ${isOwn ? 'flex-row-reverse' : ''} group`}>
-                  <Avatar className="w-7 h-7 shrink-0 cursor-pointer" onClick={() => navigateToProfile(msg.user_id)}>
-                    <AvatarImage src={msg.user_profiles?.avatar_url} />
-                    <AvatarFallback>{msg.user_profiles?.username?.[0]?.toUpperCase()}</AvatarFallback>
-                  </Avatar>
+                  <div className="relative shrink-0">
+                    <Avatar className="w-7 h-7 cursor-pointer" onClick={() => navigateToProfile(msg.user_id)}>
+                      <AvatarImage src={msg.user_profiles?.avatar_url} />
+                      <AvatarFallback>{msg.user_profiles?.username?.[0]?.toUpperCase()}</AvatarFallback>
+                    </Avatar>
+                    {isActive && (
+                      <span className="absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 bg-green-500 rounded-full border-2 border-background animate-pulse" />
+                    )}
+                  </div>
                   <div className={`flex flex-col max-w-[70%] ${isOwn ? 'items-end' : 'items-start'}`}>
                     {!isOwn && (
                       <span className="text-xs text-muted-foreground mb-0.5 cursor-pointer hover:underline" onClick={() => navigateToProfile(msg.user_id)}>
@@ -274,12 +306,12 @@ export const GroupChat: React.FC<GroupChatProps> = ({ groupId, groupName, onBack
         )}
       </div>
 
-      {/* Message Input */}
+      {/* Message Input - raised higher above nav */}
       {canChat && (
-        <div className="p-3 border-t shrink-0 bg-background">
+        <div className="p-3 pb-5 border-t shrink-0 bg-background mb-2">
           <div className="flex items-center gap-1">
             <FileUploader onFileUploaded={(url, type) => sendMessage(url, type)} />
-            <VoiceRecorder onVoiceSent={(url) => sendMessage(url)} />
+            <VoiceRecorder onVoiceSent={(url) => sendMessage(url, 'voice')} />
             <Input
               value={newMessage}
               onChange={(e) => setNewMessage(e.target.value)}
