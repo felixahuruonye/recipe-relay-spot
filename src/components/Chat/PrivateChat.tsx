@@ -5,7 +5,6 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Badge } from '@/components/ui/badge';
-import { ScrollArea } from '@/components/ui/scroll-area';
 import { Send, ArrowLeft, Check, CheckCheck, Trash2 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { VoiceRecorder } from './VoiceRecorder';
@@ -30,17 +29,14 @@ interface PrivateMessage {
 }
 
 export const PrivateChat: React.FC<PrivateChatProps> = ({ 
-  recipientId, 
-  recipientName, 
-  recipientAvatar,
-  onBack 
+  recipientId, recipientName, recipientAvatar, onBack 
 }) => {
   const { user } = useAuth();
   const [messages, setMessages] = useState<PrivateMessage[]>([]);
   const [newMessage, setNewMessage] = useState('');
   const [loading, setLoading] = useState(true);
   const [recipientOnline, setRecipientOnline] = useState(false);
-  const [recipientIsTyping] = useState(false);
+  const [recipientLastSeen, setRecipientLastSeen] = useState<string | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const typingTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const [isTyping, setIsTyping] = useState(false);
@@ -62,10 +58,14 @@ export const PrivateChat: React.FC<PrivateChatProps> = ({
   const checkRecipientStatus = async () => {
     const { data } = await supabase
       .from('user_profiles')
-      .select('is_online')
+      .select('is_online, last_seen')
       .eq('id', recipientId)
       .single();
-    setRecipientOnline(data?.is_online || false);
+    
+    const lastSeen = data?.last_seen ? new Date(data.last_seen).getTime() : 0;
+    const isActive = data?.is_online && (Date.now() - lastSeen) < 120000;
+    setRecipientOnline(isActive || false);
+    setRecipientLastSeen(data?.last_seen || null);
   };
 
   const fetchMessages = async () => {
@@ -106,7 +106,9 @@ export const PrivateChat: React.FC<PrivateChatProps> = ({
         }
       })
       .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'user_profiles', filter: `id=eq.${recipientId}` }, (payload) => {
-        setRecipientOnline((payload.new as any).is_online || false);
+        const p = payload.new as any;
+        const lastSeen = p.last_seen ? new Date(p.last_seen).getTime() : 0;
+        setRecipientOnline(p.is_online && (Date.now() - lastSeen) < 120000);
       })
       .subscribe();
     return () => { supabase.removeChannel(channel); };
@@ -134,11 +136,8 @@ export const PrivateChat: React.FC<PrivateChatProps> = ({
     const msg = newMessage.trim();
     setNewMessage('');
     setIsTyping(false);
-
     const { error } = await supabase.from('private_messages').insert({
-      from_user_id: user.id,
-      to_user_id: recipientId,
-      message: msg
+      from_user_id: user.id, to_user_id: recipientId, message: msg
     });
     if (error) toast({ title: 'Error', description: 'Failed to send message', variant: 'destructive' });
   };
@@ -146,8 +145,7 @@ export const PrivateChat: React.FC<PrivateChatProps> = ({
   const sendMedia = async (url: string, type?: string) => {
     if (!user) return;
     await supabase.from('private_messages').insert({
-      from_user_id: user.id,
-      to_user_id: recipientId,
+      from_user_id: user.id, to_user_id: recipientId,
       message: type === 'image' ? '📷 Photo' : type === 'video' ? '🎬 Video' : type === 'document' ? '📄 Document' : '🎤 Voice message',
       media_url: url,
     });
@@ -167,23 +165,30 @@ export const PrivateChat: React.FC<PrivateChatProps> = ({
   };
 
   return (
-    <div className="flex flex-col" style={{ height: 'calc(100dvh - 4rem)' }}>
+    <div className="flex flex-col" style={{ height: 'calc(100dvh - 5.5rem)' }}>
       {/* Header */}
       <div className="bg-card border-b p-3 flex items-center space-x-3 shrink-0">
         <Button variant="ghost" size="icon" onClick={onBack}><ArrowLeft className="h-5 w-5" /></Button>
-        <Avatar className="w-9 h-9">
-          <AvatarImage src={recipientAvatar} />
-          <AvatarFallback>{recipientName.charAt(0).toUpperCase()}</AvatarFallback>
-        </Avatar>
+        <div className="relative">
+          <Avatar className="w-9 h-9">
+            <AvatarImage src={recipientAvatar} />
+            <AvatarFallback>{recipientName.charAt(0).toUpperCase()}</AvatarFallback>
+          </Avatar>
+          {recipientOnline && (
+            <span className="absolute -bottom-0.5 -right-0.5 w-3 h-3 bg-green-500 rounded-full border-2 border-background animate-pulse" />
+          )}
+        </div>
         <div className="flex-1 min-w-0">
           <h3 className="font-semibold text-sm truncate">{recipientName}</h3>
           <div className="flex items-center gap-2">
             {recipientOnline ? (
-              <Badge variant="outline" className="text-xs bg-green-500/10 text-green-600 border-green-500/30">Online</Badge>
+              <span className="text-xs text-green-600 flex items-center gap-1">
+                <span className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse" />
+                Active now
+              </span>
             ) : (
               <span className="text-xs text-muted-foreground">Offline</span>
             )}
-            {recipientIsTyping && <span className="text-xs text-muted-foreground animate-pulse">typing...</span>}
           </div>
         </div>
       </div>
@@ -209,11 +214,9 @@ export const PrivateChat: React.FC<PrivateChatProps> = ({
                         {formatTime(message.created_at)}
                       </span>
                       {getMessageStatus(message)}
-                      {isFromMe && (
-                        <button onClick={() => deleteMessage(message.id)} className="opacity-0 group-hover:opacity-100 transition-opacity ml-1">
-                          <Trash2 className="w-3 h-3" />
-                        </button>
-                      )}
+                      <button onClick={() => deleteMessage(message.id)} className="opacity-0 group-hover:opacity-100 transition-opacity ml-1">
+                        <Trash2 className="w-3 h-3" />
+                      </button>
                     </div>
                   </div>
                 </div>
@@ -226,11 +229,11 @@ export const PrivateChat: React.FC<PrivateChatProps> = ({
         )}
       </div>
 
-      {/* Input */}
-      <div className="p-3 border-t shrink-0 bg-background">
+      {/* Input - raised above nav */}
+      <div className="p-3 pb-5 border-t shrink-0 bg-background mb-2">
         <form onSubmit={sendMessage} className="flex items-center gap-1">
           <FileUploader onFileUploaded={(url, type) => sendMedia(url, type)} />
-          <VoiceRecorder onVoiceSent={(url) => sendMedia(url)} />
+          <VoiceRecorder onVoiceSent={(url) => sendMedia(url, 'voice')} />
           <Input
             placeholder="Type a message..."
             value={newMessage}
