@@ -21,7 +21,6 @@ export const FileUploader: React.FC<FileUploaderProps> = ({ onFileUploaded }) =>
     const file = e.target.files?.[0];
     if (!file || !user) return;
 
-    // Allow up to 500MB
     const maxSize = 500 * 1024 * 1024;
     if (file.size > maxSize) {
       toast({ title: 'File Too Large', description: 'Max file size is 500MB.', variant: 'destructive' });
@@ -34,6 +33,7 @@ export const FileUploader: React.FC<FileUploaderProps> = ({ onFileUploaded }) =>
 
     try {
       const ext = file.name.split('.').pop()?.toLowerCase() || 'bin';
+      // Path: chat-files/userId/timestamp.ext — matches storage RLS policy
       const fileName = `chat-files/${user.id}/${Date.now()}.${ext}`;
       
       setProgress(30);

@@ -18,6 +18,7 @@ import { StoriesTab } from '@/components/Admin/StoriesTab';
 import { MarketplaceTab } from '@/components/Admin/MarketplaceTab';
 import { UserMessagesTab } from '@/components/Admin/UserMessagesTab';
 import { DeleteUsersTab } from '@/components/Admin/DeleteUsersTab';
+import { DeliveriesTab } from '@/components/Admin/DeliveriesTab';
 import { useAuth } from '@/contexts/AuthContext';
 import { useNavigate } from 'react-router-dom';
 
@@ -122,6 +123,7 @@ const AdminPanel = () => {
               <TabsTrigger value="vip">VIP</TabsTrigger>
               <TabsTrigger value="stars">Stars</TabsTrigger>
               <TabsTrigger value="delete-users">Delete Users</TabsTrigger>
+              <TabsTrigger value="deliveries">Deliveries</TabsTrigger>
             </TabsList>
           </div>
 
@@ -146,6 +148,7 @@ const AdminPanel = () => {
           <TabsContent value="vip"><VIPManager /></TabsContent>
           <TabsContent value="stars"><StarPackagesTab /></TabsContent>
           <TabsContent value="delete-users"><DeleteUsersTab /></TabsContent>
+          <TabsContent value="deliveries"><DeliveriesTab /></TabsContent>
         </Tabs>
       </div>
     </div>

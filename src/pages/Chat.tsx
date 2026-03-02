@@ -106,10 +106,13 @@ const Chat = () => {
 
   const loadOnlineUsers = async () => {
     if (!user) return;
+    // Only show users who are actively online (last_seen within 2 minutes)
+    const twoMinAgo = new Date(Date.now() - 2 * 60 * 1000).toISOString();
     const { data } = await supabase
       .from('user_profiles')
       .select('id, username, avatar_url, vip, is_online, last_seen')
       .eq('is_online', true)
+      .gte('last_seen', twoMinAgo)
       .neq('id', user.id)
       .order('username')
       .limit(200);
