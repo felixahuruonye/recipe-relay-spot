@@ -44,37 +44,38 @@ export const VoiceRecorder: React.FC<VoiceRecorderProps> = ({ onVoiceSent }) => 
           });
           return;
         }
-        // Auto-deduct 20 stars and add 10 credits
-        const { error: deductError } = await supabase
-          .from('user_profiles')
-          .update({ 
-            star_balance: stars - 20, 
-            voice_credits: 10 
-          })
-          .eq('id', user.id);
+        // Use RPC to recharge (bypasses profile protection trigger)
+        const { data: newCredits, error: rpcError } = await supabase.rpc('deduct_voice_credits', { 
+          p_user_id: user.id, 
+          p_recharge: true 
+        });
 
-        if (deductError) {
+        if (rpcError || newCredits === -1) {
           toast({ title: 'Error', description: 'Could not recharge voice credits', variant: 'destructive' });
           return;
         }
 
-        // Send notification
-        await supabase.from('user_notifications').insert({
-          user_id: user.id,
-          title: 'Voice Credits Recharged',
-          message: '20 Stars deducted. 10 voice recordings added!',
-          type: 'system',
-          notification_category: 'billing',
-        });
-
-        credits = 10;
+        credits = newCredits as number;
         toast({ title: 'Voice Credits Recharged! 🎤', description: '20 Stars deducted. 10 recordings added!' });
       }
 
       setCreditsLeft(credits);
 
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      const mediaRecorder = new MediaRecorder(stream, { mimeType: 'audio/webm;codecs=opus' });
+      
+      // Try opus first, fall back to default
+      let mimeType = 'audio/webm;codecs=opus';
+      if (!MediaRecorder.isTypeSupported(mimeType)) {
+        mimeType = 'audio/webm';
+        if (!MediaRecorder.isTypeSupported(mimeType)) {
+          mimeType = '';
+        }
+      }
+
+      const mediaRecorder = mimeType 
+        ? new MediaRecorder(stream, { mimeType })
+        : new MediaRecorder(stream);
+      
       mediaRecorderRef.current = mediaRecorder;
       chunksRef.current = [];
       setRecordingTime(0);
@@ -86,16 +87,15 @@ export const VoiceRecorder: React.FC<VoiceRecorderProps> = ({ onVoiceSent }) => 
       mediaRecorder.onstop = async () => {
         stream.getTracks().forEach(t => t.stop());
         if (timerRef.current) clearInterval(timerRef.current);
-        const blob = new Blob(chunksRef.current, { type: 'audio/webm' });
+        const blob = new Blob(chunksRef.current, { type: mediaRecorder.mimeType || 'audio/webm' });
         if (blob.size > 0) {
           await uploadVoice(blob);
         }
       };
 
-      mediaRecorder.start(250); // collect data every 250ms
+      mediaRecorder.start(250);
       setRecording(true);
 
-      // Timer
       timerRef.current = setInterval(() => {
         setRecordingTime(prev => prev + 1);
       }, 1000);
@@ -118,6 +118,7 @@ export const VoiceRecorder: React.FC<VoiceRecorderProps> = ({ onVoiceSent }) => 
     if (!user) return;
     setUploading(true);
     try {
+      // Path must be userId/filename for storage RLS, OR voice/userId/filename with new policy
       const fileName = `voice/${user.id}/${Date.now()}.webm`;
       const { error } = await supabase.storage.from('post-media').upload(fileName, blob, { 
         contentType: 'audio/webm',
@@ -125,6 +126,7 @@ export const VoiceRecorder: React.FC<VoiceRecorderProps> = ({ onVoiceSent }) => 
       });
 
       if (error) {
+        console.error('Voice upload error:', error);
         toast({ title: 'Upload Error', description: error.message, variant: 'destructive' });
         setUploading(false);
         return;
@@ -132,25 +134,20 @@ export const VoiceRecorder: React.FC<VoiceRecorderProps> = ({ onVoiceSent }) => 
 
       const { data: urlData } = supabase.storage.from('post-media').getPublicUrl(fileName);
 
-      // Deduct one voice credit
-      const { data: profile } = await supabase
-        .from('user_profiles')
-        .select('voice_credits')
-        .eq('id', user.id)
-        .single();
-      
-      const currentCredits = profile?.voice_credits ?? 10;
-      const newCredits = Math.max(0, currentCredits - 1);
-      await supabase
-        .from('user_profiles')
-        .update({ voice_credits: newCredits })
-        .eq('id', user.id);
+      // Use RPC to deduct 1 credit (bypasses profile protection trigger)
+      const { data: newCredits } = await supabase.rpc('deduct_voice_credits', { 
+        p_user_id: user.id, 
+        p_recharge: false 
+      });
 
-      setCreditsLeft(newCredits);
+      const remaining = (newCredits as number) ?? 0;
+      setCreditsLeft(remaining);
       onVoiceSent(urlData.publicUrl);
       
-      if (newCredits <= 2 && newCredits > 0) {
-        toast({ title: `${newCredits} recordings left`, description: 'Voice credits running low!' });
+      if (remaining <= 2 && remaining > 0) {
+        toast({ title: `${remaining} recordings left`, description: 'Voice credits running low!' });
+      } else if (remaining === 0) {
+        toast({ title: 'No recordings left', description: 'Next recording will cost 20 Stars.' });
       }
     } catch (err: any) {
       toast({ title: 'Upload Error', description: err.message || 'Failed to upload voice', variant: 'destructive' });
@@ -169,6 +166,9 @@ export const VoiceRecorder: React.FC<VoiceRecorderProps> = ({ onVoiceSent }) => 
           <Badge variant="destructive" className="text-xs animate-pulse">
             🔴 {formatTime(recordingTime)}
           </Badge>
+          {creditsLeft !== null && (
+            <span className="text-[10px] text-muted-foreground">{creditsLeft} left</span>
+          )}
           <Button variant="destructive" size="icon" onClick={stopRecording} className="h-8 w-8">
             <Square className="w-3 h-3" />
           </Button>

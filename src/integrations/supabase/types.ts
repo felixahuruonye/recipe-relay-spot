@@ -811,6 +811,101 @@ export type Database = {
         }
         Relationships: []
       }
+      marketplace_deliveries: {
+        Row: {
+          amount_charged: number | null
+          amount_paid: number | null
+          buyer_id: string
+          created_at: string
+          customer_address: string | null
+          customer_email: string | null
+          customer_location: string | null
+          customer_name: string | null
+          customer_phone: string | null
+          delivery_date: string | null
+          delivery_method: string
+          id: string
+          invoice_url: string | null
+          offers_refund: boolean | null
+          order_id: string | null
+          product_id: string
+          seller_address: string | null
+          seller_email: string | null
+          seller_id: string
+          seller_location: string | null
+          seller_name: string | null
+          seller_note: string | null
+          seller_website: string | null
+          seller_whatsapp: string | null
+          status: string
+          updated_at: string
+        }
+        Insert: {
+          amount_charged?: number | null
+          amount_paid?: number | null
+          buyer_id: string
+          created_at?: string
+          customer_address?: string | null
+          customer_email?: string | null
+          customer_location?: string | null
+          customer_name?: string | null
+          customer_phone?: string | null
+          delivery_date?: string | null
+          delivery_method?: string
+          id?: string
+          invoice_url?: string | null
+          offers_refund?: boolean | null
+          order_id?: string | null
+          product_id: string
+          seller_address?: string | null
+          seller_email?: string | null
+          seller_id: string
+          seller_location?: string | null
+          seller_name?: string | null
+          seller_note?: string | null
+          seller_website?: string | null
+          seller_whatsapp?: string | null
+          status?: string
+          updated_at?: string
+        }
+        Update: {
+          amount_charged?: number | null
+          amount_paid?: number | null
+          buyer_id?: string
+          created_at?: string
+          customer_address?: string | null
+          customer_email?: string | null
+          customer_location?: string | null
+          customer_name?: string | null
+          customer_phone?: string | null
+          delivery_date?: string | null
+          delivery_method?: string
+          id?: string
+          invoice_url?: string | null
+          offers_refund?: boolean | null
+          order_id?: string | null
+          product_id?: string
+          seller_address?: string | null
+          seller_email?: string | null
+          seller_id?: string
+          seller_location?: string | null
+          seller_name?: string | null
+          seller_note?: string | null
+          seller_website?: string | null
+          seller_whatsapp?: string | null
+          status?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "marketplace_deliveries_order_id_fkey"
+            columns: ["order_id"]
+            isOneToOne: false
+            referencedRelation: "orders"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       marketplace_offers: {
         Row: {
           approved_at: string | null
@@ -1412,6 +1507,33 @@ export type Database = {
           message?: string
           read_at?: string | null
           to_user_id?: string
+        }
+        Relationships: []
+      }
+      product_reviews: {
+        Row: {
+          created_at: string
+          id: string
+          product_id: string
+          rating: number
+          review: string | null
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          product_id: string
+          rating: number
+          review?: string | null
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          product_id?: string
+          rating?: number
+          review?: string | null
+          user_id?: string
         }
         Relationships: []
       }
@@ -3130,7 +3252,13 @@ export type Database = {
       }
       archive_old_posts: { Args: never; Returns: undefined }
       auto_archive_old_posts: { Args: never; Returns: undefined }
-      deduct_voice_credits: { Args: { p_user_id: string }; Returns: Json }
+      deduct_stars_for_service: {
+        Args: { p_amount: number; p_description: string; p_user_id: string }
+        Returns: boolean
+      }
+      deduct_voice_credits:
+        | { Args: { p_user_id: string }; Returns: Json }
+        | { Args: { p_recharge?: boolean; p_user_id: string }; Returns: number }
       delete_own_group: { Args: { p_group_id: string }; Returns: Json }
       execute_admin_sql: { Args: { query: string }; Returns: Json }
       get_user_device_info: {

@@ -36,11 +36,40 @@ const Notifications = () => {
   }, [user]);
 
   useEffect(() => {
-    if (user) {
-      const cleanup = setupRealtimeSubscription();
-      return cleanup;
-    }
-  }, [user]);
+    if (!user) return;
+    const channel = supabase
+      .channel(`notif-realtime-${user.id}`)
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'user_notifications', filter: `user_id=eq.${user.id}` }, (payload) => {
+        const n = payload.new as any;
+        const newNotification: Notification = {
+          id: n.id,
+          title: n.title,
+          message: n.message,
+          type: n.type || 'general',
+          related_id: n.related_id,
+          notification_category: n.notification_category || 'general',
+          is_read: n.is_read_receipt || false,
+          created_at: n.created_at,
+          action_data: n.action_data
+        };
+        setNotifications((prev) => [newNotification, ...prev]);
+        toast({ title: newNotification.title, description: newNotification.message });
+      })
+      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'user_notifications', filter: `user_id=eq.${user.id}` }, (payload) => {
+        const n = payload.new as any;
+        setNotifications((prev) => prev.map((existing) => existing.id === n.id ? {
+          ...existing,
+          is_read: n.is_read_receipt || false,
+          action_data: n.action_data
+        } : existing));
+      })
+      .on('postgres_changes', { event: 'DELETE', schema: 'public', table: 'user_notifications', filter: `user_id=eq.${user.id}` }, (payload) => {
+        const deletedId = (payload.old as any)?.id;
+        if (deletedId) setNotifications((prev) => prev.filter((n) => n.id !== deletedId));
+      })
+      .subscribe();
+    return () => { supabase.removeChannel(channel); };
+  }, [user?.id]);
 
   const loadNotifications = async () => {
     if (!user) return;
