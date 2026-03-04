@@ -97,7 +97,7 @@ const FlowaIr: React.FC<FlowaIrProps> = ({
       if (fnError) throw fnError;
 
       if (data?.error) {
-        toast({ title: 'FlowaIr', description: data.error, variant: 'destructive' });
+        toast({ title: 'Lernory AI', description: data.error, variant: 'destructive' });
         setLoading(false);
         return;
       }
@@ -121,7 +121,7 @@ const FlowaIr: React.FC<FlowaIrProps> = ({
   if (error) {
     return (
       <Card>
-        <CardHeader><CardTitle>FlowaIr</CardTitle></CardHeader>
+        <CardHeader><CardTitle>Lernory AI</CardTitle></CardHeader>
         <CardContent><p className="text-destructive">{error}</p></CardContent>
       </Card>
     );
@@ -130,9 +130,9 @@ const FlowaIr: React.FC<FlowaIrProps> = ({
   return (
     <Card className="border-primary/20 bg-gradient-to-br from-primary/5 to-transparent">
       <CardHeader className="pb-2">
-        <CardTitle className="flex items-center gap-2 text-lg">
+      <CardTitle className="flex items-center gap-2 text-lg">
           <Sparkles className="w-5 h-5 text-primary" />
-          FlowaIr AI
+          Lernory AI
           <span className="text-xs font-normal text-muted-foreground ml-auto flex items-center gap-2">
             {credits} credits
             {messages.length > 0 && (
@@ -142,7 +142,7 @@ const FlowaIr: React.FC<FlowaIrProps> = ({
             )}
           </span>
         </CardTitle>
-        <p className="text-xs text-muted-foreground">Ask me anything! Paste a link to open it directly.</p>
+        <p className="text-xs text-muted-foreground">Ask Lernory AI anything! Paste a link to open it directly.</p>
       </CardHeader>
       <CardContent className="space-y-3">
         {/* Chat Messages - scrollable */}
@@ -196,7 +196,7 @@ const FlowaIr: React.FC<FlowaIrProps> = ({
         <div className="flex items-center gap-2">
           <Input
             ref={inputRef}
-            placeholder="Ask FlowaIr anything or paste a link..."
+            placeholder="Ask Lernory AI anything or paste a link..."
             value={input}
             onChange={e => setInput(e.target.value)}
             onKeyDown={e => e.key === 'Enter' && !e.shiftKey && sendMessage()}
