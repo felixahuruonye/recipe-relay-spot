@@ -73,7 +73,7 @@ const Navigation = () => {
     { icon: Star, label: 'Wallet', path: '/wallet' },
     { icon: User, label: 'Profile', path: '/profile' },
     { icon: Mail, label: 'Contact Admin', path: '/contact-admin' },
-    { icon: Share2, label: 'Share SaveMore', path: '/share' },
+    { icon: Share2, label: 'Share Lernory', path: '/share' },
     { icon: Settings, label: 'Settings', path: '/settings' },
   ];
 

@@ -8,13 +8,12 @@ import { Switch } from '@/components/ui/switch';
 import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Badge } from '@/components/ui/badge';
 import { useToast } from '@/hooks/use-toast';
 import { 
-  Settings, Save, Users, Crown, Copy, QrCode, UserPlus, UserMinus, 
-  Shield, DollarSign, Clock, Link, BarChart3, Trash2, LogOut, Image
+  Settings, Save, Users, Crown, Copy, QrCode, UserMinus, 
+  Shield, DollarSign, Clock, BarChart3, Trash2, LogOut
 } from 'lucide-react';
 
 interface GroupSettingsProps {
@@ -46,15 +45,27 @@ export const GroupSettings: React.FC<GroupSettingsProps> = ({ groupId, group, is
   const [entryFee, setEntryFee] = useState(group.entry_fee_stars?.toString() || '0');
   const [slowMode, setSlowMode] = useState('off');
   const [messagePrice, setMessagePrice] = useState('0');
-  const [isChannel, setIsChannel] = useState(false);
   const [members, setMembers] = useState<GroupMember[]>([]);
   const [pendingMembers, setPendingMembers] = useState<GroupMember[]>([]);
   const [loading, setLoading] = useState(false);
   const [showAnalytics, setShowAnalytics] = useState(false);
   const [analyticsUnlocked, setAnalyticsUnlocked] = useState(false);
+  const [showQR, setShowQR] = useState(false);
 
   useEffect(() => {
     loadMembers();
+  }, [groupId]);
+
+  // Realtime member updates
+  useEffect(() => {
+    const channel = supabase
+      .channel(`group-members-${groupId}`)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'group_members', filter: `group_id=eq.${groupId}` }, () => {
+        loadMembers();
+      })
+      .subscribe();
+
+    return () => { supabase.removeChannel(channel); };
   }, [groupId]);
 
   const loadMembers = async () => {
@@ -96,9 +107,10 @@ export const GroupSettings: React.FC<GroupSettingsProps> = ({ groupId, group, is
     setLoading(false);
   };
 
+  const inviteLink = `${window.location.origin}/groups?join=${groupId}`;
+
   const copyInviteLink = () => {
-    const link = `${window.location.origin}/groups?join=${groupId}`;
-    navigator.clipboard.writeText(link);
+    navigator.clipboard.writeText(inviteLink);
     toast({ title: 'Copied!', description: 'Invite link copied to clipboard' });
   };
 
@@ -135,19 +147,6 @@ export const GroupSettings: React.FC<GroupSettingsProps> = ({ groupId, group, is
   const unlockAnalytics = async () => {
     if (!user) return;
 
-    // Check user star balance
-    const { data: profile } = await supabase
-      .from('user_profiles')
-      .select('star_balance')
-      .eq('id', user.id)
-      .single();
-
-    if (!profile || (profile.star_balance || 0) < 50) {
-      toast({ title: 'Insufficient Stars', description: 'You need 50 stars to unlock analytics', variant: 'destructive' });
-      return;
-    }
-
-    // Deduct stars via server-side RPC (cannot update protected fields from client)
     const { data, error } = await supabase.rpc('spend_stars' as any, {
       p_amount: 50,
       p_type: 'group_analytics_unlock',
@@ -169,17 +168,29 @@ export const GroupSettings: React.FC<GroupSettingsProps> = ({ groupId, group, is
     toast({ title: 'Unlocked!', description: 'Analytics unlocked for 20 days' });
   };
 
-  const deactivateGroup = async () => {
-    const confirmed = window.confirm('Are you sure you want to deactivate this group? This cannot be undone.');
+  const deleteGroup = async () => {
+    const confirmed = window.confirm('Are you sure you want to permanently DELETE this group? This cannot be undone.');
     if (!confirmed) return;
 
-    await supabase
-      .from('groups')
-      .update({ is_suspended: true })
-      .eq('id', groupId);
+    try {
+      const { data, error } = await supabase.rpc('delete_own_group' as any, { p_group_id: groupId } as any);
 
-    toast({ title: 'Deactivated', description: 'Group has been deactivated' });
-    onClose();
+      if (error) {
+        toast({ title: 'Error', description: error.message, variant: 'destructive' });
+        return;
+      }
+
+      if (data && (data as any).success === false) {
+        toast({ title: 'Error', description: (data as any).error || 'Could not delete group', variant: 'destructive' });
+        return;
+      }
+
+      toast({ title: 'Deleted', description: 'Group has been permanently deleted' });
+      onUpdate();
+      onClose();
+    } catch (err: any) {
+      toast({ title: 'Error', description: err.message, variant: 'destructive' });
+    }
   };
 
   const leaveGroup = async () => {
@@ -192,6 +203,7 @@ export const GroupSettings: React.FC<GroupSettingsProps> = ({ groupId, group, is
       .eq('user_id', user.id);
 
     toast({ title: 'Left Group', description: 'You have left the group' });
+    onUpdate();
     onClose();
   };
 
@@ -224,9 +236,7 @@ export const GroupSettings: React.FC<GroupSettingsProps> = ({ groupId, group, is
               <div>
                 <Label>Group Type</Label>
                 <Select value={groupType} onValueChange={setGroupType}>
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
+                  <SelectTrigger><SelectValue /></SelectTrigger>
                   <SelectContent>
                     <SelectItem value="public">Public (Anyone can join)</SelectItem>
                     <SelectItem value="private">Private (Invite only)</SelectItem>
@@ -252,34 +262,20 @@ export const GroupSettings: React.FC<GroupSettingsProps> = ({ groupId, group, is
               <div>
                 <Label>Entry Fee (Stars)</Label>
                 <Select value={entryFee} onValueChange={setEntryFee}>
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
+                  <SelectTrigger><SelectValue /></SelectTrigger>
                   <SelectContent>
                     <SelectItem value="0">Free</SelectItem>
-                    <SelectItem value="5">5 Stars</SelectItem>
-                    <SelectItem value="10">10 Stars</SelectItem>
-                    <SelectItem value="25">25 Stars</SelectItem>
-                    <SelectItem value="50">50 Stars</SelectItem>
-                    <SelectItem value="100">100 Stars</SelectItem>
-                    <SelectItem value="500">500 Stars</SelectItem>
-                    <SelectItem value="1000">1,000 Stars</SelectItem>
-                    <SelectItem value="5000">5,000 Stars</SelectItem>
-                    <SelectItem value="10000">10,000 Stars</SelectItem>
-                    <SelectItem value="50000">50,000 Stars</SelectItem>
-                    <SelectItem value="100000">100,000 Stars</SelectItem>
-                    <SelectItem value="500000">500,000 Stars</SelectItem>
+                    {[5,10,25,50,100,500,1000,5000,10000,50000,100000,500000].map(v => (
+                      <SelectItem key={v} value={v.toString()}>{v.toLocaleString()} Stars</SelectItem>
+                    ))}
                   </SelectContent>
                 </Select>
                 <p className="text-xs text-muted-foreground mt-1">You earn 80% of entry fees</p>
               </div>
-
               <div>
                 <Label>Message Fee (Stars per message)</Label>
                 <Select value={messagePrice} onValueChange={setMessagePrice}>
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
+                  <SelectTrigger><SelectValue /></SelectTrigger>
                   <SelectContent>
                     <SelectItem value="0">Free</SelectItem>
                     {[...Array(20)].map((_, i) => (
@@ -301,17 +297,13 @@ export const GroupSettings: React.FC<GroupSettingsProps> = ({ groupId, group, is
             </CardHeader>
             <CardContent>
               <Select value={slowMode} onValueChange={setSlowMode}>
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
+                <SelectTrigger><SelectValue /></SelectTrigger>
                 <SelectContent>
                   <SelectItem value="off">Off</SelectItem>
                   <SelectItem value="10s">10 seconds</SelectItem>
                   <SelectItem value="30s">30 seconds</SelectItem>
                   <SelectItem value="1m">1 minute</SelectItem>
                   <SelectItem value="5m">5 minutes</SelectItem>
-                  <SelectItem value="15m">15 minutes</SelectItem>
-                  <SelectItem value="1h">1 hour</SelectItem>
                 </SelectContent>
               </Select>
             </CardContent>
@@ -322,16 +314,26 @@ export const GroupSettings: React.FC<GroupSettingsProps> = ({ groupId, group, is
             <CardHeader>
               <CardTitle className="text-lg">Invite Link</CardTitle>
             </CardHeader>
-            <CardContent className="space-y-2">
+            <CardContent className="space-y-3">
               <div className="flex gap-2">
                 <Button onClick={copyInviteLink} className="flex-1">
                   <Copy className="w-4 h-4 mr-2" />
                   Copy Invite Link
                 </Button>
-                <Button variant="outline">
+                <Button variant="outline" onClick={() => setShowQR(!showQR)}>
                   <QrCode className="w-4 h-4" />
                 </Button>
               </div>
+              {showQR && (
+                <div className="flex flex-col items-center gap-2 p-4 bg-white rounded-lg">
+                  <img 
+                    src={`https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(inviteLink)}`} 
+                    alt="QR Code"
+                    className="w-48 h-48"
+                  />
+                  <p className="text-xs text-black text-center break-all">{inviteLink}</p>
+                </div>
+              )}
             </CardContent>
           </Card>
 
@@ -351,7 +353,7 @@ export const GroupSettings: React.FC<GroupSettingsProps> = ({ groupId, group, is
                       <AvatarImage src={member.user_profiles?.avatar_url} />
                       <AvatarFallback>{member.user_profiles?.username?.[0]}</AvatarFallback>
                     </Avatar>
-                    <span>{member.user_profiles?.username}</span>
+                    <span className="text-sm">{member.user_profiles?.username}</span>
                     {member.role === 'owner' && <Badge><Crown className="w-3 h-3" /></Badge>}
                     {member.role === 'admin' && <Badge variant="secondary"><Shield className="w-3 h-3" /></Badge>}
                   </div>
@@ -359,7 +361,7 @@ export const GroupSettings: React.FC<GroupSettingsProps> = ({ groupId, group, is
                     <div className="flex gap-1">
                       {member.role !== 'admin' && (
                         <Button size="sm" variant="outline" onClick={() => makeAdmin(member.id)}>
-                          Make Admin
+                          Admin
                         </Button>
                       )}
                       <Button size="sm" variant="destructive" onClick={() => removeMember(member.id)}>
@@ -413,14 +415,6 @@ export const GroupSettings: React.FC<GroupSettingsProps> = ({ groupId, group, is
                     <span>Total Members</span>
                     <span className="font-bold">{members.length}</span>
                   </div>
-                  <div className="flex justify-between p-2 bg-muted rounded">
-                    <span>Total Messages</span>
-                    <span className="font-bold">-</span>
-                  </div>
-                  <div className="flex justify-between p-2 bg-muted rounded">
-                    <span>Total Earned</span>
-                    <span className="font-bold text-green-500">₦0</span>
-                  </div>
                 </div>
               ) : (
                 <div className="text-center">
@@ -440,9 +434,9 @@ export const GroupSettings: React.FC<GroupSettingsProps> = ({ groupId, group, is
               <CardTitle className="text-lg text-destructive">Danger Zone</CardTitle>
             </CardHeader>
             <CardContent className="space-y-2">
-              <Button variant="destructive" className="w-full" onClick={deactivateGroup}>
+              <Button variant="destructive" className="w-full" onClick={deleteGroup}>
                 <Trash2 className="w-4 h-4 mr-2" />
-                Deactivate Group
+                Delete Group Permanently
               </Button>
             </CardContent>
           </Card>

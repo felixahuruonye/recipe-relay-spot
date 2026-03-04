@@ -578,13 +578,20 @@ const Groups = () => {
                             size="icon"
                             onClick={async () => {
                               if (!confirm(`Delete group "${group.name}"? This cannot be undone.`)) return;
-                              const { data, error } = await supabase.rpc('delete_own_group', { p_group_id: group.id });
-                              if (error) {
-                                toast({ title: 'Error', description: error.message, variant: 'destructive' });
-                              } else {
-                                toast({ title: 'Group Deleted', description: `"${group.name}" has been deleted.` });
-                                fetchGroups();
-                                fetchMyGroups();
+                              try {
+                                const gid = group.id;
+                                const { data, error } = await supabase.rpc('delete_own_group' as any, { p_group_id: gid } as any);
+                                if (error) {
+                                  toast({ title: 'Error', description: error.message, variant: 'destructive' });
+                                } else if (data && (data as any).success === false) {
+                                  toast({ title: 'Error', description: (data as any).error, variant: 'destructive' });
+                                } else {
+                                  toast({ title: 'Group Deleted', description: `"${group.name}" has been deleted.` });
+                                  fetchGroups();
+                                  fetchMyGroups();
+                                }
+                              } catch (err: any) {
+                                toast({ title: 'Error', description: err.message, variant: 'destructive' });
                               }
                             }}
                           >
