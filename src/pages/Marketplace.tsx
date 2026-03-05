@@ -412,7 +412,7 @@ const Marketplace = () => {
         <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-lg">
           <DialogHeader><DialogTitle>Choose Delivery Method</DialogTitle></DialogHeader>
           <Tabs defaultValue="self">
-            <TabsList className="w-full"><TabsTrigger value="self" className="flex-1">🚚 Self Delivery</TabsTrigger><TabsTrigger value="savemore" className="flex-1">🚚 Save More (50⭐)</TabsTrigger></TabsList>
+            <TabsList className="w-full"><TabsTrigger value="self" className="flex-1">🚚 Self Delivery</TabsTrigger><TabsTrigger value="savemore" className="flex-1">🚚 Lernory Express (50⭐)</TabsTrigger></TabsList>
             <TabsContent value="self" className="space-y-3">
               <Input placeholder="Your Name" value={deliveryForm.seller_name || ''} onChange={e => setDeliveryForm({...deliveryForm, seller_name: e.target.value})} />
               <Input placeholder="Location (State, Country)" value={deliveryForm.seller_location || ''} onChange={e => setDeliveryForm({...deliveryForm, seller_location: e.target.value})} />
