@@ -70,11 +70,14 @@ const FlowaIr: React.FC<FlowaIrProps> = ({
   const sendMessage = async () => {
     if (!input.trim() || !user || loading) return;
     
-    // Check if input is a URL - open it directly
+    // Check if input is a URL - open it in an iframe dialog
     const urlPattern = /^https?:\/\//i;
     if (urlPattern.test(input.trim())) {
-      window.open(input.trim(), '_blank');
+      const url = input.trim();
       setInput('');
+      setMessages(prev => [...prev, { role: 'user', content: url }, { role: 'assistant', content: `Opening link: ${url}` }]);
+      // Open in new tab as in-app browser (iframe blocked by most sites)
+      window.open(url, '_blank', 'noopener,noreferrer');
       return;
     }
 
