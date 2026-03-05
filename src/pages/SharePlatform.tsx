@@ -82,7 +82,7 @@ const SharePlatform = () => {
               </Avatar>
               <div>
                 <h2 className="text-xl font-bold">@{profile.username}</h2>
-                <p className="text-sm text-muted-foreground">SaveMore Community</p>
+                <p className="text-sm text-muted-foreground">Lernory Social</p>
               </div>
             </div>
           </div>
