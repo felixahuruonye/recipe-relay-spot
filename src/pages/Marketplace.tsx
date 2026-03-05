@@ -251,7 +251,7 @@ const Marketplace = () => {
     if (!user || !deliveryForm) return;
     const starCost = method === 'savemore' ? 50 : 0;
     if (starCost > 0) {
-      const { data: ok } = await supabase.rpc('deduct_stars_for_service', { p_user_id: user.id, p_amount: starCost, p_description: 'Save More Online Delivery fee' });
+      const { data: ok } = await supabase.rpc('deduct_stars_for_service', { p_user_id: user.id, p_amount: starCost, p_description: 'Lernory Express Delivery fee' });
       if (!ok) { toast({ title: 'Not enough Stars', description: `You need ${starCost} Stars`, variant: 'destructive' }); return; }
     }
     const { error } = await supabase.from('marketplace_deliveries').insert({
