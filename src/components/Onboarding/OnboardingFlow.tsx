@@ -109,7 +109,7 @@ const OnboardingFlow: React.FC<OnboardingFlowProps> = ({ onComplete }) => {
         <Card className="max-w-lg mx-auto">
           <CardHeader>
             <CardTitle className="text-center text-xl flex items-center justify-center gap-2">
-              <BookOpen className="w-5 h-5" /> Welcome to SaveMore 🤗
+              <BookOpen className="w-5 h-5" /> Welcome to Lernory 🤗
             </CardTitle>
           </CardHeader>
           <CardContent className="space-y-4 text-sm leading-relaxed">
