@@ -86,7 +86,7 @@ const OnboardingFlow: React.FC<OnboardingFlowProps> = ({ onComplete }) => {
               </Select>
             </div>
             <div>
-              <Label>How did you find SaveMore?</Label>
+              <Label>How did you find Lernory?</Label>
               <Input value={answers.howFound} onChange={e => setAnswers(p => ({ ...p, howFound: e.target.value }))} placeholder="Friend, social media, etc." />
             </div>
             <div>
