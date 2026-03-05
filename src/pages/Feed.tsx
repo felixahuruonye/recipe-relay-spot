@@ -681,8 +681,8 @@ const Feed = () => {
       {/* Header */}
       <div className="space-y-4">
         <div className="text-center">
-          <h1 className="text-2xl font-bold text-primary">SaveMore Community</h1>
-          <p className="text-muted-foreground">Share your food experiences</p>
+          <h1 className="text-2xl font-bold text-primary">Lernory Social</h1>
+          <p className="text-muted-foreground">Connect, Learn, Share & Earn</p>
           <div className="flex justify-center gap-2 mt-2">
             <Badge className="bg-yellow-500 text-black">⭐ {userStarBalance} Stars</Badge>
             <Badge variant="secondary">₦{walletBalance.toLocaleString()} Wallet</Badge>

@@ -4,7 +4,8 @@ import { useAuth } from '@/contexts/AuthContext';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Send, ArrowLeft, Eye, Trash2, Settings, LogOut, Flag } from 'lucide-react';
+import { Badge } from '@/components/ui/badge';
+import { Send, ArrowLeft, Eye, Trash2, Settings, LogOut, Flag, Info, Crown, Shield } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { useNavigate } from 'react-router-dom';
 import { VoiceRecorder } from '@/components/Chat/VoiceRecorder';
@@ -16,6 +17,7 @@ import {
 import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
+import { ScrollArea } from '@/components/ui/scroll-area';
 
 interface Message {
   id: string;
@@ -38,6 +40,15 @@ interface ReadReceipt {
   avatar_url: string | null;
 }
 
+interface GroupMemberInfo {
+  user_id: string;
+  role: string;
+  username: string;
+  avatar_url: string | null;
+  is_online: boolean;
+  last_seen: string | null;
+}
+
 export const GroupChat: React.FC<GroupChatProps> = ({ groupId, groupName, onBack }) => {
   const { user } = useAuth();
   const { toast } = useToast();
@@ -53,6 +64,11 @@ export const GroupChat: React.FC<GroupChatProps> = ({ groupId, groupName, onBack
   const [readReceiptsLoading, setReadReceiptsLoading] = useState(false);
   const [isOwner, setIsOwner] = useState(false);
   const [onlineMembers, setOnlineMembers] = useState<Set<string>>(new Set());
+  const [showGroupInfo, setShowGroupInfo] = useState(false);
+  const [groupInfo, setGroupInfo] = useState<any>(null);
+  const [groupMembers, setGroupMembers] = useState<GroupMemberInfo[]>([]);
+  // Track which messages have been "seen" by current user to show fresh read receipts
+  const [messageViewers, setMessageViewers] = useState<Record<string, string[]>>({});
 
   useEffect(() => {
     let channel: ReturnType<typeof supabase.channel> | null = null;
@@ -60,7 +76,8 @@ export const GroupChat: React.FC<GroupChatProps> = ({ groupId, groupName, onBack
       if (!user) { setMemberStatus('none'); return; }
       setMemberStatus('checking');
 
-      const { data: groupData } = await supabase.from('groups').select('owner_id').eq('id', groupId).single();
+      const { data: groupData } = await supabase.from('groups').select('*').eq('id', groupId).single();
+      setGroupInfo(groupData);
       const ownerMatch = groupData?.owner_id === user.id;
       setIsOwner(ownerMatch);
 
@@ -107,7 +124,6 @@ export const GroupChat: React.FC<GroupChatProps> = ({ groupId, groupName, onBack
     const now = Date.now();
     const online = new Set<string>();
     profiles?.forEach(p => {
-      // Only show online if last_seen within 2 minutes (active usage)
       const lastSeen = p.last_seen ? new Date(p.last_seen).getTime() : 0;
       if (p.is_online && (now - lastSeen) < 120000) {
         online.add(p.id);
@@ -118,7 +134,29 @@ export const GroupChat: React.FC<GroupChatProps> = ({ groupId, groupName, onBack
 
   const loadMemberCount = async () => {
     const { count } = await supabase.from('group_members').select('*', { count: 'exact', head: true }).eq('group_id', groupId).eq('status', 'active');
-    setMemberCount(count || 0);
+    const c = count || 0;
+    setMemberCount(c);
+    // Also sync to groups table
+    await supabase.from('groups').update({ member_count: c }).eq('id', groupId);
+  };
+
+  const loadGroupMembers = async () => {
+    const { data } = await supabase
+      .from('group_members')
+      .select('user_id, role, user_profiles:user_id (username, avatar_url, is_online, last_seen)')
+      .eq('group_id', groupId)
+      .eq('status', 'active');
+    
+    if (data) {
+      setGroupMembers(data.map((m: any) => ({
+        user_id: m.user_id,
+        role: m.role,
+        username: m.user_profiles?.username || 'Unknown',
+        avatar_url: m.user_profiles?.avatar_url,
+        is_online: m.user_profiles?.is_online || false,
+        last_seen: m.user_profiles?.last_seen,
+      })));
+    }
   };
 
   const loadMessages = async () => {
@@ -140,17 +178,13 @@ export const GroupChat: React.FC<GroupChatProps> = ({ groupId, groupName, onBack
       .on('postgres_changes', { event: 'DELETE', schema: 'public', table: 'group_messages', filter: `group_id=eq.${groupId}` }, (payload) => {
         setMessages(prev => prev.filter(m => m.id !== payload.old.id));
       })
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'group_members', filter: `group_id=eq.${groupId}` }, () => {
+        loadMemberCount();
+        loadOnlineMembers();
+      })
       .subscribe();
 
-    // Refresh online members every 30 seconds
     const onlineInterval = setInterval(loadOnlineMembers, 30000);
-    
-    const origCleanup = () => {
-      supabase.removeChannel(channel);
-      clearInterval(onlineInterval);
-    };
-    
-    // Store cleanup via a hack - return channel but setup interval cleanup
     (channel as any).__onlineInterval = onlineInterval;
     return channel;
   };
@@ -179,7 +213,6 @@ export const GroupChat: React.FC<GroupChatProps> = ({ groupId, groupName, onBack
     if (!confirm('Leave this group? Your messages will be removed.')) return;
     await supabase.from('group_messages').delete().eq('group_id', groupId).eq('user_id', user.id);
     await supabase.from('group_members').delete().eq('group_id', groupId).eq('user_id', user.id);
-    await supabase.from('groups').update({ member_count: Math.max(0, memberCount - 1) }).eq('id', groupId);
     toast({ title: 'Left Group', description: 'You have left the group and your messages were removed.' });
     onBack();
   };
@@ -200,15 +233,25 @@ export const GroupChat: React.FC<GroupChatProps> = ({ groupId, groupName, onBack
     toast({ title: 'Reported', description: 'Message reported.' });
   };
 
-  const showReadReceipts = async (msgId: string) => {
+  const showReadReceipts = async (msgId: string, msgCreatedAt: string) => {
     setReadReceiptMsg(msgId);
     setReadReceiptsLoading(true);
-    const { data } = await supabase.from('group_members').select('user_id').eq('group_id', groupId).eq('status', 'active');
-    if (data && data.length > 0) {
-      const memberIds = data.map(m => m.user_id).filter(id => id !== user?.id);
+    // Get members who were active AFTER this message was sent
+    const { data: members } = await supabase.from('group_members').select('user_id').eq('group_id', groupId).eq('status', 'active');
+    if (members && members.length > 0) {
+      const memberIds = members.map(m => m.user_id).filter(id => id !== user?.id);
       if (memberIds.length > 0) {
-        const { data: profiles } = await supabase.from('user_profiles').select('id, username, avatar_url').in('id', memberIds);
-        setReadReceipts((profiles || []).map(p => ({ user_id: p.id, username: p.username, avatar_url: p.avatar_url })));
+        const { data: profiles } = await supabase
+          .from('user_profiles')
+          .select('id, username, avatar_url, last_seen')
+          .in('id', memberIds);
+        // Only show as "seen" if user's last_seen is after the message was created
+        const msgTime = new Date(msgCreatedAt).getTime();
+        const seenProfiles = (profiles || []).filter(p => {
+          const ls = p.last_seen ? new Date(p.last_seen).getTime() : 0;
+          return ls > msgTime;
+        });
+        setReadReceipts(seenProfiles.map(p => ({ user_id: p.id, username: p.username, avatar_url: p.avatar_url })));
       } else setReadReceipts([]);
     }
     setReadReceiptsLoading(false);
@@ -216,15 +259,31 @@ export const GroupChat: React.FC<GroupChatProps> = ({ groupId, groupName, onBack
 
   const navigateToProfile = (userId: string) => navigate(`/profile/${userId}`);
 
+  const handleGroupInfoClick = async () => {
+    await loadGroupMembers();
+    setShowGroupInfo(true);
+  };
+
   return (
     <div className="flex flex-col" style={{ height: 'calc(100dvh - 5.5rem)' }}>
       {/* Header */}
       <div className="flex items-center space-x-3 p-3 border-b shrink-0">
         <Button variant="ghost" size="icon" onClick={onBack}><ArrowLeft className="h-5 w-5" /></Button>
-        <div className="flex-1 min-w-0">
-          <h2 className="font-semibold text-sm truncate">{groupName}</h2>
-          <p className="text-xs text-muted-foreground">{memberCount} members · {onlineMembers.size} active</p>
-        </div>
+        <button className="flex-1 min-w-0 text-left" onClick={handleGroupInfoClick}>
+          <div className="flex items-center gap-2">
+            {groupInfo?.avatar_url && (
+              <Avatar className="w-8 h-8">
+                <AvatarImage src={groupInfo.avatar_url} />
+                <AvatarFallback>{groupName[0]}</AvatarFallback>
+              </Avatar>
+            )}
+            <div>
+              <h2 className="font-semibold text-sm truncate">{groupName}</h2>
+              <p className="text-xs text-muted-foreground">{memberCount} members · {onlineMembers.size} active</p>
+            </div>
+          </div>
+        </button>
+        <Button variant="ghost" size="icon" onClick={handleGroupInfoClick}><Info className="w-4 h-4" /></Button>
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
             <Button variant="ghost" size="icon"><Settings className="w-4 h-4" /></Button>
@@ -283,7 +342,7 @@ export const GroupChat: React.FC<GroupChatProps> = ({ groupId, groupName, onBack
                       </span>
                       {isOwn && (
                         <>
-                          <button onClick={() => showReadReceipts(msg.id)} className="text-xs text-muted-foreground hover:text-foreground flex items-center gap-0.5">
+                          <button onClick={() => showReadReceipts(msg.id, msg.created_at)} className="text-xs text-muted-foreground hover:text-foreground flex items-center gap-0.5">
                             <Eye className="w-3 h-3" /><span>Seen</span>
                           </button>
                           <button onClick={() => deleteMessage(msg.id)} className="text-xs text-destructive hover:text-destructive/80">
@@ -306,7 +365,7 @@ export const GroupChat: React.FC<GroupChatProps> = ({ groupId, groupName, onBack
         )}
       </div>
 
-      {/* Message Input - raised higher above nav */}
+      {/* Message Input */}
       {canChat && (
         <div className="p-3 pb-5 border-t shrink-0 bg-background mb-2">
           <div className="flex items-center gap-1">
@@ -331,19 +390,85 @@ export const GroupChat: React.FC<GroupChatProps> = ({ groupId, groupName, onBack
       <Dialog open={!!readReceiptMsg} onOpenChange={() => setReadReceiptMsg(null)}>
         <DialogContent className="max-w-sm">
           <DialogHeader>
-            <DialogTitle className="flex items-center gap-2"><Eye className="w-4 h-4" /> Audience Reached ({readReceipts.length})</DialogTitle>
+            <DialogTitle className="flex items-center gap-2"><Eye className="w-4 h-4" /> Seen by ({readReceipts.length})</DialogTitle>
           </DialogHeader>
           <div className="max-h-60 overflow-y-auto space-y-2">
             {readReceiptsLoading ? (
               <p className="text-sm text-muted-foreground text-center py-4">Loading…</p>
             ) : readReceipts.length === 0 ? (
-              <p className="text-sm text-muted-foreground text-center py-4">No other members yet</p>
+              <p className="text-sm text-muted-foreground text-center py-4">No one has seen this yet</p>
             ) : readReceipts.map((r) => (
               <div key={r.user_id} className="flex items-center gap-3 p-2 rounded-lg hover:bg-muted cursor-pointer" onClick={() => { setReadReceiptMsg(null); navigateToProfile(r.user_id); }}>
                 <Avatar className="w-8 h-8"><AvatarImage src={r.avatar_url || ''} /><AvatarFallback>{r.username?.[0]?.toUpperCase()}</AvatarFallback></Avatar>
                 <span className="text-sm font-medium">{r.username}</span>
               </div>
             ))}
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Group Info Dialog */}
+      <Dialog open={showGroupInfo} onOpenChange={setShowGroupInfo}>
+        <DialogContent className="max-w-md max-h-[80vh] overflow-hidden flex flex-col">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-3">
+              {groupInfo?.avatar_url && (
+                <Avatar className="w-12 h-12">
+                  <AvatarImage src={groupInfo.avatar_url} />
+                  <AvatarFallback>{groupName[0]}</AvatarFallback>
+                </Avatar>
+              )}
+              <div>
+                <h3 className="text-lg font-bold">{groupName}</h3>
+                <p className="text-xs text-muted-foreground">{groupInfo?.group_type} group · {memberCount} members</p>
+              </div>
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 overflow-y-auto flex-1">
+            {groupInfo?.description && (
+              <div>
+                <h4 className="text-sm font-semibold mb-1">Description</h4>
+                <p className="text-sm text-muted-foreground">{groupInfo.description}</p>
+              </div>
+            )}
+            <div>
+              <h4 className="text-sm font-semibold mb-1">Created</h4>
+              <p className="text-sm text-muted-foreground">{new Date(groupInfo?.created_at).toLocaleDateString()}</p>
+            </div>
+            {groupInfo?.entry_fee_stars > 0 && (
+              <Badge variant="secondary">Entry Fee: {groupInfo.entry_fee_stars} ⭐</Badge>
+            )}
+            <div>
+              <h4 className="text-sm font-semibold mb-2">Members ({groupMembers.length})</h4>
+              <ScrollArea className="max-h-64">
+                <div className="space-y-2">
+                  {groupMembers.map(m => {
+                    const now = Date.now();
+                    const isActive = m.is_online && m.last_seen && (now - new Date(m.last_seen).getTime()) < 120000;
+                    return (
+                      <div key={m.user_id} className="flex items-center gap-3 p-2 rounded-lg hover:bg-muted cursor-pointer" onClick={() => { setShowGroupInfo(false); navigateToProfile(m.user_id); }}>
+                        <div className="relative">
+                          <Avatar className="w-9 h-9">
+                            <AvatarImage src={m.avatar_url || ''} />
+                            <AvatarFallback>{m.username[0]?.toUpperCase()}</AvatarFallback>
+                          </Avatar>
+                          {isActive && (
+                            <span className="absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 bg-green-500 rounded-full border-2 border-background animate-pulse" />
+                          )}
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-2">
+                            <span className="text-sm font-medium truncate">{m.username}</span>
+                            {m.role === 'owner' && <Badge variant="default" className="text-xs h-5"><Crown className="w-3 h-3 mr-0.5" />Owner</Badge>}
+                            {m.role === 'admin' && <Badge variant="secondary" className="text-xs h-5"><Shield className="w-3 h-3 mr-0.5" />Admin</Badge>}
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </ScrollArea>
+            </div>
           </div>
         </DialogContent>
       </Dialog>

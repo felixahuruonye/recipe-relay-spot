@@ -22,14 +22,14 @@ interface TrendingKeyword {
 
 const categories = [
   { value: 'all', label: 'All Categories' },
-  { value: 'Jollof Rice', label: 'Jollof Rice' },
-  { value: 'Desserts', label: 'Desserts' },
-  { value: 'Equipment', label: 'Equipment' },
+  { value: 'Wealth', label: 'Wealth' },
+  { value: 'Tech', label: 'Tech' },
+  { value: 'Music', label: 'Music' },
+  { value: 'Lifestyle', label: 'Lifestyle' },
+  { value: 'Education', label: 'Education' },
+  { value: 'Entertainment', label: 'Entertainment' },
+  { value: 'Business', label: 'Business' },
   { value: 'For Sale', label: 'For Sale' },
-  { value: 'Tips & Tricks', label: 'Tips & Tricks' },
-  { value: 'Restaurants Reviews', label: 'Restaurants Reviews' },
-  { value: 'Recipes', label: 'Recipes' },
-  { value: 'Cooking videos', label: 'Cooking videos' },
   { value: 'General Discussion', label: 'General Discussion' },
 ];
 

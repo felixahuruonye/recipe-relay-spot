@@ -60,7 +60,7 @@ interface Delivery {
   created_at: string;
 }
 
-const SELLER_GUIDE = `## How to Sell on SaveMore Marketplace
+const SELLER_GUIDE = `## How to Sell on Lernory Marketplace
 
 **Rules & Guidelines:**
 1. Only VIP members can list products
@@ -70,7 +70,7 @@ const SELLER_GUIDE = `## How to Sell on SaveMore Marketplace
 
 **Delivery Options:**
 - 🚚 **Self Delivery** — You handle shipping directly to the customer
-- 🚚 **Save More Online Delivery** — We pick up and deliver (50 Stars fee)
+- 🚚 **Lernory Express Delivery** — We pick up and deliver (50 Stars fee)
 
 **Invoice:** Generate a professional invoice for 30 Stars per product.
 
@@ -233,7 +233,7 @@ const Marketplace = () => {
   const buyProduct = (product: Product) => {
     const url = paymentUrls[product.id];
     if (url) { window.open(url, '_blank'); return; }
-    window.open(`https://paystack.com/pay/savemore-product`, '_blank');
+    window.open(`https://paystack.com/pay/lernory-product`, '_blank');
   };
 
   const copyLink = (p: Product) => {
@@ -251,7 +251,7 @@ const Marketplace = () => {
     if (!user || !deliveryForm) return;
     const starCost = method === 'savemore' ? 50 : 0;
     if (starCost > 0) {
-      const { data: ok } = await supabase.rpc('deduct_stars_for_service', { p_user_id: user.id, p_amount: starCost, p_description: 'Save More Online Delivery fee' });
+      const { data: ok } = await supabase.rpc('deduct_stars_for_service', { p_user_id: user.id, p_amount: starCost, p_description: 'Lernory Express Delivery fee' });
       if (!ok) { toast({ title: 'Not enough Stars', description: `You need ${starCost} Stars`, variant: 'destructive' }); return; }
     }
     const { error } = await supabase.from('marketplace_deliveries').insert({
@@ -412,7 +412,7 @@ const Marketplace = () => {
         <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-lg">
           <DialogHeader><DialogTitle>Choose Delivery Method</DialogTitle></DialogHeader>
           <Tabs defaultValue="self">
-            <TabsList className="w-full"><TabsTrigger value="self" className="flex-1">🚚 Self Delivery</TabsTrigger><TabsTrigger value="savemore" className="flex-1">🚚 Save More (50⭐)</TabsTrigger></TabsList>
+            <TabsList className="w-full"><TabsTrigger value="self" className="flex-1">🚚 Self Delivery</TabsTrigger><TabsTrigger value="savemore" className="flex-1">🚚 Lernory Express (50⭐)</TabsTrigger></TabsList>
             <TabsContent value="self" className="space-y-3">
               <Input placeholder="Your Name" value={deliveryForm.seller_name || ''} onChange={e => setDeliveryForm({...deliveryForm, seller_name: e.target.value})} />
               <Input placeholder="Location (State, Country)" value={deliveryForm.seller_location || ''} onChange={e => setDeliveryForm({...deliveryForm, seller_location: e.target.value})} />
@@ -436,7 +436,7 @@ const Marketplace = () => {
               <Input placeholder="Customer Name" value={deliveryForm.customer_name || ''} onChange={e => setDeliveryForm({...deliveryForm, customer_name: e.target.value})} />
               <Input placeholder="Customer Address" value={deliveryForm.customer_address || ''} onChange={e => setDeliveryForm({...deliveryForm, customer_address: e.target.value})} />
               <Input placeholder="Customer Phone" value={deliveryForm.customer_phone || ''} onChange={e => setDeliveryForm({...deliveryForm, customer_phone: e.target.value})} />
-              <p className="text-xs font-medium text-destructive">50 Stars will be deducted for Save More delivery</p>
+              <p className="text-xs font-medium text-destructive">50 Stars will be deducted for Lernory Express delivery</p>
               <Button className="w-full" onClick={() => submitDeliveryForm('savemore')}><Truck className="w-4 h-4 mr-2" /> Submit for Pickup (50⭐)</Button>
             </TabsContent>
           </Tabs>

@@ -56,7 +56,7 @@ const OnboardingFlow: React.FC<OnboardingFlowProps> = ({ onComplete }) => {
       <div className="min-h-screen bg-background p-4 overflow-y-auto pb-24">
         <Card className="max-w-lg mx-auto">
           <CardHeader>
-            <CardTitle className="text-center text-xl">👋 Welcome to SaveMore!</CardTitle>
+            <CardTitle className="text-center text-xl">👋 Welcome to Lernory!</CardTitle>
             <p className="text-center text-muted-foreground text-sm">Tell us a bit about yourself</p>
           </CardHeader>
           <CardContent className="space-y-4">
@@ -86,7 +86,7 @@ const OnboardingFlow: React.FC<OnboardingFlowProps> = ({ onComplete }) => {
               </Select>
             </div>
             <div>
-              <Label>How did you find SaveMore?</Label>
+              <Label>How did you find Lernory?</Label>
               <Input value={answers.howFound} onChange={e => setAnswers(p => ({ ...p, howFound: e.target.value }))} placeholder="Friend, social media, etc." />
             </div>
             <div>
@@ -109,13 +109,13 @@ const OnboardingFlow: React.FC<OnboardingFlowProps> = ({ onComplete }) => {
         <Card className="max-w-lg mx-auto">
           <CardHeader>
             <CardTitle className="text-center text-xl flex items-center justify-center gap-2">
-              <BookOpen className="w-5 h-5" /> Welcome to SaveMore 🤗
+              <BookOpen className="w-5 h-5" /> Welcome to Lernory 🤗
             </CardTitle>
           </CardHeader>
           <CardContent className="space-y-4 text-sm leading-relaxed">
             <div className="bg-primary/10 p-4 rounded-lg">
-              <h3 className="font-bold mb-2">🏠 What is SaveMore Community?</h3>
-              <p>SaveMore is a social platform where you can connect with others, share content, and <strong>earn real money</strong> from your posts, stories, and interactions.</p>
+              <h3 className="font-bold mb-2">🏠 What is Lernory Social?</h3>
+              <p>Lernory is a social platform where you can connect with others, share content, and <strong>earn real money</strong> from your posts, stories, and interactions.</p>
             </div>
 
             <div className="bg-muted p-4 rounded-lg">
@@ -142,7 +142,7 @@ const OnboardingFlow: React.FC<OnboardingFlowProps> = ({ onComplete }) => {
 
             <div className="bg-muted p-4 rounded-lg">
               <h3 className="font-bold mb-2">⭐ What are Stars?</h3>
-              <p>Stars are the platform currency. You spend Stars to view premium content and earn Stars from your own content. Stars can be converted to real money in your wallet.</p>
+              <p>Stars are Lernory's currency. You spend Stars to view premium content and earn Stars from your own content. Stars can be converted to real money in your wallet.</p>
             </div>
 
             <div className="bg-muted p-4 rounded-lg">
@@ -255,7 +255,7 @@ const OnboardingFlow: React.FC<OnboardingFlowProps> = ({ onComplete }) => {
     await supabase.from('user_profiles').update({
       story_settings: { onboarding_complete: true }
     }).eq('id', user.id);
-    toast({ title: "Welcome! 🎉", description: "You're all set. Enjoy SaveMore!" });
+    toast({ title: "Welcome! 🎉", description: "You're all set. Enjoy Lernory!" });
     onComplete();
   }
 

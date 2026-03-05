@@ -43,8 +43,8 @@ const SharePlatform = () => {
 
   const shareToSocial = (platform: string) => {
     const shareText = profile 
-      ? `Join me on SaveMore Community! 🎉 Follow @${profile.username} - ${referralUrl}`
-      : `Join SaveMore Community! 🎉 The best social platform for earning! ${referralUrl}`;
+      ? `Join me on Lernory Social! 🎉 Follow @${profile.username} - ${referralUrl}`
+      : `Join Lernory Social! 🎉 The best social platform for earning! ${referralUrl}`;
 
     const urls: { [key: string]: string } = {
       whatsapp: `https://wa.me/?text=${encodeURIComponent(shareText)}`,
@@ -67,7 +67,7 @@ const SharePlatform = () => {
         </Button>
         <div className="flex items-center gap-2">
           <Share2 className="h-6 w-6 text-primary" />
-          <h1 className="text-2xl font-bold">Share SaveMore</h1>
+          <h1 className="text-2xl font-bold">Share Lernory</h1>
         </div>
       </div>
 
@@ -82,13 +82,13 @@ const SharePlatform = () => {
               </Avatar>
               <div>
                 <h2 className="text-xl font-bold">@{profile.username}</h2>
-                <p className="text-sm text-muted-foreground">SaveMore Community</p>
+                <p className="text-sm text-muted-foreground">Lernory Social</p>
               </div>
             </div>
           </div>
           <CardContent className="p-4">
             <p className="text-sm text-muted-foreground">
-              Join me on SaveMore Community! Earn while you browse, share content, and connect with amazing people.
+              Join me on Lernory Social! Earn while you browse, share content, and connect with amazing people.
             </p>
           </CardContent>
         </Card>

@@ -76,8 +76,8 @@ const CreatePost: React.FC<CreatePostProps> = ({
   };
 
   const categories = [
-    'Jollof Rice', 'Desserts', 'Equipment', 'For Sale', 'Tips & Tricks',
-    'Restaurant Reviews', 'Recipes', 'Cooking Videos', 'General Discussion'
+    'Wealth', 'Tech', 'Music', 'Lifestyle', 'Education',
+    'Entertainment', 'Business', 'For Sale', 'General Discussion'
   ];
 
   const isPaidTier = starPrice >= 100;
