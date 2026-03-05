@@ -43,8 +43,8 @@ const SharePlatform = () => {
 
   const shareToSocial = (platform: string) => {
     const shareText = profile 
-      ? `Join me on SaveMore Community! 🎉 Follow @${profile.username} - ${referralUrl}`
-      : `Join SaveMore Community! 🎉 The best social platform for earning! ${referralUrl}`;
+      ? `Join me on Lernory Social! 🎉 Follow @${profile.username} - ${referralUrl}`
+      : `Join Lernory Social! 🎉 The best social platform for earning! ${referralUrl}`;
 
     const urls: { [key: string]: string } = {
       whatsapp: `https://wa.me/?text=${encodeURIComponent(shareText)}`,
