@@ -142,7 +142,7 @@ const OnboardingFlow: React.FC<OnboardingFlowProps> = ({ onComplete }) => {
 
             <div className="bg-muted p-4 rounded-lg">
               <h3 className="font-bold mb-2">⭐ What are Stars?</h3>
-              <p>Stars are the platform currency. You spend Stars to view premium content and earn Stars from your own content. Stars can be converted to real money in your wallet.</p>
+              <p>Stars are Lernory's currency. You spend Stars to view premium content and earn Stars from your own content. Stars can be converted to real money in your wallet.</p>
             </div>
 
             <div className="bg-muted p-4 rounded-lg">
