@@ -56,7 +56,7 @@ const OnboardingFlow: React.FC<OnboardingFlowProps> = ({ onComplete }) => {
       <div className="min-h-screen bg-background p-4 overflow-y-auto pb-24">
         <Card className="max-w-lg mx-auto">
           <CardHeader>
-            <CardTitle className="text-center text-xl">👋 Welcome to SaveMore!</CardTitle>
+            <CardTitle className="text-center text-xl">👋 Welcome to Lernory!</CardTitle>
             <p className="text-center text-muted-foreground text-sm">Tell us a bit about yourself</p>
           </CardHeader>
           <CardContent className="space-y-4">
