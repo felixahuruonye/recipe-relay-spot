@@ -255,7 +255,7 @@ const OnboardingFlow: React.FC<OnboardingFlowProps> = ({ onComplete }) => {
     await supabase.from('user_profiles').update({
       story_settings: { onboarding_complete: true }
     }).eq('id', user.id);
-    toast({ title: "Welcome! 🎉", description: "You're all set. Enjoy SaveMore!" });
+    toast({ title: "Welcome! 🎉", description: "You're all set. Enjoy Lernory!" });
     onComplete();
   }
 

@@ -88,7 +88,7 @@ const SharePlatform = () => {
           </div>
           <CardContent className="p-4">
             <p className="text-sm text-muted-foreground">
-              Join me on SaveMore Community! Earn while you browse, share content, and connect with amazing people.
+              Join me on Lernory Social! Earn while you browse, share content, and connect with amazing people.
             </p>
           </CardContent>
         </Card>

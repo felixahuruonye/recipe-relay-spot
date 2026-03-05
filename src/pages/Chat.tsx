@@ -338,7 +338,9 @@ const Chat = () => {
                       <div className="flex items-center gap-2 min-w-0">
                         <div className="font-semibold truncate">{p?.username || c.partnerId}</div>
                         {p?.vip ? <Badge variant="secondary">VIP</Badge> : null}
-                        {p?.is_online ? <Badge variant="outline">Online</Badge> : null}
+                        {p?.is_online && p?.last_seen && (Date.now() - new Date(p.last_seen).getTime()) < 120000 ? (
+                          <span className="w-2.5 h-2.5 bg-green-500 rounded-full animate-pulse inline-block" title="Active now" />
+                        ) : null}
                       </div>
                       <div className="text-xs text-muted-foreground">{new Date(c.lastAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</div>
                     </div>

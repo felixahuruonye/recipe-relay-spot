@@ -14,15 +14,14 @@ import { useNavigate } from 'react-router-dom';
 
 const CATEGORIES = [
   "All",
-  "Food & Cooking",
-  "Jollof Rice",
-  "Desserts",
-  "Equipment",
+  "Wealth",
+  "Tech",
+  "Music",
+  "Lifestyle",
+  "Education",
+  "Entertainment",
+  "Business",
   "For Sale",
-  "Tips & Tricks",
-  "Restaurant Reviews",
-  "Recipes",
-  "Cooking Videos",
   "General Discussion"
 ];
 

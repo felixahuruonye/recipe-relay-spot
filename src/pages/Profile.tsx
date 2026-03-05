@@ -329,7 +329,7 @@ const Profile = () => {
               <div className="text-sm space-y-2">
                 <p><strong>✅ VIP Badge</strong> - Blue checkmark beside your name</p>
                 <p><strong>✅ Priority Posts</strong> - Your posts get highlighted</p>
-                <p><strong>✅ Premium Recipes</strong> - VIP-only content access</p>
+                <p><strong>✅ Premium Content</strong> - VIP-only content access</p>
                 <p><strong>✅ Special Discounts</strong> - Lower marketplace fees</p>
                 <p><strong>✅ Exclusive Contests</strong> - VIP-only challenges</p>
               </div>

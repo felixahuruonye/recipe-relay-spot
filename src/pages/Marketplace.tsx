@@ -60,7 +60,7 @@ interface Delivery {
   created_at: string;
 }
 
-const SELLER_GUIDE = `## How to Sell on SaveMore Marketplace
+const SELLER_GUIDE = `## How to Sell on Lernory Marketplace
 
 **Rules & Guidelines:**
 1. Only VIP members can list products
@@ -70,7 +70,7 @@ const SELLER_GUIDE = `## How to Sell on SaveMore Marketplace
 
 **Delivery Options:**
 - 🚚 **Self Delivery** — You handle shipping directly to the customer
-- 🚚 **Save More Online Delivery** — We pick up and deliver (50 Stars fee)
+- 🚚 **Lernory Express Delivery** — We pick up and deliver (50 Stars fee)
 
 **Invoice:** Generate a professional invoice for 30 Stars per product.
 
