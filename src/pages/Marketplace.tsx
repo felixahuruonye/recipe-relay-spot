@@ -436,7 +436,7 @@ const Marketplace = () => {
               <Input placeholder="Customer Name" value={deliveryForm.customer_name || ''} onChange={e => setDeliveryForm({...deliveryForm, customer_name: e.target.value})} />
               <Input placeholder="Customer Address" value={deliveryForm.customer_address || ''} onChange={e => setDeliveryForm({...deliveryForm, customer_address: e.target.value})} />
               <Input placeholder="Customer Phone" value={deliveryForm.customer_phone || ''} onChange={e => setDeliveryForm({...deliveryForm, customer_phone: e.target.value})} />
-              <p className="text-xs font-medium text-destructive">50 Stars will be deducted for Save More delivery</p>
+              <p className="text-xs font-medium text-destructive">50 Stars will be deducted for Lernory Express delivery</p>
               <Button className="w-full" onClick={() => submitDeliveryForm('savemore')}><Truck className="w-4 h-4 mr-2" /> Submit for Pickup (50⭐)</Button>
             </TabsContent>
           </Tabs>
