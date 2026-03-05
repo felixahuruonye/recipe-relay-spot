@@ -67,7 +67,7 @@ const SharePlatform = () => {
         </Button>
         <div className="flex items-center gap-2">
           <Share2 className="h-6 w-6 text-primary" />
-          <h1 className="text-2xl font-bold">Share SaveMore</h1>
+          <h1 className="text-2xl font-bold">Share Lernory</h1>
         </div>
       </div>
 
