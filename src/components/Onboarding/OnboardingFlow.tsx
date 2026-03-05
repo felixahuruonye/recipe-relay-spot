@@ -114,8 +114,8 @@ const OnboardingFlow: React.FC<OnboardingFlowProps> = ({ onComplete }) => {
           </CardHeader>
           <CardContent className="space-y-4 text-sm leading-relaxed">
             <div className="bg-primary/10 p-4 rounded-lg">
-              <h3 className="font-bold mb-2">🏠 What is SaveMore Community?</h3>
-              <p>SaveMore is a social platform where you can connect with others, share content, and <strong>earn real money</strong> from your posts, stories, and interactions.</p>
+              <h3 className="font-bold mb-2">🏠 What is Lernory Social?</h3>
+              <p>Lernory is a social platform where you can connect with others, share content, and <strong>earn real money</strong> from your posts, stories, and interactions.</p>
             </div>
 
             <div className="bg-muted p-4 rounded-lg">
