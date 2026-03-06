@@ -40,7 +40,7 @@ const Auth = () => {
     }
     deferredPrompt.prompt();
     const { outcome } = await deferredPrompt.userChoice;
-    if (outcome === 'accepted') toast({ title: 'Installed!', description: 'SaveMore has been installed.' });
+    if (outcome === 'accepted') toast({ title: 'Installed!', description: 'Lernory has been installed.' });
     setDeferredPrompt(null);
   };
 
