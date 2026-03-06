@@ -871,6 +871,7 @@ const Feed = () => {
       {showStoryViewer && selectedStoryUserId && (
         <EnhancedStorylineViewer
           userId={selectedStoryUserId}
+          open={showStoryViewer}
           onClose={() => { setShowStoryViewer(false); setSelectedStoryUserId(null); }}
         />
       )}
