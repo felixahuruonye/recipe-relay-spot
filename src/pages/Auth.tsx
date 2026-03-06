@@ -79,7 +79,7 @@ const Auth = () => {
           {/* Install Button */}
           <Button variant="outline" className="w-full gap-2" onClick={handleInstall}>
             <Download className="w-4 h-4" />
-            Install SaveMore App
+            Install Lernory App
           </Button>
 
           <Tabs defaultValue="signin" className="w-full">

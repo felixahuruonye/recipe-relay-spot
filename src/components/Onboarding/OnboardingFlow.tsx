@@ -209,7 +209,7 @@ const OnboardingFlow: React.FC<OnboardingFlowProps> = ({ onComplete }) => {
           </CardHeader>
           <CardContent className="space-y-4 text-center">
             <p className="text-sm text-muted-foreground">
-              Stars are the currency of SaveMore. Buy Stars to unlock premium content, boost your posts, and access exclusive features. You can also earn Stars from your content!
+              Stars are the currency of Lernory. Buy Stars to unlock premium content, boost your posts, and access exclusive features. You can also earn Stars from your content!
             </p>
             <div className="flex gap-2">
               <Button className="flex-1" onClick={() => {

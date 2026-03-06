@@ -174,7 +174,7 @@ export const ShareMenu = ({ postId, postTitle, postImage, postDescription }: Sha
               <img src={postImage} alt="" className="w-16 h-16 object-cover rounded" />
               <div className="flex-1 min-w-0">
                 <p className="font-medium text-sm line-clamp-2">{postTitle}</p>
-                <p className="text-xs text-muted-foreground">SaveMore Community</p>
+                <p className="text-xs text-muted-foreground">Lernory Social</p>
               </div>
             </div>
           </div>
