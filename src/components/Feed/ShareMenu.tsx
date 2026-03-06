@@ -49,7 +49,7 @@ export const ShareMenu = ({ postId, postTitle, postImage, postDescription }: Sha
     const ogUrl = document.querySelector('meta[property="og:url"]');
 
     if (ogTitle) ogTitle.setAttribute('content', postTitle);
-    if (ogDescription) ogDescription.setAttribute('content', postDescription || 'Check out this post on SaveMore Community!');
+    if (ogDescription) ogDescription.setAttribute('content', postDescription || 'Check out this post on Lernory Social!');
     if (ogImage && postImage) ogImage.setAttribute('content', postImage);
     if (ogUrl) ogUrl.setAttribute('content', postUrl);
   };
