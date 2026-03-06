@@ -880,7 +880,7 @@ const Feed = () => {
       {showCreateStory && (
         <Dialog open={showCreateStory} onOpenChange={setShowCreateStory}>
           <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
-            <CreateStoryline onComplete={() => { setShowCreateStory(false); loadUserStories(); }} />
+            <CreateStoryline onCreated={() => { setShowCreateStory(false); loadUserStories(); }} />
           </DialogContent>
         </Dialog>
       )}
