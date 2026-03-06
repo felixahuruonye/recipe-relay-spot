@@ -30,7 +30,7 @@ export const ShareMenu = ({ postId, postTitle, postImage, postDescription }: Sha
   const postUrl = `${baseUrl}/feed?post=${postId}`;
   
   // Create a share message with thumbnail info
-  const shareText = `🔥 ${postTitle}\n\n${postDescription?.slice(0, 100) || ''}\n\n📱 SaveMore Community`;
+  const shareText = `🔥 ${postTitle}\n\n${postDescription?.slice(0, 100) || ''}\n\n📱 Lernory Social`;
   const fullShareUrl = postUrl;
 
   // Update document meta tags when sharing
