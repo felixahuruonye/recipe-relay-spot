@@ -112,7 +112,7 @@ export const ShareMenu = ({ postId, postTitle, postImage, postDescription }: Sha
       try {
         await navigator.share({
           title: postTitle,
-          text: postDescription || 'Check out this post on SaveMore Community!',
+          text: postDescription || 'Check out this post on Lernory Social!',
           url: fullShareUrl,
         });
         toast({ title: 'Shared!', description: 'Post shared successfully' });
