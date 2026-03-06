@@ -106,7 +106,7 @@ const ProfileSetup: React.FC<ProfileSetupProps> = ({ onComplete }) => {
 
       toast({
         title: "Profile created!",
-        description: "Welcome to SaveMore Community!"
+        description: "Welcome to Lernory Social!"
       });
 
       onComplete();
