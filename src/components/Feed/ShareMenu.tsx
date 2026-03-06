@@ -30,7 +30,7 @@ export const ShareMenu = ({ postId, postTitle, postImage, postDescription }: Sha
   const postUrl = `${baseUrl}/feed?post=${postId}`;
   
   // Create a share message with thumbnail info
-  const shareText = `🔥 ${postTitle}\n\n${postDescription?.slice(0, 100) || ''}\n\n📱 SaveMore Community`;
+  const shareText = `🔥 ${postTitle}\n\n${postDescription?.slice(0, 100) || ''}\n\n📱 Lernory Social`;
   const fullShareUrl = postUrl;
 
   // Update document meta tags when sharing
@@ -49,7 +49,7 @@ export const ShareMenu = ({ postId, postTitle, postImage, postDescription }: Sha
     const ogUrl = document.querySelector('meta[property="og:url"]');
 
     if (ogTitle) ogTitle.setAttribute('content', postTitle);
-    if (ogDescription) ogDescription.setAttribute('content', postDescription || 'Check out this post on SaveMore Community!');
+    if (ogDescription) ogDescription.setAttribute('content', postDescription || 'Check out this post on Lernory Social!');
     if (ogImage && postImage) ogImage.setAttribute('content', postImage);
     if (ogUrl) ogUrl.setAttribute('content', postUrl);
   };
@@ -112,7 +112,7 @@ export const ShareMenu = ({ postId, postTitle, postImage, postDescription }: Sha
       try {
         await navigator.share({
           title: postTitle,
-          text: postDescription || 'Check out this post on SaveMore Community!',
+          text: postDescription || 'Check out this post on Lernory Social!',
           url: fullShareUrl,
         });
         toast({ title: 'Shared!', description: 'Post shared successfully' });
@@ -174,7 +174,7 @@ export const ShareMenu = ({ postId, postTitle, postImage, postDescription }: Sha
               <img src={postImage} alt="" className="w-16 h-16 object-cover rounded" />
               <div className="flex-1 min-w-0">
                 <p className="font-medium text-sm line-clamp-2">{postTitle}</p>
-                <p className="text-xs text-muted-foreground">SaveMore Community</p>
+                <p className="text-xs text-muted-foreground">Lernory Social</p>
               </div>
             </div>
           </div>

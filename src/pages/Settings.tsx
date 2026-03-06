@@ -99,11 +99,11 @@ const Settings = () => {
           </Button>
           <Button variant="outline" className="w-full justify-start h-14" onClick={() => navigate('/share')}>
             <Share2 className="h-5 w-5 mr-3" />
-            <div className="text-left"><div className="font-medium">Share SaveMore Community</div><div className="text-xs text-muted-foreground">Invite friends to join</div></div>
+            <div className="text-left"><div className="font-medium">Share Lernory</div><div className="text-xs text-muted-foreground">Invite friends to join</div></div>
           </Button>
-          <Button variant="outline" className="w-full justify-start h-14" onClick={() => window.open('https://savemore.community/help', '_blank')}>
+          <Button variant="outline" className="w-full justify-start h-14" onClick={() => window.open('https://lernory.com/help', '_blank')}>
             <HelpCircle className="h-5 w-5 mr-3" />
-            <div className="text-left"><div className="font-medium">Help & FAQ</div><div className="text-xs text-muted-foreground">Learn how to use SaveMore</div></div>
+            <div className="text-left"><div className="font-medium">Help & FAQ</div><div className="text-xs text-muted-foreground">Learn how to use Lernory</div></div>
           </Button>
           <Button variant="destructive" className="w-full justify-start h-14 mt-4" onClick={handleSignOut}>
             <LogOut className="h-5 w-5 mr-3" />

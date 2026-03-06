@@ -176,7 +176,7 @@ export const CreateStoryline: React.FC<CreateStorylineProps> = ({ onCreated, use
             <Alert>
               <AlertDescription>
                 <p className="font-semibold mb-2">Share your story, earn Stars, and inspire the world!</p>
-                <p>Welcome to SAVE MORE StarStory, the home of creative minds and premium stories.</p>
+                <p>Welcome to Lernory StarStory, the home of creative minds and premium stories.</p>
               </AlertDescription>
             </Alert>
 

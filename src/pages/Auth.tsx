@@ -40,7 +40,7 @@ const Auth = () => {
     }
     deferredPrompt.prompt();
     const { outcome } = await deferredPrompt.userChoice;
-    if (outcome === 'accepted') toast({ title: 'Installed!', description: 'SaveMore has been installed.' });
+    if (outcome === 'accepted') toast({ title: 'Installed!', description: 'Lernory has been installed.' });
     setDeferredPrompt(null);
   };
 
@@ -72,14 +72,14 @@ const Auth = () => {
     <div className="min-h-screen flex items-center justify-center bg-background p-4">
       <Card className="w-full max-w-md">
         <CardHeader className="text-center">
-          <CardTitle className="text-2xl font-bold text-primary">SaveMore Community</CardTitle>
-          <CardDescription>Join the community & start earning</CardDescription>
+          <CardTitle className="text-2xl font-bold text-primary">Lernory Social</CardTitle>
+          <CardDescription>Connect, Learn, Share & Earn</CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
           {/* Install Button */}
           <Button variant="outline" className="w-full gap-2" onClick={handleInstall}>
             <Download className="w-4 h-4" />
-            Install SaveMore App
+            Install Lernory App
           </Button>
 
           <Tabs defaultValue="signin" className="w-full">

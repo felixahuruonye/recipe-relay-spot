@@ -309,7 +309,7 @@ const CreatePost: React.FC<CreatePostProps> = ({
             <Label htmlFor="body">Content *</Label>
             <Textarea
               id="body"
-              placeholder="Share your thoughts, recipe, or ask a question..."
+              placeholder="Share your thoughts, ideas, or ask a question..."
               value={body}
               onChange={(e) => setBody(e.target.value)}
               required
