@@ -4,7 +4,8 @@ import { supabase } from '@/integrations/supabase/client';
 import { Button } from '@/components/ui/button';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Badge } from '@/components/ui/badge';
-import { Heart, MessageCircle, Star, Eye, Share2, Volume2, VolumeX, ChevronUp, ChevronDown, Zap, Timer, Lock, UserPlus, Music, ToggleLeft, ToggleRight } from 'lucide-react';
+import { Card } from '@/components/ui/card';
+import { Heart, MessageCircle, Star, Eye, Share2, Volume2, VolumeX, Zap, Timer, UserPlus, ToggleLeft, ToggleRight, Plus, Search, ShoppingBag, TrendingUp, ChevronUp } from 'lucide-react';
 import { EnhancedStorylineViewer } from '@/components/Storyline/EnhancedStorylineViewer';
 import { CreateStoryline } from '@/components/Storyline/CreateStoryline';
 import { StorylineCard } from '@/components/Storyline/StorylineCard';
@@ -14,7 +15,6 @@ import CreatePost from '@/components/Posts/CreatePost';
 import ProfileSetup from '@/components/Profile/ProfileSetup';
 import NewSearchBar from '@/components/Search/NewSearchBar';
 import { CommentSection } from '@/components/Feed/CommentSection';
-import { VideoPlayer } from '@/components/Feed/VideoPlayer';
 import { ShareMenu } from '@/components/Feed/ShareMenu';
 import { PostMenu } from '@/components/Feed/PostMenu';
 import { PostViewers } from '@/components/Profile/PostViewers';
@@ -40,6 +40,7 @@ interface Post {
   rating: number;
   user_id: string;
   star_price?: number;
+  media_type?: string;
 }
 
 interface UserProfile {
@@ -55,290 +56,287 @@ interface PostLike {
   post_id: string;
 }
 
-// ── Snap-Focus Post Card ──
-const SnapFocusPost: React.FC<{
+// ── Feed Post Card ──
+const FeedPostCard: React.FC<{
   post: Post;
   postUser?: UserProfile;
-  isActive: boolean;
   isLiked: boolean;
   likesCount: number;
   commentsCount: number;
   isProcessed: boolean;
   isFollowing: boolean;
   isOwnPost: boolean;
-  userStarBalance: number;
+  userId?: string;
   onLike: () => void;
   onFollow: () => void;
   onProfile: () => void;
-  onComment: () => void;
   onProcessView: () => void;
   onFetchPosts: () => void;
-}> = ({ post, postUser, isActive, isLiked, likesCount, commentsCount, isProcessed, isFollowing, isOwnPost, userStarBalance, onLike, onFollow, onProfile, onComment, onProcessView, onFetchPosts }) => {
+}> = ({ post, postUser, isLiked, likesCount, commentsCount, isProcessed, isFollowing, isOwnPost, userId, onLike, onFollow, onProfile, onProcessView, onFetchPosts }) => {
   const [showComments, setShowComments] = useState(false);
   const [viewProgress, setViewProgress] = useState(0);
-  const [revealed, setRevealed] = useState(false);
-  const [videoEnded, setVideoEnded] = useState(false);
+  const [isMuted, setIsMuted] = useState(false);
+  const [isInView, setIsInView] = useState(false);
   const timerRef = useRef<NodeJS.Timeout | null>(null);
   const startTimeRef = useRef<number>(0);
   const hasProcessedRef = useRef(false);
+  const videoRef = useRef<HTMLVideoElement>(null);
+  const cardRef = useRef<HTMLDivElement>(null);
+  const navigate = useNavigate();
 
   const hasMedia = post.media_urls && post.media_urls.length > 0;
-  const isVideo = hasMedia && (post.media_urls[0].match(/\.(mp4|webm|ogg)$/i) || post.media_urls[0].includes('video'));
-  const isPaidPost = post.star_price && post.star_price > 0 && post.user_id !== postUser?.id;
-  const viewDuration = isVideo ? 0 : 30; // seconds for images; videos use ended event
+  const isVideo = hasMedia && (post.media_urls[0]?.match(/\.(mp4|webm|ogg|mov)$/i) || post.media_urls[0]?.includes('video'));
+  const viewDuration = 30; // 30 seconds for images
 
-  // 3-second focus reveal + view progress timer
+  // Intersection observer for auto-play and view tracking
   useEffect(() => {
-    if (!isActive) {
-      if (timerRef.current) clearInterval(timerRef.current);
-      setViewProgress(0);
-      setRevealed(false);
-      startTimeRef.current = 0;
-      return;
-    }
+    const el = cardRef.current;
+    if (!el) return;
 
-    // Start the focus timer
-    startTimeRef.current = Date.now();
-    
-    // Haptic feedback on snap
-    if (navigator.vibrate) navigator.vibrate(15);
+    const observer = new IntersectionObserver(
+      ([entry]) => {
+        const inView = entry.isIntersecting && entry.intersectionRatio >= 0.5;
+        setIsInView(inView);
 
-    timerRef.current = setInterval(() => {
-      const elapsed = (Date.now() - startTimeRef.current) / 1000;
-      
-      // Reveal after 3 seconds
-      if (elapsed >= 3 && !revealed) {
-        setRevealed(true);
-      }
-
-      if (isVideo) {
-        // For videos, progress is based on video playback (handled by videoEnded)
-        setViewProgress(Math.min(elapsed / 30 * 100, 99)); // visual only
-      } else {
-        // For images, progress fills over viewDuration
-        const progress = Math.min((elapsed / viewDuration) * 100, 100);
-        setViewProgress(progress);
-        
-        if (progress >= 100 && !hasProcessedRef.current && !isProcessed) {
-          hasProcessedRef.current = true;
-          onProcessView();
+        if (inView) {
+          // Auto-play video with sound
+          if (isVideo && videoRef.current) {
+            videoRef.current.muted = isMuted;
+            videoRef.current.play().catch(() => {});
+          }
+          // Start view timer
+          if (!hasProcessedRef.current && !isProcessed) {
+            startTimeRef.current = Date.now();
+            timerRef.current = setInterval(() => {
+              const elapsed = (Date.now() - startTimeRef.current) / 1000;
+              if (!isVideo) {
+                const progress = Math.min((elapsed / viewDuration) * 100, 100);
+                setViewProgress(progress);
+                if (progress >= 100 && !hasProcessedRef.current) {
+                  hasProcessedRef.current = true;
+                  onProcessView();
+                  if (timerRef.current) clearInterval(timerRef.current);
+                }
+              }
+            }, 200);
+          }
+        } else {
+          // Pause video when out of view
+          if (isVideo && videoRef.current) {
+            videoRef.current.pause();
+          }
+          if (timerRef.current) clearInterval(timerRef.current);
         }
-      }
-    }, 100);
+      },
+      { threshold: 0.5 }
+    );
 
-    return () => {
-      if (timerRef.current) clearInterval(timerRef.current);
-    };
-  }, [isActive]);
-
-  // Handle video end
-  useEffect(() => {
-    if (videoEnded && isActive && !hasProcessedRef.current && !isProcessed) {
-      hasProcessedRef.current = true;
-      setViewProgress(100);
-      onProcessView();
-    }
-  }, [videoEnded, isActive]);
+    observer.observe(el);
+    return () => { observer.disconnect(); if (timerRef.current) clearInterval(timerRef.current); };
+  }, [isProcessed, isMuted]);
 
   // Reset on post change
   useEffect(() => {
     hasProcessedRef.current = isProcessed;
-  }, [post.id]);
+    setViewProgress(isProcessed ? 100 : 0);
+  }, [post.id, isProcessed]);
+
+  const handleVideoEnded = () => {
+    if (!hasProcessedRef.current && !isProcessed) {
+      hasProcessedRef.current = true;
+      setViewProgress(100);
+      onProcessView();
+    }
+  };
+
+  const timeAgo = (date: string) => {
+    const s = Math.floor((Date.now() - new Date(date).getTime()) / 1000);
+    if (s < 60) return `${s}s`;
+    if (s < 3600) return `${Math.floor(s / 60)}m`;
+    if (s < 86400) return `${Math.floor(s / 3600)}h`;
+    return `${Math.floor(s / 86400)}d`;
+  };
 
   return (
     <motion.div
-      className="snap-start snap-always relative w-full flex flex-col"
-      style={{ height: 'calc(100vh - 4rem)', minHeight: 'calc(100dvh - 4rem)' }}
-      initial={{ opacity: 0.7, scale: 0.98 }}
-      animate={{
-        opacity: isActive ? 1 : 0.5,
-        scale: isActive ? 1 : 0.95,
-      }}
+      ref={cardRef}
+      className="relative bg-card rounded-2xl overflow-hidden border border-border/50 shadow-sm"
+      initial={{ opacity: 0, y: 20 }}
+      animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.3 }}
     >
-      {/* Background glow when active */}
-      <div className={`absolute inset-0 transition-all duration-700 rounded-xl ${
-        isActive 
-          ? 'bg-gradient-to-b from-primary/5 via-transparent to-primary/10 shadow-[0_0_60px_-15px_hsl(var(--primary)/0.3)]' 
-          : 'bg-background/50'
-      }`} />
-
-      {/* Main content area */}
-      <div className="relative flex-1 flex flex-col overflow-hidden rounded-xl">
-        {/* Media area - takes most space */}
-        <div className="relative flex-1 bg-black/5 dark:bg-white/5 overflow-hidden rounded-t-xl">
-          {hasMedia ? (
-            <>
-              {isVideo ? (
-                <div className="w-full h-full">
-                  <video
-                    src={post.media_urls[0]}
-                    className="w-full h-full object-cover"
-                    autoPlay={isActive}
-                    loop={false}
-                    muted={!isActive}
-                    playsInline
-                    onEnded={() => setVideoEnded(true)}
-                    onPause={() => {
-                      if (!isActive) return;
-                    }}
-                  />
-                </div>
-              ) : (
-                <img
-                  src={post.media_urls[0]}
-                  alt={post.title}
-                  className="w-full h-full object-cover"
-                  loading="lazy"
-                />
-              )}
-
-              {/* Blur overlay before reveal */}
-              <motion.div
-                className="absolute inset-0 bg-black/20 backdrop-blur-sm"
-                animate={{ opacity: revealed ? 0 : 1 }}
-                transition={{ duration: 0.5 }}
-                style={{ pointerEvents: 'none' }}
-              />
-            </>
-          ) : (
-            <div className="w-full h-full flex items-center justify-center p-6 bg-gradient-to-br from-primary/10 to-accent/10">
-              <p className="text-lg text-center font-medium leading-relaxed">{post.body}</p>
-            </div>
-          )}
-
-          {/* Star price badge */}
-          {isPaidPost && (
-            <Badge className="absolute top-3 left-3 bg-yellow-500/90 text-black gap-1 z-10">
-              <Star className="w-3 h-3 fill-current" />
-              {post.star_price} Stars
-            </Badge>
-          )}
-
-          {/* View timer badge */}
-          {!isProcessed && isActive && !isVideo && viewProgress < 100 && (
-            <Badge className="absolute top-3 right-3 bg-primary/80 text-primary-foreground animate-pulse z-10 gap-1">
-              <Timer className="w-3 h-3" />
-              {Math.ceil(viewDuration - (viewDuration * viewProgress / 100))}s
-            </Badge>
-          )}
-
-          {isProcessed && (
-            <Badge className="absolute top-3 right-3 bg-green-500/90 text-white z-10 gap-1">
-              <Zap className="w-3 h-3" /> Earned
-            </Badge>
-          )}
-
-          {/* Right side action buttons (TikTok style) */}
-          <div className="absolute right-3 bottom-20 flex flex-col items-center gap-5 z-20">
-            {/* Profile */}
-            <button onClick={onProfile} className="relative">
-              <Avatar className="w-11 h-11 border-2 border-white shadow-lg">
-                <AvatarImage src={postUser?.avatar_url} />
-                <AvatarFallback className="bg-primary text-primary-foreground text-sm">
-                  {postUser?.username?.charAt(0).toUpperCase() || 'U'}
-                </AvatarFallback>
-              </Avatar>
-              {!isOwnPost && !isFollowing && (
-                <div className="absolute -bottom-1.5 left-1/2 -translate-x-1/2 bg-primary rounded-full w-5 h-5 flex items-center justify-center">
-                  <span className="text-white text-xs font-bold">+</span>
-                </div>
-              )}
-            </button>
-
-            {/* Like */}
-            <button onClick={onLike} className="flex flex-col items-center gap-0.5">
-              <motion.div
-                whileTap={{ scale: 1.4 }}
-                transition={{ type: 'spring', stiffness: 400 }}
-              >
-                <Heart className={`w-7 h-7 drop-shadow-lg ${isLiked ? 'fill-red-500 text-red-500' : 'text-white'}`} />
-              </motion.div>
-              <span className="text-white text-xs font-bold drop-shadow">{likesCount}</span>
-            </button>
-
-            {/* Comment */}
-            <button onClick={() => setShowComments(!showComments)} className="flex flex-col items-center gap-0.5">
-              <MessageCircle className="w-7 h-7 text-white drop-shadow-lg" />
-              <span className="text-white text-xs font-bold drop-shadow">{commentsCount}</span>
-            </button>
-
-            {/* Views */}
-            <div className="flex flex-col items-center gap-0.5">
-              <Eye className="w-6 h-6 text-white/80 drop-shadow-lg" />
-              <span className="text-white text-xs font-bold drop-shadow">{post.view_count || 0}</span>
-            </div>
-
-            {/* Share */}
-            <ShareMenu
-              postId={post.id}
-              postTitle={post.title}
-              postImage={hasMedia ? post.media_urls[0] : undefined}
-              postDescription={post.body}
-            />
-          </div>
-
-          {/* Bottom overlay with title and user info */}
-          <motion.div
-            className="absolute bottom-0 left-0 right-0 p-4 bg-gradient-to-t from-black/70 via-black/30 to-transparent"
-            animate={{ opacity: revealed ? 1 : 0.5 }}
-          >
-            <div className="flex items-center gap-2 mb-2">
-              <button onClick={onProfile} className="flex items-center gap-2">
-                <span className="text-white font-bold text-sm drop-shadow">@{postUser?.username}</span>
-                {postUser?.vip && (
-                  <Badge className="bg-yellow-400 text-black text-[10px] px-1 py-0">VIP</Badge>
-                )}
+      {/* Header */}
+      <div className="flex items-center justify-between p-3 pb-2">
+        <div className="flex items-center gap-2.5">
+          <Avatar className="w-9 h-9 cursor-pointer ring-2 ring-primary/20" onClick={onProfile}>
+            <AvatarImage src={postUser?.avatar_url} />
+            <AvatarFallback className="bg-primary/10 text-primary text-sm font-bold">
+              {postUser?.username?.charAt(0).toUpperCase() || 'U'}
+            </AvatarFallback>
+          </Avatar>
+          <div>
+            <div className="flex items-center gap-1.5">
+              <button onClick={onProfile} className="font-semibold text-sm hover:underline">
+                {postUser?.username}
               </button>
-              {!isOwnPost && (
-                <Button
-                  size="sm"
-                  variant={isFollowing ? 'secondary' : 'default'}
-                  className="h-6 text-[10px] px-2"
-                  onClick={onFollow}
-                >
-                  {isFollowing ? 'Following' : 'Follow'}
-                </Button>
+              {postUser?.vip && (
+                <Badge className="bg-yellow-400 text-black text-[9px] px-1 py-0 h-4">VIP</Badge>
               )}
+              <span className="text-muted-foreground text-xs">· {timeAgo(post.created_at)}</span>
             </div>
-            <h3 className="text-white font-semibold text-base drop-shadow mb-1 line-clamp-2">{post.title}</h3>
-            {hasMedia && post.body && (
-              <p className="text-white/80 text-xs line-clamp-2 drop-shadow">{post.body}</p>
-            )}
-            <div className="flex items-center gap-2 mt-2">
-              <Badge variant="outline" className="text-white/70 border-white/30 text-[10px]">{post.category}</Badge>
-              {post.boosted && <Badge className="bg-accent text-accent-foreground text-[10px]">🔥 Boosted</Badge>}
+            <div className="flex items-center gap-1.5">
+              <Badge variant="outline" className="text-[10px] h-4 px-1.5">{post.category}</Badge>
+              {post.boosted && <Badge className="bg-orange-500 text-white text-[9px] h-4 px-1">🔥 Hot</Badge>}
             </div>
-          </motion.div>
+          </div>
         </div>
-
-        {/* View progress bar */}
-        <div className="h-1 bg-muted relative overflow-hidden">
-          <motion.div
-            className="absolute inset-y-0 left-0 bg-gradient-to-r from-primary to-accent"
-            animate={{ width: `${viewProgress}%` }}
-            transition={{ duration: 0.1 }}
-          />
+        <div className="flex items-center gap-1">
+          {!isOwnPost && !isFollowing && (
+            <Button size="sm" variant="outline" className="h-7 text-xs px-2 gap-1" onClick={onFollow}>
+              <UserPlus className="w-3 h-3" /> Follow
+            </Button>
+          )}
+          <PostMenu postId={post.id} postOwnerId={post.user_id} onPostDeleted={onFetchPosts} />
         </div>
       </div>
 
-      {/* Comments bottom sheet */}
+      {/* Title */}
+      <div className="px-3 pb-2">
+        <h3 className="font-bold text-sm leading-snug">{post.title}</h3>
+        {post.body && !hasMedia && (
+          <p className="text-sm text-muted-foreground mt-1 leading-relaxed">{post.body}</p>
+        )}
+      </div>
+
+      {/* Star Price */}
+      {post.star_price && post.star_price > 0 && !isOwnPost && (
+        <div className="px-3 pb-2">
+          <Badge className="bg-yellow-500/90 text-black gap-1">
+            <Star className="w-3 h-3 fill-current" />
+            {post.star_price} Stars to watch & earn
+          </Badge>
+        </div>
+      )}
+
+      {/* Media */}
+      {hasMedia && (
+        <div className="relative w-full" style={{ aspectRatio: isVideo ? '9/16' : '4/5', maxHeight: '70vh' }}>
+          {isVideo ? (
+            <>
+              <video
+                ref={videoRef}
+                src={post.media_urls[0]}
+                className="w-full h-full object-cover bg-black"
+                loop={false}
+                playsInline
+                muted={isMuted}
+                onEnded={handleVideoEnded}
+                onClick={() => {
+                  if (videoRef.current?.paused) videoRef.current.play().catch(() => {});
+                  else videoRef.current?.pause();
+                }}
+              />
+              {/* Mute toggle */}
+              <button
+                onClick={() => {
+                  setIsMuted(!isMuted);
+                  if (videoRef.current) videoRef.current.muted = !isMuted;
+                }}
+                className="absolute bottom-3 right-3 w-8 h-8 rounded-full bg-black/50 flex items-center justify-center z-10"
+              >
+                {isMuted ? <VolumeX className="w-4 h-4 text-white" /> : <Volume2 className="w-4 h-4 text-white" />}
+              </button>
+            </>
+          ) : (
+            <img
+              src={post.media_urls[0]}
+              alt={post.title}
+              className="w-full h-full object-cover cursor-pointer"
+              loading="lazy"
+              onClick={() => navigate(`/profile/${post.user_id}`)}
+            />
+          )}
+
+          {/* View progress bar */}
+          {!isProcessed && isInView && (
+            <div className="absolute bottom-0 left-0 right-0 h-1 bg-black/30">
+              <motion.div
+                className="h-full bg-gradient-to-r from-green-400 to-emerald-500"
+                animate={{ width: `${viewProgress}%` }}
+                transition={{ duration: 0.2 }}
+              />
+            </div>
+          )}
+
+          {/* Timer badge */}
+          {!isProcessed && isInView && !isVideo && viewProgress < 100 && (
+            <div className="absolute top-3 right-3">
+              <Badge className="bg-black/60 text-white text-[10px] gap-1 animate-pulse">
+                <Timer className="w-3 h-3" />
+                {Math.ceil(viewDuration - (viewDuration * viewProgress / 100))}s
+              </Badge>
+            </div>
+          )}
+
+          {isProcessed && (
+            <div className="absolute top-3 right-3">
+              <Badge className="bg-green-500 text-white text-[10px] gap-1">
+                <Zap className="w-3 h-3" /> Earned ✓
+              </Badge>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Caption under media */}
+      {hasMedia && post.body && (
+        <p className="px-3 pt-2 text-sm text-muted-foreground line-clamp-2">{post.body}</p>
+      )}
+
+      {/* Action buttons */}
+      <div className="flex items-center justify-between px-3 py-2.5">
+        <div className="flex items-center gap-4">
+          <motion.button
+            whileTap={{ scale: 1.3 }}
+            onClick={onLike}
+            className="flex items-center gap-1.5"
+          >
+            <Heart className={`w-6 h-6 transition-colors ${isLiked ? 'fill-red-500 text-red-500' : 'text-muted-foreground hover:text-red-400'}`} />
+            <span className="text-sm font-semibold">{likesCount}</span>
+          </motion.button>
+
+          <button onClick={() => setShowComments(!showComments)} className="flex items-center gap-1.5">
+            <MessageCircle className="w-5.5 h-5.5 text-muted-foreground hover:text-primary transition-colors" />
+            <span className="text-sm font-semibold">{commentsCount}</span>
+          </button>
+
+          <ShareMenu
+            postId={post.id}
+            postTitle={post.title}
+            postImage={hasMedia ? post.media_urls[0] : undefined}
+            postDescription={post.body}
+          />
+        </div>
+
+        <div className="flex items-center gap-3">
+          <div className="flex items-center gap-1 text-muted-foreground">
+            <Eye className="w-4 h-4" />
+            <span className="text-xs font-medium">{post.view_count || 0}</span>
+          </div>
+          <PostViewers postId={post.id} viewCount={post.view_count || 0} />
+        </div>
+      </div>
+
+      {/* Comments section */}
       <AnimatePresence>
         {showComments && (
           <motion.div
-            initial={{ y: '100%' }}
-            animate={{ y: 0 }}
-            exit={{ y: '100%' }}
-            transition={{ type: 'spring', damping: 25, stiffness: 300 }}
-            className="absolute bottom-0 left-0 right-0 h-[60%] bg-card rounded-t-2xl z-30 shadow-2xl overflow-hidden"
+            initial={{ height: 0, opacity: 0 }}
+            animate={{ height: 'auto', opacity: 1 }}
+            exit={{ height: 0, opacity: 0 }}
+            className="border-t overflow-hidden"
           >
-            <div className="flex items-center justify-center py-2">
-              <div className="w-10 h-1 bg-muted-foreground/30 rounded-full" />
-            </div>
-            <div className="px-4 pb-2 border-b">
-              <h4 className="font-semibold text-sm">Comments ({commentsCount})</h4>
-            </div>
-            <div className="overflow-y-auto h-[calc(100%-3rem)] p-4">
+            <div className="p-3 max-h-64 overflow-y-auto">
               <CommentSection postId={post.id} />
             </div>
           </motion.div>
@@ -352,6 +350,7 @@ const Feed = () => {
   const { user } = useAuth();
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
+  const { toast } = useToast();
   const [posts, setPosts] = useState<Post[]>([]);
   const [users, setUsers] = useState<{ [key: string]: UserProfile }>({});
   const [userProfile, setUserProfile] = useState<UserProfile | null>(null);
@@ -370,89 +369,42 @@ const Feed = () => {
   const [userStarBalance, setUserStarBalance] = useState(0);
   const [walletBalance, setWalletBalance] = useState(0);
   const [followingUsers, setFollowingUsers] = useState<Set<string>>(new Set());
-  const [activePostIndex, setActivePostIndex] = useState(0);
   const [autoScroll, setAutoScroll] = useState(false);
-  const [showHeader, setShowHeader] = useState(true);
+  const [products, setProducts] = useState<any[]>([]);
   const feedRef = useRef<HTMLDivElement>(null);
   const autoScrollTimerRef = useRef<NodeJS.Timeout | null>(null);
-  const { toast } = useToast();
 
   // Anti-bot tracking
   const scrollTimestamps = useRef<number[]>([]);
   const [showBotCheck, setShowBotCheck] = useState(false);
+  const lastScrollY = useRef(0);
 
-  // Intersection observer for snap detection
-  const observerRef = useRef<IntersectionObserver | null>(null);
-  const postRefs = useRef<Map<number, HTMLDivElement>>(new Map());
-
+  // Anti-bot scroll detection
   useEffect(() => {
-    observerRef.current = new IntersectionObserver(
-      (entries) => {
-        entries.forEach((entry) => {
-          if (entry.isIntersecting && entry.intersectionRatio >= 0.7) {
-            const index = Number(entry.target.getAttribute('data-index'));
-            if (!isNaN(index)) {
-              // Anti-bot check
-              const now = Date.now();
-              scrollTimestamps.current.push(now);
-              scrollTimestamps.current = scrollTimestamps.current.filter(t => now - t < 2000);
-              if (scrollTimestamps.current.length > 3) {
-                setShowBotCheck(true);
-                return;
-              }
-              setActivePostIndex(index);
-            }
-          }
-        });
-      },
-      { threshold: 0.7 }
-    );
-
-    return () => observerRef.current?.disconnect();
+    const el = feedRef.current;
+    if (!el) return;
+    const handleScroll = () => {
+      const now = Date.now();
+      const diff = Math.abs(el.scrollTop - lastScrollY.current);
+      lastScrollY.current = el.scrollTop;
+      if (diff > 800) {
+        scrollTimestamps.current.push(now);
+        scrollTimestamps.current = scrollTimestamps.current.filter(t => now - t < 2000);
+        if (scrollTimestamps.current.length > 3) setShowBotCheck(true);
+      }
+    };
+    el.addEventListener('scroll', handleScroll, { passive: true });
+    return () => el.removeEventListener('scroll', handleScroll);
   }, []);
 
   // Auto-scroll logic
   useEffect(() => {
-    if (!autoScroll || posts.length === 0) {
-      if (autoScrollTimerRef.current) clearTimeout(autoScrollTimerRef.current);
-      return;
-    }
-
-    const post = posts[activePostIndex];
-    const hasMedia = post?.media_urls?.length > 0;
-    const isVideo = hasMedia && (post.media_urls[0].match(/\.(mp4|webm|ogg)$/i) || post.media_urls[0].includes('video'));
-    const duration = isVideo ? 35000 : 33000; // auto advance after view complete
-
-    autoScrollTimerRef.current = setTimeout(() => {
-      if (activePostIndex < posts.length - 1) {
-        const nextEl = postRefs.current.get(activePostIndex + 1);
-        nextEl?.scrollIntoView({ behavior: 'smooth' });
-      }
-    }, duration);
-
-    return () => {
-      if (autoScrollTimerRef.current) clearTimeout(autoScrollTimerRef.current);
-    };
-  }, [autoScroll, activePostIndex, posts]);
-
-  // Register post refs with observer
-  const setPostRef = useCallback((index: number, el: HTMLDivElement | null) => {
-    if (el) {
-      postRefs.current.set(index, el);
-      observerRef.current?.observe(el);
-    }
-  }, []);
-
-  // Hide header on scroll
-  useEffect(() => {
-    const handleScroll = () => {
-      if (feedRef.current) {
-        setShowHeader(feedRef.current.scrollTop < 100);
-      }
-    };
-    feedRef.current?.addEventListener('scroll', handleScroll);
-    return () => feedRef.current?.removeEventListener('scroll', handleScroll);
-  }, []);
+    if (!autoScroll || !feedRef.current) return;
+    autoScrollTimerRef.current = setInterval(() => {
+      feedRef.current?.scrollBy({ top: 2, behavior: 'auto' });
+    }, 50);
+    return () => { if (autoScrollTimerRef.current) clearInterval(autoScrollTimerRef.current); };
+  }, [autoScroll]);
 
   // ── Data loading ──
   useEffect(() => {
@@ -460,6 +412,7 @@ const Feed = () => {
       checkUserProfile();
       loadUserBalances();
       loadFollowing();
+      loadProducts();
     }
   }, [user]);
 
@@ -468,7 +421,8 @@ const Feed = () => {
       fetchPosts();
       loadUserStories();
       loadCurrentUserProfile();
-      setupRealtimeSubscription();
+      const cleanup = setupRealtimeSubscription();
+      return cleanup;
     }
   }, [userProfile, showOldPosts]);
 
@@ -484,6 +438,16 @@ const Feed = () => {
       .subscribe();
     return () => { supabase.removeChannel(channel); };
   }, [user]);
+
+  const loadProducts = async () => {
+    const { data } = await supabase
+      .from('products')
+      .select('*, user_profiles:seller_user_id(username, avatar_url, vip)')
+      .eq('status', 'active')
+      .order('created_at', { ascending: false })
+      .limit(10);
+    setProducts(data || []);
+  };
 
   const loadFollowing = async () => {
     if (!user) return;
@@ -528,12 +492,16 @@ const Feed = () => {
         if (!userStoryMap.has(story.user_id)) userStoryMap.set(story.user_id, story);
       });
       const userIds = Array.from(userStoryMap.keys());
-      const { data: profiles } = await supabase.from('user_profiles').select('id, username, avatar_url').in('id', userIds);
-      const profileMap = new Map(profiles?.map(p => [p.id, p]));
-      setStories(Array.from(userStoryMap.values()).map(story => ({
-        ...story,
-        user_profile: profileMap.get(story.user_id)
-      })));
+      if (userIds.length > 0) {
+        const { data: profiles } = await supabase.from('user_profiles').select('id, username, avatar_url').in('id', userIds);
+        const profileMap = new Map(profiles?.map(p => [p.id, p]));
+        setStories(Array.from(userStoryMap.values()).map(story => ({
+          ...story,
+          user_profile: profileMap.get(story.user_id)
+        })));
+      } else {
+        setStories([]);
+      }
     }
   };
 
@@ -582,7 +550,6 @@ const Feed = () => {
           likesLookup[like.post_id].push(like);
         });
 
-        // Load comment counts
         const counts = await Promise.all(
           filteredPosts.map(async (p) => {
             const { count } = await (supabase as any).from('post_comments').select('*', { count: 'exact', head: true }).eq('post_id', p.id);
@@ -617,7 +584,7 @@ const Feed = () => {
           return updated;
         });
         setPosts(prev => prev.map(post =>
-          post.id === payload.new.post_id ? { ...post, likes_count: post.likes_count + 1 } : post
+          post.id === payload.new.post_id ? { ...post, likes_count: (post.likes_count || 0) + 1 } : post
         ));
       })
       .on('postgres_changes', { event: 'DELETE', schema: 'public', table: 'post_likes' }, (payload) => {
@@ -628,12 +595,13 @@ const Feed = () => {
           return updated;
         });
         setPosts(prev => prev.map(post =>
-          post.id === payload.old.post_id ? { ...post, likes_count: Math.max(0, post.likes_count - 1) } : post
+          post.id === payload.old.post_id ? { ...post, likes_count: Math.max(0, (post.likes_count || 0) - 1) } : post
         ));
       })
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'post_views' }, () => {
-        // Refresh view counts
-        fetchPosts();
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'post_views' }, (payload) => {
+        setPosts(prev => prev.map(post =>
+          post.id === payload.new.post_id ? { ...post, view_count: (post.view_count || 0) + 1 } : post
+        ));
       })
       .subscribe();
     return () => { supabase.removeChannel(channel); };
@@ -662,10 +630,8 @@ const Feed = () => {
         await loadUserBalances();
         if (result.charged) {
           toast({ title: '💰 Earned!', description: `⭐ ${result.stars_spent} Stars → ₦${result.viewer_earn} cashback!` });
-        } else if (result.already_viewed) {
-          // silent
-        } else {
-          toast({ title: '👁️ Viewed', description: 'Free post viewed' });
+        } else if (!result.already_viewed && result.free) {
+          toast({ title: '👁️ View recorded' });
         }
       }
     } finally {
@@ -679,44 +645,68 @@ const Feed = () => {
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center" style={{ height: 'calc(100vh - 4rem)' }}>
+      <div className="flex items-center justify-center min-h-[60vh]">
         <div className="flex flex-col items-center gap-3">
-          <div className="w-12 h-12 border-4 border-primary border-t-transparent rounded-full animate-spin" />
-          <p className="text-muted-foreground text-sm animate-pulse">Loading your feed...</p>
+          <div className="w-10 h-10 border-3 border-primary border-t-transparent rounded-full animate-spin" />
+          <p className="text-muted-foreground text-sm">Loading feed...</p>
         </div>
       </div>
     );
   }
 
+  // Build mixed feed items
+  const feedItems: { type: 'post' | 'product' | 'suggested'; data: any; key: string }[] = [];
+  let productIndex = 0;
+  let suggestedInserted = false;
+
+  posts.forEach((post, i) => {
+    feedItems.push({ type: 'post', data: post, key: `post-${post.id}` });
+
+    // Insert marketplace product every 3 posts
+    if ((i + 1) % 3 === 0 && productIndex < products.length) {
+      feedItems.push({ type: 'product', data: products[productIndex], key: `product-${products[productIndex].id}` });
+      productIndex++;
+    }
+
+    // Insert suggested users after 2nd post
+    if (i === 1 && !suggestedInserted) {
+      feedItems.push({ type: 'suggested', data: null, key: 'suggested-users' });
+      suggestedInserted = true;
+    }
+  });
+
   return (
-    <div className="relative" style={{ height: 'calc(100vh - 4rem)' }}>
-      {/* Floating header */}
-      <motion.div
-        className="absolute top-0 left-0 right-0 z-40 px-4 pt-2 pb-1 bg-gradient-to-b from-background to-transparent"
-        animate={{ y: showHeader ? 0 : -100, opacity: showHeader ? 1 : 0 }}
-        transition={{ duration: 0.2 }}
-      >
-        <div className="flex items-center justify-between mb-2">
-          <h1 className="text-lg font-bold text-primary">Lernory</h1>
+    <div className="relative min-h-screen bg-background">
+      {/* Sticky header */}
+      <div className="sticky top-0 z-40 bg-background/95 backdrop-blur-md border-b border-border/50">
+        {/* Top bar */}
+        <div className="flex items-center justify-between px-4 pt-3 pb-2">
+          <h1 className="text-xl font-black bg-gradient-to-r from-primary to-accent bg-clip-text text-transparent">
+            Lernory
+          </h1>
           <div className="flex items-center gap-2">
-            <Badge className="bg-yellow-500/90 text-black text-[10px] gap-0.5">
+            <Badge className="bg-yellow-500/90 text-black text-[10px] gap-0.5 font-bold">
               <Star className="w-3 h-3 fill-current" />{userStarBalance}
             </Badge>
-            <Badge variant="secondary" className="text-[10px]">₦{walletBalance.toLocaleString()}</Badge>
-            
-            {/* Auto-scroll toggle */}
+            <Badge variant="secondary" className="text-[10px] font-bold">₦{walletBalance.toLocaleString()}</Badge>
             <button
               onClick={() => setAutoScroll(!autoScroll)}
-              className={`p-1.5 rounded-full transition-colors ${autoScroll ? 'bg-primary text-primary-foreground' : 'bg-muted'}`}
+              className={`p-1.5 rounded-full transition-all ${autoScroll ? 'bg-primary text-primary-foreground shadow-lg shadow-primary/30' : 'bg-muted text-muted-foreground'}`}
+              title={autoScroll ? 'Auto-scroll ON' : 'Auto-scroll OFF'}
             >
               {autoScroll ? <ToggleRight className="w-4 h-4" /> : <ToggleLeft className="w-4 h-4" />}
             </button>
           </div>
         </div>
 
-        {/* Stories strip */}
-        <div className="overflow-x-auto -mx-4 px-4 pb-1">
-          <div className="flex items-start gap-2.5">
+        {/* Search bar */}
+        <div className="px-4 pb-2">
+          <NewSearchBar />
+        </div>
+
+        {/* Stories */}
+        <div className="overflow-x-auto px-4 pb-2 -mx-0">
+          <div className="flex items-start gap-2.5 min-w-min">
             <StorylineCard
               type="create"
               avatarUrl={currentUserProfile?.avatar_url}
@@ -739,84 +729,78 @@ const Feed = () => {
           </div>
         </div>
 
-        {/* View toggle + create */}
-        <div className="flex gap-1.5 mt-1">
+        {/* Feed tabs */}
+        <div className="flex gap-1.5 px-4 pb-2">
           <Button
             variant={!showOldPosts ? 'default' : 'outline'}
             size="sm"
-            className="flex-1 h-7 text-xs"
+            className="flex-1 h-8 text-xs font-semibold"
             onClick={() => setShowOldPosts(false)}
-          >New</Button>
+          >
+            <TrendingUp className="w-3 h-3 mr-1" /> New
+          </Button>
           <Button
             variant={showOldPosts ? 'default' : 'outline'}
             size="sm"
-            className="flex-1 h-7 text-xs"
+            className="flex-1 h-8 text-xs font-semibold"
             onClick={() => setShowOldPosts(true)}
-          >Past</Button>
+          >
+            Past Posts
+          </Button>
           <Button
             size="sm"
-            className="h-7 text-xs px-3 bg-accent text-accent-foreground"
+            className="h-8 text-xs px-3 gap-1 bg-gradient-to-r from-primary to-accent text-primary-foreground font-semibold"
             onClick={() => setIsCreatePostOpen(true)}
           >
-            <Zap className="w-3 h-3 mr-1" /> Post
+            <Plus className="w-3.5 h-3.5" /> Post
           </Button>
         </div>
-      </motion.div>
+      </div>
 
-      {/* Snap-Focus Feed */}
-      <div
-        ref={feedRef}
-        className="h-full overflow-y-auto"
-        style={{
-          scrollSnapType: 'y mandatory',
-          scrollBehavior: 'smooth',
-          WebkitOverflowScrolling: 'touch',
-        }}
-      >
-        {/* Spacer for header */}
-        <div className="h-36 snap-start" />
-
-        {posts.length === 0 ? (
-          <div className="flex flex-col items-center justify-center gap-4 p-8" style={{ height: 'calc(100vh - 14rem)' }}>
+      {/* Feed content */}
+      <div ref={feedRef} className="px-3 py-3 space-y-3 pb-20 overflow-y-auto" style={{ maxHeight: 'calc(100vh - 4rem)' }}>
+        {feedItems.length === 0 ? (
+          <div className="flex flex-col items-center justify-center gap-4 py-16">
             <div className="text-5xl">🚀</div>
             <h3 className="text-lg font-bold">No posts yet</h3>
-            <p className="text-muted-foreground text-sm text-center">Be the first to share something amazing!</p>
+            <p className="text-muted-foreground text-sm text-center">Be the first to share something!</p>
             <Button onClick={() => setIsCreatePostOpen(true)} className="gap-2">
-              <Zap className="w-4 h-4" /> Create Post
+              <Plus className="w-4 h-4" /> Create Post
             </Button>
           </div>
         ) : (
-          posts.map((post, index) => (
-            <div
-              key={post.id}
-              ref={(el) => setPostRef(index, el)}
-              data-index={index}
-              className="snap-start snap-always"
-            >
-              <SnapFocusPost
+          feedItems.map((item) => {
+            if (item.type === 'suggested') {
+              return <SuggestedUsers key={item.key} />;
+            }
+            if (item.type === 'product') {
+              return <ProductCard key={item.key} product={item.data} />;
+            }
+            const post = item.data as Post;
+            return (
+              <FeedPostCard
+                key={item.key}
                 post={post}
                 postUser={users[post.user_id]}
-                isActive={activePostIndex === index}
                 isLiked={(postLikes[post.id] || []).some(l => l.user_id === user?.id)}
                 likesCount={postLikes[post.id]?.length || 0}
                 commentsCount={post.comments_count || 0}
                 isProcessed={processedPosts.has(post.id)}
                 isFollowing={followingUsers.has(post.user_id)}
                 isOwnPost={post.user_id === user?.id}
-                userStarBalance={userStarBalance}
+                userId={user?.id}
                 onLike={() => handleLike(post.id)}
                 onFollow={() => handleFollow(post.user_id)}
                 onProfile={() => navigate(`/profile/${post.user_id}`)}
-                onComment={() => {}}
                 onProcessView={() => processPostPayment(post)}
                 onFetchPosts={fetchPosts}
               />
-            </div>
-          ))
+            );
+          })
         )}
       </div>
 
-      {/* Anti-bot check dialog */}
+      {/* Anti-bot check */}
       <AnimatePresence>
         {showBotCheck && (
           <motion.div
@@ -827,22 +811,14 @@ const Feed = () => {
           >
             <motion.div
               className="bg-card rounded-2xl p-6 mx-6 max-w-sm w-full shadow-2xl"
-              initial={{ scale: 0.8, y: 50 }}
-              animate={{ scale: 1, y: 0 }}
-              exit={{ scale: 0.8, y: 50 }}
+              initial={{ scale: 0.8 }}
+              animate={{ scale: 1 }}
             >
               <div className="text-center space-y-4">
                 <div className="text-4xl">🧠</div>
                 <h3 className="text-lg font-bold">Brain Box Check</h3>
                 <p className="text-sm text-muted-foreground">Are you learning or just scrolling?</p>
-                <p className="text-xs text-muted-foreground">Slow down to earn more from each post!</p>
-                <Button
-                  className="w-full"
-                  onClick={() => {
-                    setShowBotCheck(false);
-                    scrollTimestamps.current = [];
-                  }}
-                >
+                <Button className="w-full" onClick={() => { setShowBotCheck(false); scrollTimestamps.current = []; }}>
                   I'm Learning! 📚
                 </Button>
               </div>
@@ -854,18 +830,14 @@ const Feed = () => {
       {/* Auto-scroll indicator */}
       {autoScroll && (
         <div className="fixed bottom-20 left-1/2 -translate-x-1/2 z-40">
-          <Badge className="bg-primary/90 text-primary-foreground animate-pulse gap-1">
+          <Badge className="bg-primary/90 text-primary-foreground animate-pulse gap-1 shadow-lg">
             <ChevronUp className="w-3 h-3" /> Auto-scrolling
           </Badge>
         </div>
       )}
 
       {/* Create Post Dialog */}
-      <CreatePost
-        onPostCreated={fetchPosts}
-        isOpen={isCreatePostOpen}
-        onOpenChange={setIsCreatePostOpen}
-      />
+      <CreatePost onPostCreated={fetchPosts} isOpen={isCreatePostOpen} onOpenChange={setIsCreatePostOpen} />
 
       {/* Story Viewer */}
       {showStoryViewer && selectedStoryUserId && (
