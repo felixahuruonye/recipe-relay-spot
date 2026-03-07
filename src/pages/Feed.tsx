@@ -196,7 +196,7 @@ const FeedPostCard: React.FC<{
               <UserPlus className="w-3 h-3" /> Follow
             </Button>
           )}
-          <PostMenu postId={post.id} postUserId={post.user_id} onPostUpdated={onFetchPosts} />
+          <PostMenu postId={post.id} postOwnerId={post.user_id} onPostUpdated={onFetchPosts} />
         </div>
       </div>
 
