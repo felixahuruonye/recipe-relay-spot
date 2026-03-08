@@ -4,8 +4,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { Button } from '@/components/ui/button';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Badge } from '@/components/ui/badge';
-import { Card } from '@/components/ui/card';
-import { Heart, MessageCircle, Star, Eye, Share2, Volume2, VolumeX, Zap, Timer, UserPlus, ToggleLeft, ToggleRight, Plus, Search, ShoppingBag, TrendingUp, ChevronUp } from 'lucide-react';
+import { Heart, MessageCircle, Star, Eye, Share2, Volume2, VolumeX, Zap, Timer, UserPlus, ToggleLeft, ToggleRight, Plus, TrendingUp, ChevronUp, ShieldAlert, Coins } from 'lucide-react';
 import { EnhancedStorylineViewer } from '@/components/Storyline/EnhancedStorylineViewer';
 import { CreateStoryline } from '@/components/Storyline/CreateStoryline';
 import { StorylineCard } from '@/components/Storyline/StorylineCard';
@@ -56,6 +55,75 @@ interface PostLike {
   post_id: string;
 }
 
+// ── Star Gate Card ──
+const StarGateCard: React.FC<{
+  starPrice: number;
+  userStars: number;
+  onTopUp: () => void;
+  onSkip: () => void;
+}> = ({ starPrice, userStars, onTopUp, onSkip }) => (
+  <motion.div
+    className="absolute inset-0 bg-black/70 backdrop-blur-md flex items-center justify-center z-20 rounded-2xl"
+    initial={{ opacity: 0 }}
+    animate={{ opacity: 1 }}
+    exit={{ opacity: 0 }}
+  >
+    <motion.div
+      className="bg-card rounded-2xl p-5 mx-4 max-w-xs w-full shadow-2xl border border-border"
+      initial={{ scale: 0.85, y: 20 }}
+      animate={{ scale: 1, y: 0 }}
+    >
+      <div className="text-center space-y-3">
+        <div className="w-14 h-14 mx-auto rounded-full bg-yellow-500/20 flex items-center justify-center">
+          <ShieldAlert className="w-7 h-7 text-yellow-500" />
+        </div>
+        <h3 className="font-bold text-base">Can't Earn From This Post</h3>
+        <p className="text-sm text-muted-foreground">
+          This post requires <span className="font-bold text-yellow-500">{starPrice} ⭐</span> to watch & earn.
+          You have <span className="font-bold">{userStars} ⭐</span>.
+        </p>
+        <p className="text-xs text-muted-foreground">Top up your Star balance to earn from this post, or scroll to the next one.</p>
+        <div className="flex gap-2 pt-1">
+          <Button
+            className="flex-1 gap-1.5 bg-gradient-to-r from-yellow-500 to-orange-500 text-black font-bold hover:from-yellow-400 hover:to-orange-400"
+            onClick={onTopUp}
+          >
+            <Coins className="w-4 h-4" /> Top Up Stars
+          </Button>
+          <Button variant="outline" className="flex-1" onClick={onSkip}>
+            Cancel
+          </Button>
+        </div>
+      </div>
+    </motion.div>
+  </motion.div>
+);
+
+// ── Earnings Toast Card ──
+const EarningsPopup: React.FC<{
+  amount: number;
+  starsSpent: number;
+  onDismiss: () => void;
+}> = ({ amount, starsSpent, onDismiss }) => (
+  <motion.div
+    className="absolute top-3 left-3 right-3 z-30"
+    initial={{ opacity: 0, y: -20 }}
+    animate={{ opacity: 1, y: 0 }}
+    exit={{ opacity: 0, y: -20 }}
+  >
+    <div className="bg-green-500/95 rounded-xl p-3 shadow-lg flex items-center gap-3">
+      <div className="w-10 h-10 rounded-full bg-white/20 flex items-center justify-center shrink-0">
+        <Zap className="w-5 h-5 text-white" />
+      </div>
+      <div className="flex-1 text-white">
+        <p className="font-bold text-sm">You Earned! 💰</p>
+        <p className="text-xs opacity-90">⭐ {starsSpent} Stars → ₦{amount} cashback!</p>
+      </div>
+      <button onClick={onDismiss} className="text-white/70 hover:text-white text-xs font-medium">OK</button>
+    </div>
+  </motion.div>
+);
+
 // ── Feed Post Card ──
 const FeedPostCard: React.FC<{
   post: Post;
@@ -67,28 +135,36 @@ const FeedPostCard: React.FC<{
   isFollowing: boolean;
   isOwnPost: boolean;
   userId?: string;
+  userStarBalance: number;
   onLike: () => void;
   onFollow: () => void;
   onProfile: () => void;
   onProcessView: () => void;
   onFetchPosts: () => void;
-}> = ({ post, postUser, isLiked, likesCount, commentsCount, isProcessed, isFollowing, isOwnPost, userId, onLike, onFollow, onProfile, onProcessView, onFetchPosts }) => {
+  onStarGateSkip: () => void;
+  onAutoScrollComplete?: () => void;
+}> = ({ post, postUser, isLiked, likesCount, commentsCount, isProcessed, isFollowing, isOwnPost, userId, userStarBalance, onLike, onFollow, onProfile, onProcessView, onFetchPosts, onStarGateSkip, onAutoScrollComplete }) => {
   const [showComments, setShowComments] = useState(false);
   const [viewProgress, setViewProgress] = useState(0);
   const [isMuted, setIsMuted] = useState(false);
   const [isInView, setIsInView] = useState(false);
+  const [showStarGate, setShowStarGate] = useState(false);
+  const [showEarnings, setShowEarnings] = useState<{ amount: number; stars: number } | null>(null);
   const timerRef = useRef<NodeJS.Timeout | null>(null);
   const startTimeRef = useRef<number>(0);
   const hasProcessedRef = useRef(false);
+  const hasCheckedGateRef = useRef(false);
   const videoRef = useRef<HTMLVideoElement>(null);
   const cardRef = useRef<HTMLDivElement>(null);
   const navigate = useNavigate();
 
   const hasMedia = post.media_urls && post.media_urls.length > 0;
   const isVideo = hasMedia && (post.media_urls[0]?.match(/\.(mp4|webm|ogg|mov)$/i) || post.media_urls[0]?.includes('video'));
-  const viewDuration = 30; // 30 seconds for images
+  const viewDuration = 30;
+  const starPrice = post.star_price || 0;
+  const needsStars = starPrice > 0 && !isOwnPost && userStarBalance < starPrice;
 
-  // Intersection observer for auto-play and view tracking
+  // Intersection observer
   useEffect(() => {
     const el = cardRef.current;
     if (!el) return;
@@ -99,13 +175,22 @@ const FeedPostCard: React.FC<{
         setIsInView(inView);
 
         if (inView) {
-          // Auto-play video with sound
+          // Star gate check
+          if (needsStars && !hasCheckedGateRef.current && !isProcessed) {
+            hasCheckedGateRef.current = true;
+            setShowStarGate(true);
+            return;
+          }
+
+          if (showStarGate) return;
+
+          // Auto-play video
           if (isVideo && videoRef.current) {
             videoRef.current.muted = isMuted;
             videoRef.current.play().catch(() => {});
           }
-          // Start view timer
-          if (!hasProcessedRef.current && !isProcessed) {
+          // Start view timer for images
+          if (!hasProcessedRef.current && !isProcessed && !needsStars) {
             startTimeRef.current = Date.now();
             timerRef.current = setInterval(() => {
               const elapsed = (Date.now() - startTimeRef.current) / 1000;
@@ -116,15 +201,14 @@ const FeedPostCard: React.FC<{
                   hasProcessedRef.current = true;
                   onProcessView();
                   if (timerRef.current) clearInterval(timerRef.current);
+                  // Auto-scroll after image timer
+                  setTimeout(() => onAutoScrollComplete?.(), 800);
                 }
               }
             }, 200);
           }
         } else {
-          // Pause video when out of view
-          if (isVideo && videoRef.current) {
-            videoRef.current.pause();
-          }
+          if (isVideo && videoRef.current) videoRef.current.pause();
           if (timerRef.current) clearInterval(timerRef.current);
         }
       },
@@ -133,12 +217,14 @@ const FeedPostCard: React.FC<{
 
     observer.observe(el);
     return () => { observer.disconnect(); if (timerRef.current) clearInterval(timerRef.current); };
-  }, [isProcessed, isMuted]);
+  }, [isProcessed, isMuted, showStarGate, needsStars]);
 
-  // Reset on post change
   useEffect(() => {
     hasProcessedRef.current = isProcessed;
+    hasCheckedGateRef.current = false;
     setViewProgress(isProcessed ? 100 : 0);
+    setShowStarGate(false);
+    setShowEarnings(null);
   }, [post.id, isProcessed]);
 
   const handleVideoEnded = () => {
@@ -146,7 +232,19 @@ const FeedPostCard: React.FC<{
       hasProcessedRef.current = true;
       setViewProgress(100);
       onProcessView();
+      // Auto-scroll after video ends
+      setTimeout(() => onAutoScrollComplete?.(), 800);
     }
+  };
+
+  // Show earnings popup when processed
+  const handleProcessViewWithEarnings = () => {
+    onProcessView();
+  };
+
+  const handleStarGateSkip = () => {
+    setShowStarGate(false);
+    onStarGateSkip();
   };
 
   const timeAgo = (date: string) => {
@@ -165,6 +263,29 @@ const FeedPostCard: React.FC<{
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.3 }}
     >
+      {/* Star Gate overlay */}
+      <AnimatePresence>
+        {showStarGate && (
+          <StarGateCard
+            starPrice={starPrice}
+            userStars={userStarBalance}
+            onTopUp={() => navigate('/star-marketplace')}
+            onSkip={handleStarGateSkip}
+          />
+        )}
+      </AnimatePresence>
+
+      {/* Earnings popup */}
+      <AnimatePresence>
+        {showEarnings && (
+          <EarningsPopup
+            amount={showEarnings.amount}
+            starsSpent={showEarnings.stars}
+            onDismiss={() => setShowEarnings(null)}
+          />
+        )}
+      </AnimatePresence>
+
       {/* Header */}
       <div className="flex items-center justify-between p-3 pb-2">
         <div className="flex items-center gap-2.5">
@@ -209,11 +330,11 @@ const FeedPostCard: React.FC<{
       </div>
 
       {/* Star Price */}
-      {post.star_price && post.star_price > 0 && !isOwnPost && (
+      {starPrice > 0 && !isOwnPost && (
         <div className="px-3 pb-2">
           <Badge className="bg-yellow-500/90 text-black gap-1">
             <Star className="w-3 h-3 fill-current" />
-            {post.star_price} Stars to watch & earn
+            {starPrice} Stars to watch & earn
           </Badge>
         </div>
       )}
@@ -236,7 +357,6 @@ const FeedPostCard: React.FC<{
                   else videoRef.current?.pause();
                 }}
               />
-              {/* Mute toggle */}
               <button
                 onClick={() => {
                   setIsMuted(!isMuted);
@@ -258,7 +378,7 @@ const FeedPostCard: React.FC<{
           )}
 
           {/* View progress bar */}
-          {!isProcessed && isInView && (
+          {!isProcessed && isInView && !showStarGate && (
             <div className="absolute bottom-0 left-0 right-0 h-1 bg-black/30">
               <motion.div
                 className="h-full bg-gradient-to-r from-green-400 to-emerald-500"
@@ -269,7 +389,7 @@ const FeedPostCard: React.FC<{
           )}
 
           {/* Timer badge */}
-          {!isProcessed && isInView && !isVideo && viewProgress < 100 && (
+          {!isProcessed && isInView && !isVideo && viewProgress < 100 && !showStarGate && (
             <div className="absolute top-3 right-3">
               <Badge className="bg-black/60 text-white text-[10px] gap-1 animate-pulse">
                 <Timer className="w-3 h-3" />
@@ -288,7 +408,7 @@ const FeedPostCard: React.FC<{
         </div>
       )}
 
-      {/* Caption under media */}
+      {/* Caption */}
       {hasMedia && post.body && (
         <p className="px-3 pt-2 text-sm text-muted-foreground line-clamp-2">{post.body}</p>
       )}
@@ -296,28 +416,16 @@ const FeedPostCard: React.FC<{
       {/* Action buttons */}
       <div className="flex items-center justify-between px-3 py-2.5">
         <div className="flex items-center gap-4">
-          <motion.button
-            whileTap={{ scale: 1.3 }}
-            onClick={onLike}
-            className="flex items-center gap-1.5"
-          >
+          <motion.button whileTap={{ scale: 1.3 }} onClick={onLike} className="flex items-center gap-1.5">
             <Heart className={`w-6 h-6 transition-colors ${isLiked ? 'fill-red-500 text-red-500' : 'text-muted-foreground hover:text-red-400'}`} />
             <span className="text-sm font-semibold">{likesCount}</span>
           </motion.button>
-
           <button onClick={() => setShowComments(!showComments)} className="flex items-center gap-1.5">
             <MessageCircle className="w-5.5 h-5.5 text-muted-foreground hover:text-primary transition-colors" />
             <span className="text-sm font-semibold">{commentsCount}</span>
           </button>
-
-          <ShareMenu
-            postId={post.id}
-            postTitle={post.title}
-            postImage={hasMedia ? post.media_urls[0] : undefined}
-            postDescription={post.body}
-          />
+          <ShareMenu postId={post.id} postTitle={post.title} postImage={hasMedia ? post.media_urls[0] : undefined} postDescription={post.body} />
         </div>
-
         <div className="flex items-center gap-3">
           <div className="flex items-center gap-1 text-muted-foreground">
             <Eye className="w-4 h-4" />
@@ -327,15 +435,10 @@ const FeedPostCard: React.FC<{
         </div>
       </div>
 
-      {/* Comments section */}
+      {/* Comments */}
       <AnimatePresence>
         {showComments && (
-          <motion.div
-            initial={{ height: 0, opacity: 0 }}
-            animate={{ height: 'auto', opacity: 1 }}
-            exit={{ height: 0, opacity: 0 }}
-            className="border-t overflow-hidden"
-          >
+          <motion.div initial={{ height: 0, opacity: 0 }} animate={{ height: 'auto', opacity: 1 }} exit={{ height: 0, opacity: 0 }} className="border-t overflow-hidden">
             <div className="p-3 max-h-64 overflow-y-auto">
               <CommentSection postId={post.id} />
             </div>
@@ -346,6 +449,7 @@ const FeedPostCard: React.FC<{
   );
 };
 
+// ── Main Feed ──
 const Feed = () => {
   const { user } = useAuth();
   const navigate = useNavigate();
@@ -372,7 +476,8 @@ const Feed = () => {
   const [autoScroll, setAutoScroll] = useState(false);
   const [products, setProducts] = useState<any[]>([]);
   const feedRef = useRef<HTMLDivElement>(null);
-  const autoScrollTimerRef = useRef<NodeJS.Timeout | null>(null);
+  const postCardsRef = useRef<HTMLDivElement[]>([]);
+  const currentPostIndexRef = useRef(0);
 
   // Anti-bot tracking
   const scrollTimestamps = useRef<number[]>([]);
@@ -397,13 +502,15 @@ const Feed = () => {
     return () => el.removeEventListener('scroll', handleScroll);
   }, []);
 
-  // Auto-scroll logic
-  useEffect(() => {
+  // Auto-scroll: scroll to next post card
+  const scrollToNextPost = useCallback(() => {
     if (!autoScroll || !feedRef.current) return;
-    autoScrollTimerRef.current = setInterval(() => {
-      feedRef.current?.scrollBy({ top: 2, behavior: 'auto' });
-    }, 50);
-    return () => { if (autoScrollTimerRef.current) clearInterval(autoScrollTimerRef.current); };
+    const postElements = feedRef.current.querySelectorAll('[data-post-card]');
+    if (postElements.length === 0) return;
+    currentPostIndexRef.current = Math.min(currentPostIndexRef.current + 1, postElements.length - 1);
+    postElements[currentPostIndexRef.current]?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    // Haptic feedback
+    if (navigator.vibrate) navigator.vibrate(15);
   }, [autoScroll]);
 
   // ── Data loading ──
@@ -629,7 +736,10 @@ const Feed = () => {
         setProcessedPosts(prev => new Set(prev).add(post.id));
         await loadUserBalances();
         if (result.charged) {
-          toast({ title: '💰 Earned!', description: `⭐ ${result.stars_spent} Stars → ₦${result.viewer_earn} cashback!` });
+          toast({
+            title: '💰 You Earned!',
+            description: `⭐ ${result.stars_spent} Stars → ₦${result.viewer_earn} cashback!`,
+          });
         } else if (!result.already_viewed && result.free) {
           toast({ title: '👁️ View recorded' });
         }
@@ -638,6 +748,11 @@ const Feed = () => {
       processingPostsRef.current.delete(post.id);
     }
   }, [user, processedPosts]);
+
+  // Skip to next post (for star gate cancel or auto-scroll)
+  const skipToNextPost = useCallback(() => {
+    scrollToNextPost();
+  }, [scrollToNextPost]);
 
   if (needsProfileSetup) {
     return <ProfileSetup onComplete={() => { setNeedsProfileSetup(false); checkUserProfile(); }} />;
@@ -661,14 +776,10 @@ const Feed = () => {
 
   posts.forEach((post, i) => {
     feedItems.push({ type: 'post', data: post, key: `post-${post.id}` });
-
-    // Insert marketplace product every 3 posts
     if ((i + 1) % 3 === 0 && productIndex < products.length) {
       feedItems.push({ type: 'product', data: products[productIndex], key: `product-${products[productIndex].id}` });
       productIndex++;
     }
-
-    // Insert suggested users after 2nd post
     if (i === 1 && !suggestedInserted) {
       feedItems.push({ type: 'suggested', data: null, key: 'suggested-users' });
       suggestedInserted = true;
@@ -677,10 +788,10 @@ const Feed = () => {
 
   return (
     <div className="relative min-h-screen bg-background">
-      {/* Sticky header */}
+      {/* Fixed header: Lernory brand + stars + auto-scroll + tabs */}
       <div className="sticky top-0 z-40 bg-background/95 backdrop-blur-md border-b border-border/50">
         {/* Top bar */}
-        <div className="flex items-center justify-between px-4 pt-3 pb-2">
+        <div className="flex items-center justify-between px-4 pt-3 pb-1.5">
           <h1 className="text-xl font-black bg-gradient-to-r from-primary to-accent bg-clip-text text-transparent">
             Lernory
           </h1>
@@ -699,38 +810,8 @@ const Feed = () => {
           </div>
         </div>
 
-        {/* Search bar */}
-        <div className="px-4 pb-2">
-          <NewSearchBar />
-        </div>
-
-        {/* Stories */}
-        <div className="overflow-x-auto px-4 pb-2 -mx-0">
-          <div className="flex items-start gap-2.5 min-w-min">
-            <StorylineCard
-              type="create"
-              avatarUrl={currentUserProfile?.avatar_url}
-              onSelect={() => setShowCreateStory(true)}
-            />
-            {stories.map((story: any) => (
-              <StorylineCard
-                key={story.id}
-                type="story"
-                previewUrl={story.preview_url || story.media_url}
-                avatarUrl={story.user_profile?.avatar_url}
-                username={story.user_profile?.username}
-                starPrice={story.star_price}
-                onSelect={() => {
-                  setSelectedStoryUserId(story.user_id);
-                  setShowStoryViewer(true);
-                }}
-              />
-            ))}
-          </div>
-        </div>
-
-        {/* Feed tabs */}
-        <div className="flex gap-1.5 px-4 pb-2">
+        {/* Feed tabs - always visible under header */}
+        <div className="flex gap-1.5 px-4 pb-2 pt-1">
           <Button
             variant={!showOldPosts ? 'default' : 'outline'}
             size="sm"
@@ -757,8 +838,39 @@ const Feed = () => {
         </div>
       </div>
 
-      {/* Feed content */}
-      <div ref={feedRef} className="px-3 py-3 space-y-3 pb-20 overflow-y-auto" style={{ maxHeight: 'calc(100vh - 4rem)' }}>
+      {/* Scrollable content: search, stories, then posts */}
+      <div ref={feedRef} className="px-3 py-3 space-y-3 pb-20 overflow-y-auto" style={{ maxHeight: 'calc(100vh - 7.5rem)' }}>
+        {/* Search bar - scrolls with content */}
+        <div className="px-1">
+          <NewSearchBar />
+        </div>
+
+        {/* Stories strip - scrolls with content */}
+        <div className="overflow-x-auto -mx-1 px-1">
+          <div className="flex items-start gap-2.5 min-w-min">
+            <StorylineCard
+              type="create"
+              avatarUrl={currentUserProfile?.avatar_url}
+              onSelect={() => setShowCreateStory(true)}
+            />
+            {stories.map((story: any) => (
+              <StorylineCard
+                key={story.id}
+                type="story"
+                previewUrl={story.preview_url || story.media_url}
+                avatarUrl={story.user_profile?.avatar_url}
+                username={story.user_profile?.username}
+                starPrice={story.star_price}
+                onSelect={() => {
+                  setSelectedStoryUserId(story.user_id);
+                  setShowStoryViewer(true);
+                }}
+              />
+            ))}
+          </div>
+        </div>
+
+        {/* Feed items */}
         {feedItems.length === 0 ? (
           <div className="flex flex-col items-center justify-center gap-4 py-16">
             <div className="text-5xl">🚀</div>
@@ -778,23 +890,27 @@ const Feed = () => {
             }
             const post = item.data as Post;
             return (
-              <FeedPostCard
-                key={item.key}
-                post={post}
-                postUser={users[post.user_id]}
-                isLiked={(postLikes[post.id] || []).some(l => l.user_id === user?.id)}
-                likesCount={postLikes[post.id]?.length || 0}
-                commentsCount={post.comments_count || 0}
-                isProcessed={processedPosts.has(post.id)}
-                isFollowing={followingUsers.has(post.user_id)}
-                isOwnPost={post.user_id === user?.id}
-                userId={user?.id}
-                onLike={() => handleLike(post.id)}
-                onFollow={() => handleFollow(post.user_id)}
-                onProfile={() => navigate(`/profile/${post.user_id}`)}
-                onProcessView={() => processPostPayment(post)}
-                onFetchPosts={fetchPosts}
-              />
+              <div key={item.key} data-post-card>
+                <FeedPostCard
+                  post={post}
+                  postUser={users[post.user_id]}
+                  isLiked={(postLikes[post.id] || []).some(l => l.user_id === user?.id)}
+                  likesCount={postLikes[post.id]?.length || 0}
+                  commentsCount={post.comments_count || 0}
+                  isProcessed={processedPosts.has(post.id)}
+                  isFollowing={followingUsers.has(post.user_id)}
+                  isOwnPost={post.user_id === user?.id}
+                  userId={user?.id}
+                  userStarBalance={userStarBalance}
+                  onLike={() => handleLike(post.id)}
+                  onFollow={() => handleFollow(post.user_id)}
+                  onProfile={() => navigate(`/profile/${post.user_id}`)}
+                  onProcessView={() => processPostPayment(post)}
+                  onFetchPosts={fetchPosts}
+                  onStarGateSkip={skipToNextPost}
+                  onAutoScrollComplete={autoScroll ? scrollToNextPost : undefined}
+                />
+              </div>
             );
           })
         )}
@@ -803,17 +919,8 @@ const Feed = () => {
       {/* Anti-bot check */}
       <AnimatePresence>
         {showBotCheck && (
-          <motion.div
-            className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50"
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-          >
-            <motion.div
-              className="bg-card rounded-2xl p-6 mx-6 max-w-sm w-full shadow-2xl"
-              initial={{ scale: 0.8 }}
-              animate={{ scale: 1 }}
-            >
+          <motion.div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
+            <motion.div className="bg-card rounded-2xl p-6 mx-6 max-w-sm w-full shadow-2xl" initial={{ scale: 0.8 }} animate={{ scale: 1 }}>
               <div className="text-center space-y-4">
                 <div className="text-4xl">🧠</div>
                 <h3 className="text-lg font-bold">Brain Box Check</h3>
