@@ -324,8 +324,8 @@ const NewSearchBar = () => {
               onClick={handleFlowaIr}
               disabled={!query.trim()}
             >
-              <Sparkles className="w-4 h-4 mr-1" />
-              AI Search
+              <Sparkles className="w-4 h-4 mr-0.5" />
+              AI 🔎
             </Button>
           </div>
         </div>

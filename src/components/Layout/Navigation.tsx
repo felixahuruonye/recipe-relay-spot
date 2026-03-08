@@ -82,10 +82,18 @@ const Navigation = () => {
       <div className="flex justify-around items-center h-16 px-2">
         {navItems.map(({ icon: Icon, label, path, badge }) => {
           const isActive = location.pathname === path;
+          const isHome = path === '/';
           return (
-            <Link
+            <button
               key={path}
-              to={path}
+              onClick={() => {
+                if (isHome && isActive) {
+                  // Refresh the page when tapping Home while already on Home
+                  window.location.reload();
+                } else {
+                  window.location.href = path;
+                }
+              }}
               className={`flex flex-col items-center justify-center flex-1 py-2 transition-colors relative ${
                 isActive 
                   ? 'text-primary' 
@@ -94,14 +102,14 @@ const Navigation = () => {
             >
               <div className="relative">
                 <Icon size={20} />
-                {badge > 0 && (
+                {(badge ?? 0) > 0 && (
                   <span className="absolute -top-1.5 -right-2 bg-destructive text-destructive-foreground text-[10px] font-bold rounded-full min-w-[16px] h-4 flex items-center justify-center px-1">
-                    {badge > 99 ? '99+' : badge}
+                    {(badge ?? 0) > 99 ? '99+' : badge}
                   </span>
                 )}
               </div>
-              <span className="text-xs mt-1">{label}</span>
-            </Link>
+              <span className="text-xs mt-1">{isHome && isActive ? '⟳ Refresh' : label}</span>
+            </button>
           );
         })}
         
