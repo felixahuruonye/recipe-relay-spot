@@ -625,6 +625,11 @@ const Feed = () => {
     if (error) { setLoading(false); return; }
     setUserProfile(data);
     setNeedsProfileSetup(false);
+    // Check onboarding
+    const storySettings = data?.story_settings as any;
+    if (!storySettings?.onboarding_complete) {
+      setNeedsOnboarding(true);
+    }
   };
 
   const fetchPosts = async () => {
