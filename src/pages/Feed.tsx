@@ -462,6 +462,7 @@ const Feed = () => {
   const [postLikes, setPostLikes] = useState<{ [key: string]: PostLike[] }>({});
   const [loading, setLoading] = useState(true);
   const [needsProfileSetup, setNeedsProfileSetup] = useState(false);
+  const [needsOnboarding, setNeedsOnboarding] = useState(false);
   const [showOldPosts, setShowOldPosts] = useState(false);
   const [stories, setStories] = useState<any[]>([]);
   const [selectedStoryUserId, setSelectedStoryUserId] = useState<string | null>(null);
