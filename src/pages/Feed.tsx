@@ -954,8 +954,8 @@ const Feed = () => {
         </div>
       )}
 
-      {/* Create Post Dialog */}
-      <CreatePost onPostCreated={fetchPosts} isOpen={isCreatePostOpen} onOpenChange={setIsCreatePostOpen} />
+      {/* Create Post Wizard */}
+      <CreatePostWizard onPostCreated={fetchPosts} isOpen={isCreatePostOpen} onOpenChange={setIsCreatePostOpen} />
 
       {/* Story Viewer */}
       {showStoryViewer && selectedStoryUserId && (
