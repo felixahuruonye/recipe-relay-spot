@@ -765,6 +765,10 @@ const Feed = () => {
     return <ProfileSetup onComplete={() => { setNeedsProfileSetup(false); checkUserProfile(); }} />;
   }
 
+  if (needsOnboarding) {
+    return <OnboardingFlow onComplete={() => setNeedsOnboarding(false)} />;
+  }
+
   if (loading) {
     return (
       <div className="flex items-center justify-center min-h-[60vh]">
