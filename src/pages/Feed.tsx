@@ -10,7 +10,8 @@ import { CreateStoryline } from '@/components/Storyline/CreateStoryline';
 import { StorylineCard } from '@/components/Storyline/StorylineCard';
 import { useToast } from '@/hooks/use-toast';
 import { useNavigate, useSearchParams } from 'react-router-dom';
-import CreatePost from '@/components/Posts/CreatePost';
+import CreatePostWizard from '@/components/Posts/CreatePostWizard';
+import OnboardingFlow from '@/components/Onboarding/OnboardingFlow';
 import ProfileSetup from '@/components/Profile/ProfileSetup';
 import NewSearchBar from '@/components/Search/NewSearchBar';
 import { CommentSection } from '@/components/Feed/CommentSection';
@@ -461,6 +462,7 @@ const Feed = () => {
   const [postLikes, setPostLikes] = useState<{ [key: string]: PostLike[] }>({});
   const [loading, setLoading] = useState(true);
   const [needsProfileSetup, setNeedsProfileSetup] = useState(false);
+  const [needsOnboarding, setNeedsOnboarding] = useState(false);
   const [showOldPosts, setShowOldPosts] = useState(false);
   const [stories, setStories] = useState<any[]>([]);
   const [selectedStoryUserId, setSelectedStoryUserId] = useState<string | null>(null);
@@ -623,6 +625,11 @@ const Feed = () => {
     if (error) { setLoading(false); return; }
     setUserProfile(data);
     setNeedsProfileSetup(false);
+    // Check onboarding
+    const storySettings = data?.story_settings as any;
+    if (!storySettings?.onboarding_complete) {
+      setNeedsOnboarding(true);
+    }
   };
 
   const fetchPosts = async () => {
@@ -756,6 +763,10 @@ const Feed = () => {
 
   if (needsProfileSetup) {
     return <ProfileSetup onComplete={() => { setNeedsProfileSetup(false); checkUserProfile(); }} />;
+  }
+
+  if (needsOnboarding) {
+    return <OnboardingFlow onComplete={() => setNeedsOnboarding(false)} />;
   }
 
   if (loading) {
@@ -943,8 +954,8 @@ const Feed = () => {
         </div>
       )}
 
-      {/* Create Post Dialog */}
-      <CreatePost onPostCreated={fetchPosts} isOpen={isCreatePostOpen} onOpenChange={setIsCreatePostOpen} />
+      {/* Create Post Wizard */}
+      <CreatePostWizard onPostCreated={fetchPosts} isOpen={isCreatePostOpen} onOpenChange={setIsCreatePostOpen} />
 
       {/* Story Viewer */}
       {showStoryViewer && selectedStoryUserId && (

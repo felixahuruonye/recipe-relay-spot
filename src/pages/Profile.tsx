@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react';
+import { updateMetaTags, resetMetaTags } from '@/lib/updateMetaTags';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/integrations/supabase/client';
 import { Button } from '@/components/ui/button';
@@ -86,6 +87,14 @@ const Profile = () => {
         .single();
       if (error) throw error;
       setProfile(data);
+      // Update OG meta tags for deep linking
+      updateMetaTags({
+        title: `${data.username} on Lernory`,
+        description: data.bio || `Check out ${data.username}'s profile on Lernory Social`,
+        image: data.avatar_url || `${window.location.origin}/lernory-logo.png`,
+        url: `${window.location.origin}/profile/${data.id}`,
+        type: 'profile',
+      });
     } catch (error) {
       console.error('Error fetching profile:', error);
       toast({ title: "Error", description: "Failed to load profile", variant: "destructive" });
