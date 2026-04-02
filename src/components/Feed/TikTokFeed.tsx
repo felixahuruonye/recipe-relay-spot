@@ -506,6 +506,7 @@ const TikTokFeed: React.FC = () => {
                   key={post.id}
                   post={post}
                   postUser={users[post.user_id]}
+                  musicTrack={post.music_track_id ? musicTracks[post.music_track_id] : undefined}
                   isActive={index === activeIndex}
                   isLiked={(postLikes[post.id] || []).some((l: any) => l.user_id === user?.id)}
                   likesCount={postLikes[post.id]?.length || 0}
