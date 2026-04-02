@@ -32,6 +32,14 @@ interface Post {
   user_id: string;
   star_price?: number;
   media_type?: string;
+  music_track_id?: string;
+}
+
+interface MusicTrack {
+  id: string;
+  title: string;
+  artist_name: string;
+  audio_url: string;
 }
 
 interface UserProfile {
