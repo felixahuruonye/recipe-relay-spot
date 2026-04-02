@@ -382,7 +382,27 @@ const TikTokFeed: React.FC = () => {
           likesMap[l.post_id].push(l);
         });
 
-        setPosts(allPosts);
+        // Fetch music tracks for posts that have them
+        const musicTrackIds = allPosts.filter(p => p.music_track_id).map(p => p.music_track_id!);
+        if (musicTrackIds.length > 0) {
+          const { data: musicData } = await supabase
+            .from('music_tracks')
+            .select('id, title, artist_name, audio_url')
+            .in('id', musicTrackIds);
+          const mMap: Record<string, MusicTrack> = {};
+          musicData?.forEach((m: any) => { mMap[m.id] = m; });
+          setMusicTracks(mMap);
+        }
+
+        // Attach music tracks to posts for the component
+        const enrichedPosts = allPosts.map(p => {
+          if (p.music_track_id && musicTrackIds.length > 0) {
+            return { ...p, __musicTrack: undefined }; // will be set after state
+          }
+          return p;
+        });
+
+        setPosts(enrichedPosts);
         setUsers(usersMap);
         setPostLikes(likesMap);
       }
