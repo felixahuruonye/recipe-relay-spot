@@ -108,6 +108,18 @@ const TikTokPost: React.FC<{
     }
   }, [isActive, isMuted]);
 
+  // Video play/pause
+  useEffect(() => {
+    if (!videoRef.current) return;
+    if (isActive) {
+      videoRef.current.currentTime = 0;
+      videoRef.current.muted = isMuted;
+      videoRef.current.play().catch(() => {});
+    } else {
+      videoRef.current.pause();
+    }
+  }, [isActive, isMuted]);
+
   const handleAction = (action: () => void, msg?: string) => {
     if (!isLoggedIn) {
       onRequireLogin(msg);
