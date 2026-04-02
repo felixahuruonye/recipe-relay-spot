@@ -32,6 +32,14 @@ interface Post {
   user_id: string;
   star_price?: number;
   media_type?: string;
+  music_track_id?: string;
+}
+
+interface MusicTrack {
+  id: string;
+  title: string;
+  artist_name: string;
+  audio_url: string;
 }
 
 interface UserProfile {
@@ -45,6 +53,7 @@ interface UserProfile {
 const TikTokPost: React.FC<{
   post: Post;
   postUser?: UserProfile;
+  musicTrack?: MusicTrack;
   isActive: boolean;
   isLiked: boolean;
   likesCount: number;
@@ -61,14 +70,44 @@ const TikTokPost: React.FC<{
   onRequireLogin: (msg?: string) => void;
   isLoggedIn: boolean;
 }> = ({
-  post, postUser, isActive, isLiked, likesCount, commentsCount,
+  post, postUser, musicTrack: mTrack, isActive, isLiked, likesCount, commentsCount,
   isFollowing, isOwnPost, isMuted, onToggleMute, onLike, onFollow,
   onComment, onShare, onProfile, onRequireLogin, isLoggedIn
 }) => {
   const videoRef = useRef<HTMLVideoElement>(null);
+  const musicAudioRef = useRef<HTMLAudioElement>(null);
   const hasMedia = post.media_urls && post.media_urls.length > 0;
   const isVideo = hasMedia && (post.media_urls[0]?.match(/\.(mp4|webm|ogg|mov)$/i) || post.media_urls[0]?.includes('video'));
 
+  // Background music playback
+  useEffect(() => {
+    if (!mTrack?.audio_url) return;
+    const audio = new Audio(mTrack.audio_url);
+    audio.loop = true;
+    audio.volume = 0.3;
+    musicAudioRef.current = audio;
+
+    if (isActive && !isMuted) {
+      audio.play().catch(() => {});
+    }
+
+    return () => {
+      audio.pause();
+      audio.src = '';
+    };
+  }, [mTrack?.audio_url]);
+
+  useEffect(() => {
+    if (musicAudioRef.current) {
+      if (isActive && !isMuted) {
+        musicAudioRef.current.play().catch(() => {});
+      } else {
+        musicAudioRef.current.pause();
+      }
+    }
+  }, [isActive, isMuted]);
+
+  // Video play/pause
   useEffect(() => {
     if (!videoRef.current) return;
     if (isActive) {
@@ -230,8 +269,10 @@ const TikTokPost: React.FC<{
           </div>
           {/* Music indicator */}
           <div className="flex items-center gap-2 mt-1">
-            <Music2 className="w-3.5 h-3.5 text-white/60" />
-            <span className="text-white/60 text-xs truncate max-w-[200px]">Original sound - {postUser?.username}</span>
+            <Music2 className={`w-3.5 h-3.5 ${mTrack ? 'text-white animate-pulse' : 'text-white/60'}`} />
+            <span className="text-white/60 text-xs truncate max-w-[200px]">
+              {mTrack ? `♪ ${mTrack.title} - ${mTrack.artist_name}` : `Original sound - ${postUser?.username}`}
+            </span>
           </div>
         </div>
       </div>
@@ -259,6 +300,7 @@ const TikTokFeed: React.FC = () => {
   const [showShareMenu, setShowShareMenu] = useState(false);
   const [activeSharePost, setActiveSharePost] = useState<Post | null>(null);
   const [processedPosts, setProcessedPosts] = useState<Set<string>>(new Set());
+  const [musicTracks, setMusicTracks] = useState<Record<string, MusicTrack>>({});
   const processingRef = useRef<Set<string>>(new Set());
   const feedRef = useRef<HTMLDivElement>(null);
 
@@ -338,6 +380,18 @@ const TikTokFeed: React.FC = () => {
           if (!likesMap[l.post_id]) likesMap[l.post_id] = [];
           likesMap[l.post_id].push(l);
         });
+
+        // Fetch music tracks for posts that have them
+        const musicTrackIds = allPosts.filter(p => p.music_track_id).map(p => p.music_track_id!);
+        if (musicTrackIds.length > 0) {
+          const { data: musicData } = await supabase
+            .from('music_tracks')
+            .select('id, title, artist_name, audio_url')
+            .in('id', musicTrackIds);
+          const mMap: Record<string, MusicTrack> = {};
+          musicData?.forEach((m: any) => { mMap[m.id] = m; });
+          setMusicTracks(mMap);
+        }
 
         setPosts(allPosts);
         setUsers(usersMap);
@@ -444,6 +498,7 @@ const TikTokFeed: React.FC = () => {
                   key={post.id}
                   post={post}
                   postUser={users[post.user_id]}
+                  musicTrack={post.music_track_id ? musicTracks[post.music_track_id] : undefined}
                   isActive={index === activeIndex}
                   isLiked={(postLikes[post.id] || []).some((l: any) => l.user_id === user?.id)}
                   likesCount={postLikes[post.id]?.length || 0}
