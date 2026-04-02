@@ -25,6 +25,7 @@ import StarMarketplace from "./pages/StarMarketplace";
 import VIPSubscription from "./pages/VIPSubscription";
 import SavedSearches from "./pages/SavedSearches";
 import TikTokFeed from "./components/Feed/TikTokFeed";
+import MusicianDashboard from "./pages/MusicianDashboard";
 
 const queryClient = new QueryClient();
 
