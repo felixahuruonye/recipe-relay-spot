@@ -270,8 +270,10 @@ const TikTokPost: React.FC<{
           </div>
           {/* Music indicator */}
           <div className="flex items-center gap-2 mt-1">
-            <Music2 className="w-3.5 h-3.5 text-white/60" />
-            <span className="text-white/60 text-xs truncate max-w-[200px]">Original sound - {postUser?.username}</span>
+            <Music2 className={`w-3.5 h-3.5 ${mTrack ? 'text-white animate-pulse' : 'text-white/60'}`} />
+            <span className="text-white/60 text-xs truncate max-w-[200px]">
+              {mTrack ? `♪ ${mTrack.title} - ${mTrack.artist_name}` : `Original sound - ${postUser?.username}`}
+            </span>
           </div>
         </div>
       </div>
