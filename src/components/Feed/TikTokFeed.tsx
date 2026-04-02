@@ -393,15 +393,7 @@ const TikTokFeed: React.FC = () => {
           setMusicTracks(mMap);
         }
 
-        // Attach music tracks to posts for the component
-        const enrichedPosts = allPosts.map(p => {
-          if (p.music_track_id && musicTrackIds.length > 0) {
-            return { ...p, __musicTrack: undefined }; // will be set after state
-          }
-          return p;
-        });
-
-        setPosts(enrichedPosts);
+        setPosts(allPosts);
         setUsers(usersMap);
         setPostLikes(likesMap);
       }
