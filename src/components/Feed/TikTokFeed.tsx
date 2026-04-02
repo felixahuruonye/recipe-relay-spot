@@ -75,8 +75,10 @@ const TikTokPost: React.FC<{
   onComment, onShare, onProfile, onRequireLogin, isLoggedIn
 }) => {
   const videoRef = useRef<HTMLVideoElement>(null);
+  const musicAudioRef = useRef<HTMLAudioElement>(null);
   const hasMedia = post.media_urls && post.media_urls.length > 0;
   const isVideo = hasMedia && (post.media_urls[0]?.match(/\.(mp4|webm|ogg|mov)$/i) || post.media_urls[0]?.includes('video'));
+  const { musicTrack } = arguments[0] as any;
 
   useEffect(() => {
     if (!videoRef.current) return;
