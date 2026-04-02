@@ -24,6 +24,7 @@ import Settings from "./pages/Settings";
 import StarMarketplace from "./pages/StarMarketplace";
 import VIPSubscription from "./pages/VIPSubscription";
 import SavedSearches from "./pages/SavedSearches";
+import TikTokFeed from "./components/Feed/TikTokFeed";
 
 const queryClient = new QueryClient();
 
@@ -55,11 +56,9 @@ const App = () => (
           <BrowserRouter>
             <Routes>
             <Route path="/auth" element={<Auth />} />
-            <Route path="/" element={
-              <ProtectedRoute>
-                <Feed />
-              </ProtectedRoute>
-            } />
+            {/* Public TikTok-style feed - no login required */}
+            <Route path="/" element={<TikTokFeed />} />
+            {/* Protected feed (for post creation wizard etc.) */}
             <Route path="/feed" element={
               <ProtectedRoute>
                 <Feed />
