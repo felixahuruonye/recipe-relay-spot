@@ -53,6 +53,7 @@ interface UserProfile {
 const TikTokPost: React.FC<{
   post: Post;
   postUser?: UserProfile;
+  musicTrack?: MusicTrack;
   isActive: boolean;
   isLiked: boolean;
   likesCount: number;
