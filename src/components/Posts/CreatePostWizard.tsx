@@ -12,6 +12,7 @@ import { Progress } from '@/components/ui/progress';
 import { Upload, X, Image, Video, Star, ArrowLeft, ArrowRight, Check, Music, Hash, Sparkles, Eye, Coins } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { motion, AnimatePresence } from 'framer-motion';
+import MusicBrowser from '@/components/Music/MusicBrowser';
 
 interface CreatePostWizardProps {
   onPostCreated?: () => void;
