@@ -1035,6 +1035,57 @@ export type Database = {
         }
         Relationships: []
       }
+      music_tracks: {
+        Row: {
+          artist_id: string | null
+          artist_name: string
+          audio_url: string
+          cover_url: string | null
+          created_at: string | null
+          duration_seconds: number | null
+          external_id: string | null
+          genre: string | null
+          id: string
+          source: string | null
+          status: string | null
+          title: string
+          updated_at: string | null
+          usage_count: number | null
+        }
+        Insert: {
+          artist_id?: string | null
+          artist_name: string
+          audio_url: string
+          cover_url?: string | null
+          created_at?: string | null
+          duration_seconds?: number | null
+          external_id?: string | null
+          genre?: string | null
+          id?: string
+          source?: string | null
+          status?: string | null
+          title: string
+          updated_at?: string | null
+          usage_count?: number | null
+        }
+        Update: {
+          artist_id?: string | null
+          artist_name?: string
+          audio_url?: string
+          cover_url?: string | null
+          created_at?: string | null
+          duration_seconds?: number | null
+          external_id?: string | null
+          genre?: string | null
+          id?: string
+          source?: string | null
+          status?: string | null
+          title?: string
+          updated_at?: string | null
+          usage_count?: number | null
+        }
+        Relationships: []
+      }
       notifications: {
         Row: {
           created_at: string
@@ -1396,6 +1447,7 @@ export type Database = {
           likes_count: number | null
           media_type: string | null
           media_urls: string[] | null
+          music_track_id: string | null
           post_status: string | null
           rating: number | null
           reports_count: number | null
@@ -1425,6 +1477,7 @@ export type Database = {
           likes_count?: number | null
           media_type?: string | null
           media_urls?: string[] | null
+          music_track_id?: string | null
           post_status?: string | null
           rating?: number | null
           reports_count?: number | null
@@ -1454,6 +1507,7 @@ export type Database = {
           likes_count?: number | null
           media_type?: string | null
           media_urls?: string[] | null
+          music_track_id?: string | null
           post_status?: string | null
           rating?: number | null
           reports_count?: number | null
@@ -1473,6 +1527,13 @@ export type Database = {
             columns: ["group_id"]
             isOneToOne: false
             referencedRelation: "groups"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "posts_music_track_id_fkey"
+            columns: ["music_track_id"]
+            isOneToOne: false
+            referencedRelation: "music_tracks"
             referencedColumns: ["id"]
           },
         ]
