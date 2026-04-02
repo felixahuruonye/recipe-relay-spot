@@ -131,6 +131,11 @@ const App = () => (
                 <SavedSearches />
               </ProtectedRoute>
             } />
+            <Route path="/musician" element={
+              <ProtectedRoute>
+                <MusicianDashboard />
+              </ProtectedRoute>
+            } />
             <Route path="/wallet" element={
               <ProtectedRoute>
                 <div className="p-4"><WalletBalance /></div>
