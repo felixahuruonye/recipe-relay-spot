@@ -301,6 +301,7 @@ const TikTokFeed: React.FC = () => {
   const [showShareMenu, setShowShareMenu] = useState(false);
   const [activeSharePost, setActiveSharePost] = useState<Post | null>(null);
   const [processedPosts, setProcessedPosts] = useState<Set<string>>(new Set());
+  const [musicTracks, setMusicTracks] = useState<Record<string, MusicTrack>>({});
   const processingRef = useRef<Set<string>>(new Set());
   const feedRef = useRef<HTMLDivElement>(null);
 
