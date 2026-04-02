@@ -61,8 +61,9 @@ const CreatePostWizard: React.FC<CreatePostWizardProps> = ({ onPostCreated, isOp
   const [tags, setTags] = useState<string[]>([]);
   const [tagInput, setTagInput] = useState('');
 
-  // Step 4: Vibe Sync (music placeholder)
+  // Step 4: Vibe Sync
   const [selectedMusic, setSelectedMusic] = useState<string>('');
+  const [selectedMusicTrack, setSelectedMusicTrack] = useState<any>(null);
 
   // Step 5: Value
   const [starPrice, setStarPrice] = useState(0);
