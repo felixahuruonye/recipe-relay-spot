@@ -70,7 +70,7 @@ const TikTokPost: React.FC<{
   onRequireLogin: (msg?: string) => void;
   isLoggedIn: boolean;
 }> = ({
-  post, postUser, isActive, isLiked, likesCount, commentsCount,
+  post, postUser, musicTrack: mTrack, isActive, isLiked, likesCount, commentsCount,
   isFollowing, isOwnPost, isMuted, onToggleMute, onLike, onFollow,
   onComment, onShare, onProfile, onRequireLogin, isLoggedIn
 }) => {
@@ -78,7 +78,6 @@ const TikTokPost: React.FC<{
   const musicAudioRef = useRef<HTMLAudioElement>(null);
   const hasMedia = post.media_urls && post.media_urls.length > 0;
   const isVideo = hasMedia && (post.media_urls[0]?.match(/\.(mp4|webm|ogg|mov)$/i) || post.media_urls[0]?.includes('video'));
-  const mTrack = (post as any).__musicTrack as MusicTrack | undefined;
 
   // Background music playback
   useEffect(() => {
