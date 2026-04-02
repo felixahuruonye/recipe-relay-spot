@@ -78,12 +78,12 @@ const TikTokPost: React.FC<{
   const musicAudioRef = useRef<HTMLAudioElement>(null);
   const hasMedia = post.media_urls && post.media_urls.length > 0;
   const isVideo = hasMedia && (post.media_urls[0]?.match(/\.(mp4|webm|ogg|mov)$/i) || post.media_urls[0]?.includes('video'));
+  const mTrack = (post as any).__musicTrack as MusicTrack | undefined;
 
   // Background music playback
   useEffect(() => {
-    const mt = (arguments as any); // skip - use prop directly
-    if (!musicTrack?.audio_url) return;
-    const audio = new Audio(musicTrack.audio_url);
+    if (!mTrack?.audio_url) return;
+    const audio = new Audio(mTrack.audio_url);
     audio.loop = true;
     audio.volume = 0.3;
     musicAudioRef.current = audio;
@@ -96,7 +96,7 @@ const TikTokPost: React.FC<{
       audio.pause();
       audio.src = '';
     };
-  }, [musicTrack?.audio_url]);
+  }, [mTrack?.audio_url]);
 
   useEffect(() => {
     if (musicAudioRef.current) {
