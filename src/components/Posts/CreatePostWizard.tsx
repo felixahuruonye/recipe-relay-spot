@@ -319,14 +319,18 @@ const CreatePostWizard: React.FC<CreatePostWizardProps> = ({ onPostCreated, isOp
         </div>
       );
       case 3: return (
-        <div className="space-y-4 text-center py-6">
-          <Music className="w-12 h-12 mx-auto text-primary/60" />
-          <h3 className="font-bold text-base">Vibe Sync 🎵</h3>
-          <p className="text-sm text-muted-foreground">Add background music to your post. Musicians earn 10% royalty from each view!</p>
-          <div className="space-y-2">
-            <Input value={selectedMusic} onChange={e => setSelectedMusic(e.target.value)} placeholder="Paste music link or search..." />
-            <p className="text-xs text-muted-foreground">Music library coming soon. Skip this step for now.</p>
+        <div className="space-y-3">
+          <div className="text-center">
+            <h3 className="font-bold text-base">Vibe Sync 🎵</h3>
+            <p className="text-xs text-muted-foreground">Add background music · Musicians earn 10% royalty per view!</p>
           </div>
+          <MusicBrowser
+            selectedTrackId={selectedMusicTrack?.id}
+            onSelect={(track) => {
+              setSelectedMusicTrack(track);
+              setSelectedMusic(track?.audio_url || '');
+            }}
+          />
         </div>
       );
       case 4: return (
