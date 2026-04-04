@@ -258,7 +258,6 @@ const MusicianDashboard: React.FC = () => {
           )}
         </div>
       </div>
-    </AppLayout>
   );
 };
 
