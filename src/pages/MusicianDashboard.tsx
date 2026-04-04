@@ -10,7 +10,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { useToast } from '@/hooks/use-toast';
 import { Upload, Music2, BarChart3, TrendingUp, Play, Pause, Trash2, ArrowLeft } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
-import AppLayout from '@/components/Layout/AppLayout';
+
 
 interface Track {
   id: string;
