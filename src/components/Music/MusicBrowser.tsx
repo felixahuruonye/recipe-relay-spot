@@ -35,6 +35,7 @@ const MusicBrowser: React.FC<MusicBrowserProps> = ({ selectedTrackId, onSelect }
 
   useEffect(() => {
     loadCommunityTracks();
+    searchJamendo('afrobeats'); // Auto-load popular tracks
   }, []);
 
   useEffect(() => {
