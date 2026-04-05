@@ -97,7 +97,7 @@ const SavedSearches = () => {
               <p className="text-sm text-muted-foreground mt-2">
                 Save your searches to quickly access them later.
               </p>
-              <Button variant="outline" className="mt-4" onClick={() => navigate('/feed')}>
+              <Button variant="outline" className="mt-4" onClick={() => navigate('/')}>
                 Start Searching
               </Button>
             </div>
