@@ -29,7 +29,7 @@ export function updateMetaTags(options: {
   };
 
   if (title) {
-    document.title = `${title} | Lernory Social`;
+    document.title = `${title} | Lenory Social`;
     setMeta('og:title', title);
     setName('twitter:title', title);
   }
@@ -55,10 +55,10 @@ export function updateMetaTags(options: {
 }
 
 export function resetMetaTags() {
-  document.title = 'Lernory Social';
+  document.title = 'Lenory Social';
   updateMetaTags({
-    title: 'Lernory Social',
-    description: 'Connect, Learn, Share, and Earn with the best social platform. Join Lernory Social today!',
+    title: 'Lenory Social',
+    description: 'Connect, Learn, Share, and Earn with the best social platform. Join Lenory Social today!',
     image: `${window.location.origin}/lernory-logo.png`,
     url: window.location.origin,
   });

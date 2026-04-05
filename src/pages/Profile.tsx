@@ -89,8 +89,8 @@ const Profile = () => {
       setProfile(data);
       // Update OG meta tags for deep linking
       updateMetaTags({
-        title: `${data.username} on Lernory`,
-        description: data.bio || `Check out ${data.username}'s profile on Lernory Social`,
+        title: `${data.username} on Lenory`,
+        description: data.bio || `Check out ${data.username}'s profile on Lenory Social`,
         image: data.avatar_url || `${window.location.origin}/lernory-logo.png`,
         url: `${window.location.origin}/profile/${data.id}`,
         type: 'profile',

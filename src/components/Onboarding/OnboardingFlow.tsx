@@ -56,7 +56,7 @@ const OnboardingFlow: React.FC<OnboardingFlowProps> = ({ onComplete }) => {
       <div className="min-h-screen bg-background p-4 overflow-y-auto pb-24">
         <Card className="max-w-lg mx-auto">
           <CardHeader>
-            <CardTitle className="text-center text-xl">👋 Welcome to Lernory!</CardTitle>
+            <CardTitle className="text-center text-xl">👋 Welcome to Lenory!</CardTitle>
             <p className="text-center text-muted-foreground text-sm">Tell us a bit about yourself</p>
           </CardHeader>
           <CardContent className="space-y-4">
@@ -86,7 +86,7 @@ const OnboardingFlow: React.FC<OnboardingFlowProps> = ({ onComplete }) => {
               </Select>
             </div>
             <div>
-              <Label>How did you find Lernory?</Label>
+              <Label>How did you find Lenory?</Label>
               <Input value={answers.howFound} onChange={e => setAnswers(p => ({ ...p, howFound: e.target.value }))} placeholder="Friend, social media, etc." />
             </div>
             <div>
@@ -109,13 +109,13 @@ const OnboardingFlow: React.FC<OnboardingFlowProps> = ({ onComplete }) => {
         <Card className="max-w-lg mx-auto">
           <CardHeader>
             <CardTitle className="text-center text-xl flex items-center justify-center gap-2">
-              <BookOpen className="w-5 h-5" /> Welcome to Lernory 🤗
+              <BookOpen className="w-5 h-5" /> Welcome to Lenory 🤗
             </CardTitle>
           </CardHeader>
           <CardContent className="space-y-4 text-sm leading-relaxed">
             <div className="bg-primary/10 p-4 rounded-lg">
-              <h3 className="font-bold mb-2">🏠 What is Lernory Social?</h3>
-              <p>Lernory is a social platform where you can connect with others, share content, and <strong>earn real money</strong> from your posts, stories, and interactions.</p>
+              <h3 className="font-bold mb-2">🏠 What is Lenory Social?</h3>
+              <p>Lenory is a social platform where you can connect with others, share content, and <strong>earn real money</strong> from your posts, stories, and interactions.</p>
             </div>
 
             <div className="bg-muted p-4 rounded-lg">
@@ -142,7 +142,7 @@ const OnboardingFlow: React.FC<OnboardingFlowProps> = ({ onComplete }) => {
 
             <div className="bg-muted p-4 rounded-lg">
               <h3 className="font-bold mb-2">⭐ What are Stars?</h3>
-              <p>Stars are Lernory's currency. You spend Stars to view premium content and earn Stars from your own content. Stars can be converted to real money in your wallet.</p>
+              <p>Stars are Lenory's currency. You spend Stars to view premium content and earn Stars from your own content. Stars can be converted to real money in your wallet.</p>
             </div>
 
             <div className="bg-muted p-4 rounded-lg">
@@ -209,7 +209,7 @@ const OnboardingFlow: React.FC<OnboardingFlowProps> = ({ onComplete }) => {
           </CardHeader>
           <CardContent className="space-y-4 text-center">
             <p className="text-sm text-muted-foreground">
-              Stars are the currency of Lernory. Buy Stars to unlock premium content, boost your posts, and access exclusive features. You can also earn Stars from your content!
+              Stars are the currency of Lenory. Buy Stars to unlock premium content, boost your posts, and access exclusive features. You can also earn Stars from your content!
             </p>
             <div className="flex gap-2">
               <Button className="flex-1" onClick={() => {
@@ -255,7 +255,7 @@ const OnboardingFlow: React.FC<OnboardingFlowProps> = ({ onComplete }) => {
     await supabase.from('user_profiles').update({
       story_settings: { onboarding_complete: true }
     }).eq('id', user.id);
-    toast({ title: "Welcome! 🎉", description: "You're all set. Enjoy Lernory!" });
+    toast({ title: "Welcome! 🎉", description: "You're all set. Enjoy Lenory!" });
     onComplete();
   }
 
