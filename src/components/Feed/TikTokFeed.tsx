@@ -1101,8 +1101,8 @@ const TikTokFeed: React.FC = () => {
 
   const loadMyProfile = async () => {
     if (!user) return;
-    const { data } = await supabase.from('user_profiles').select('id, username, avatar_url, vip, is_vip, star_balance, wallet_balance, story_settings').eq('id', user.id).single();
-    if (data) setMyProfile(data as any);
+    const { data } = await (supabase as any).from('user_profiles').select('id, username, avatar_url, vip, is_vip, star_balance, wallet_balance, story_settings').eq('id', user.id).single();
+    if (data) setMyProfile(data);
   };
 
   const loadCounts = async () => {
