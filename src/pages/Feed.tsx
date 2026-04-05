@@ -799,12 +799,12 @@ const Feed = () => {
 
   return (
     <div className="relative min-h-screen bg-background">
-      {/* Fixed header: Lernory brand + stars + auto-scroll + tabs */}
+      {/* Fixed header: Lenory brand + stars + auto-scroll + tabs */}
       <div className="sticky top-0 z-40 bg-background/95 backdrop-blur-md border-b border-border/50">
         {/* Top bar */}
         <div className="flex items-center justify-between px-4 pt-3 pb-1.5">
           <h1 className="text-xl font-black bg-gradient-to-r from-primary to-accent bg-clip-text text-transparent">
-            Lernory
+            Lenory
           </h1>
           <div className="flex items-center gap-2">
             <Badge className="bg-yellow-500/90 text-black text-[10px] gap-0.5 font-bold">

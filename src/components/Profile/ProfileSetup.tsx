@@ -106,7 +106,7 @@ const ProfileSetup: React.FC<ProfileSetupProps> = ({ onComplete }) => {
 
       toast({
         title: "Profile created!",
-        description: "Welcome to Lernory Social!"
+        description: "Welcome to Lenory Social!"
       });
 
       onComplete();
@@ -127,7 +127,7 @@ const ProfileSetup: React.FC<ProfileSetupProps> = ({ onComplete }) => {
       <Card className="w-full max-w-md">
         <CardHeader className="text-center">
           <CardTitle className="text-2xl font-bold text-primary">Complete Your Profile</CardTitle>
-          <CardDescription>Set up your Lernory Social profile</CardDescription>
+          <CardDescription>Set up your Lenory Social profile</CardDescription>
         </CardHeader>
         <CardContent>
           <form onSubmit={handleSubmit} className="space-y-4">

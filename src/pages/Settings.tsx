@@ -4,7 +4,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Switch } from '@/components/ui/switch';
 import { Label } from '@/components/ui/label';
 import { Button } from '@/components/ui/button';
-import { Sun, Moon, Settings as SettingsIcon, MessageSquare, Share2, HelpCircle, LogOut, Lock } from 'lucide-react';
+import { Sun, Moon, Settings as SettingsIcon, MessageSquare, Share2, HelpCircle, LogOut, Lock, Coins } from 'lucide-react';
 import { useTheme } from '@/contexts/ThemeContext';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/integrations/supabase/client';
@@ -17,16 +17,18 @@ const Settings = () => {
   const { toast } = useToast();
   const isDark = theme === 'dark';
   const [lockFollowers, setLockFollowers] = useState(false);
+  const [autoSpend, setAutoSpend] = useState(false);
 
   useEffect(() => {
-    if (user) loadPrivacySettings();
+    if (user) loadSettings();
   }, [user]);
 
-  const loadPrivacySettings = async () => {
+  const loadSettings = async () => {
     if (!user) return;
     const { data } = await supabase.from('user_profiles').select('story_settings').eq('id', user.id).single();
     const settings = data?.story_settings as any;
     setLockFollowers(settings?.lock_followers || false);
+    setAutoSpend(settings?.auto_spend || false);
   };
 
   const toggleLockFollowers = async (checked: boolean) => {
@@ -40,6 +42,22 @@ const Settings = () => {
     toast({ title: checked ? 'Followers Locked 🔒' : 'Followers Unlocked', description: checked ? 'Others can no longer see your followers/following.' : 'Your followers/following are now visible.' });
   };
 
+  const toggleAutoSpend = async (checked: boolean) => {
+    if (!user) return;
+    setAutoSpend(checked);
+    const { data: current } = await supabase.from('user_profiles').select('story_settings').eq('id', user.id).single();
+    const existing = (current?.story_settings as any) || {};
+    await supabase.from('user_profiles').update({
+      story_settings: { ...existing, auto_spend: checked }
+    }).eq('id', user.id);
+    toast({
+      title: checked ? '⭐ Auto-Spend ON' : '⭐ Auto-Spend OFF',
+      description: checked
+        ? 'You will now earn when watching posts. Stars are spent to support creators.'
+        : 'Auto-spend is off. You won\'t earn or spend stars when watching posts.'
+    });
+  };
+
   const handleSignOut = async () => {
     await signOut();
     navigate('/auth');
@@ -51,6 +69,25 @@ const Settings = () => {
         <SettingsIcon className="h-6 w-6 text-primary" />
         <h1 className="text-3xl font-bold gradient-text">Settings</h1>
       </div>
+
+      {/* Auto-Spend Toggle */}
+      <Card className="glass-card card-3d border-yellow-500/30">
+        <CardHeader><CardTitle className="flex items-center gap-2"><Coins className="w-5 h-5 text-yellow-500" /> Earning & Stars</CardTitle></CardHeader>
+        <CardContent className="space-y-4">
+          <div className="flex items-center justify-between glass-card p-4 rounded-lg border border-yellow-500/20 bg-yellow-500/5">
+            <div>
+              <Label htmlFor="auto-spend" className="font-bold cursor-pointer">Auto-Spend Stars ⭐</Label>
+              <p className="text-sm text-muted-foreground mt-1">
+                When ON, stars are automatically spent when you watch posts. You earn from each post you view, like, or comment on. When OFF, you watch without earning or spending.
+              </p>
+            </div>
+            <Switch id="auto-spend" checked={autoSpend} onCheckedChange={toggleAutoSpend} className="data-[state=checked]:bg-yellow-500" />
+          </div>
+          <p className="text-xs text-muted-foreground px-1">
+            💡 1 Star = ₦300 · Earnings split: Creator 40% · Viewer 35% · Platform 25%
+          </p>
+        </CardContent>
+      </Card>
 
       {/* Theme Toggle Card */}
       <Card className="glass-card card-3d">
@@ -99,11 +136,11 @@ const Settings = () => {
           </Button>
           <Button variant="outline" className="w-full justify-start h-14" onClick={() => navigate('/share')}>
             <Share2 className="h-5 w-5 mr-3" />
-            <div className="text-left"><div className="font-medium">Share Lernory</div><div className="text-xs text-muted-foreground">Invite friends to join</div></div>
+            <div className="text-left"><div className="font-medium">Share Lenory</div><div className="text-xs text-muted-foreground">Invite friends to join</div></div>
           </Button>
-          <Button variant="outline" className="w-full justify-start h-14" onClick={() => window.open('https://lernory.com/help', '_blank')}>
+          <Button variant="outline" className="w-full justify-start h-14" onClick={() => window.open('https://lenory.com/help', '_blank')}>
             <HelpCircle className="h-5 w-5 mr-3" />
-            <div className="text-left"><div className="font-medium">Help & FAQ</div><div className="text-xs text-muted-foreground">Learn how to use Lernory</div></div>
+            <div className="text-left"><div className="font-medium">Help & FAQ</div><div className="text-xs text-muted-foreground">Learn how to use Lenory</div></div>
           </Button>
           <Button variant="destructive" className="w-full justify-start h-14 mt-4" onClick={handleSignOut}>
             <LogOut className="h-5 w-5 mr-3" />
