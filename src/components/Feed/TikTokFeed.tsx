@@ -1114,7 +1114,7 @@ const TikTokFeed: React.FC = () => {
       .is('read_at', null);
     setChatCount(chats || 0);
 
-    const { count: notifs } = await supabase
+    const { count: notifs } = await (supabase as any)
       .from('user_notifications')
       .select('*', { count: 'exact', head: true })
       .eq('user_id', user.id)
