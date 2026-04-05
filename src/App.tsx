@@ -8,7 +8,6 @@ import { AuthProvider, useAuth } from "./contexts/AuthContext";
 import { ThemeProvider } from "./contexts/ThemeContext";
 import AppLayout from "./components/Layout/AppLayout";
 import Auth from "./pages/Auth";
-import Feed from "./pages/Feed";
 import Chat from "./pages/Chat";
 import Groups from "./pages/Groups";
 import Marketplace from "./pages/Marketplace";
@@ -59,12 +58,6 @@ const App = () => (
             <Route path="/auth" element={<Auth />} />
             {/* Public TikTok-style feed - no login required */}
             <Route path="/" element={<TikTokFeed />} />
-            {/* Protected feed (for post creation wizard etc.) */}
-            <Route path="/feed" element={
-              <ProtectedRoute>
-                <Feed />
-              </ProtectedRoute>
-            } />
             <Route path="/groups" element={
               <ProtectedRoute>
                 <Groups />
@@ -141,6 +134,8 @@ const App = () => (
                 <div className="p-4"><WalletBalance /></div>
               </ProtectedRoute>
             } />
+            {/* Redirect old /feed to home */}
+            <Route path="/feed" element={<Navigate to="/" replace />} />
             {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
             <Route path="*" element={<NotFound />} />
             </Routes>
