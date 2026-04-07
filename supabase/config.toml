@@ -5,3 +5,6 @@ verify_jwt = true
 
 [functions.delete-user]
 verify_jwt = false
+
+[functions.music-search]
+verify_jwt = false
