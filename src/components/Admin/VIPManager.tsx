@@ -37,7 +37,22 @@ export const VIPManager: React.FC = () => {
 
   const loadUsers = async () => {
     const { data } = await supabase.from('user_profiles').select('id, username, avatar_url, vip, vip_expires_at, star_balance').order('vip', { ascending: false });
-    setUsers(data || []);
+    const allUsers = data || [];
+    // Auto-expire VIP users whose countdown reached 0
+    const now = new Date();
+    for (const u of allUsers) {
+      if (u.vip && u.vip_expires_at && new Date(u.vip_expires_at) <= now) {
+        await supabase.from('user_profiles').update({ vip: false, vip_started_at: null, vip_expires_at: null }).eq('id', u.id);
+        await (supabase as any).from('user_notifications').insert({
+          user_id: u.id, title: 'VIP Expired',
+          message: 'Your VIP membership has expired. Upgrade to continue enjoying VIP features!',
+          type: 'info', notification_category: 'admin'
+        });
+        u.vip = false;
+        u.vip_expires_at = null;
+      }
+    }
+    setUsers(allUsers);
     setLoading(false);
   };
 
@@ -127,7 +142,11 @@ export const VIPManager: React.FC = () => {
                 <Avatar className="w-12 h-12"><AvatarImage src={u.avatar_url} /><AvatarFallback>{u.username?.[0]}</AvatarFallback></Avatar>
                 <div className="flex-1">
                   <CardTitle className="text-base flex items-center">{u.username}{u.vip && <Crown className="w-4 h-4 ml-2 text-yellow-500" />}</CardTitle>
-                  {u.vip && u.vip_expires_at && <p className="text-xs text-muted-foreground">{getDaysRemaining(u.vip_expires_at)} days remaining</p>}
+                  {u.vip && u.vip_expires_at && (
+                    <p className={`text-xs font-semibold ${getDaysRemaining(u.vip_expires_at) <= 3 ? 'text-destructive' : 'text-muted-foreground'}`}>
+                      ⏱ {getDaysRemaining(u.vip_expires_at)} days remaining
+                    </p>
+                  )}
                 </div>
               </div>
             </CardHeader>

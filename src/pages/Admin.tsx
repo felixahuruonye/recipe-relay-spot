@@ -22,6 +22,53 @@ import { DeliveriesTab } from '@/components/Admin/DeliveriesTab';
 import { useAuth } from '@/contexts/AuthContext';
 import { useNavigate } from 'react-router-dom';
 
+const AdminOverview = () => {
+  const [onboardingData, setOnboardingData] = React.useState<any[]>([]);
+  const [stats, setStats] = React.useState({ users: 0, posts: 0, stars: 0, wallet: 0 });
+
+  React.useEffect(() => {
+    loadData();
+  }, []);
+
+  const loadData = async () => {
+    const { data: notifs } = await supabase.from('admin_notifications').select('*').eq('type', 'new_user').order('created_at', { ascending: false }).limit(50);
+    setOnboardingData(notifs || []);
+
+    const { count: userCount } = await supabase.from('user_profiles').select('*', { count: 'exact', head: true });
+    const { count: postCount } = await supabase.from('posts').select('*', { count: 'exact', head: true }).eq('status', 'approved');
+    setStats({ users: userCount || 0, posts: postCount || 0, stars: 0, wallet: 0 });
+  };
+
+  return (
+    <div className="space-y-4">
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+        <Card><CardContent className="p-4 text-center"><p className="text-2xl font-bold">{stats.users}</p><p className="text-xs text-muted-foreground">Total Users</p></CardContent></Card>
+        <Card><CardContent className="p-4 text-center"><p className="text-2xl font-bold">{stats.posts}</p><p className="text-xs text-muted-foreground">Approved Posts</p></CardContent></Card>
+      </div>
+      <Card>
+        <CardHeader><CardTitle>🆕 New User Onboarding Responses</CardTitle></CardHeader>
+        <CardContent>
+          {onboardingData.length === 0 ? (
+            <p className="text-muted-foreground text-sm">No onboarding responses yet.</p>
+          ) : (
+            <div className="space-y-3 max-h-[60vh] overflow-y-auto">
+              {onboardingData.map((n: any) => (
+                <div key={n.id} className="p-3 border rounded-lg bg-muted/30">
+                  <div className="flex justify-between items-center mb-1">
+                    <span className="text-xs font-semibold">{n.user_email}</span>
+                    <span className="text-[10px] text-muted-foreground">{new Date(n.created_at).toLocaleString()}</span>
+                  </div>
+                  <p className="text-sm whitespace-pre-line">{n.message}</p>
+                </div>
+              ))}
+            </div>
+          )}
+        </CardContent>
+      </Card>
+    </div>
+  );
+};
+
 const AdminPanel = () => {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [isCheckingAuth, setIsCheckingAuth] = useState(true);
@@ -128,12 +175,7 @@ const AdminPanel = () => {
           </div>
 
           <TabsContent value="overview">
-            <Card>
-              <CardHeader><CardTitle>Quick Stats</CardTitle></CardHeader>
-              <CardContent className="text-muted-foreground">
-                <p>Use the tabs above to manage your app.</p>
-              </CardContent>
-            </Card>
+            <AdminOverview />
           </TabsContent>
 
           <TabsContent value="balances"><UserBalancesTab /></TabsContent>

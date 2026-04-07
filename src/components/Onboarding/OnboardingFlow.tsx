@@ -251,10 +251,23 @@ const OnboardingFlow: React.FC<OnboardingFlowProps> = ({ onComplete }) => {
 
   async function completeOnboarding() {
     if (!user) return;
-    // Mark onboarding as done
+    // Merge with existing settings to preserve other keys
+    const { data: current } = await supabase.from('user_profiles').select('story_settings').eq('id', user.id).single();
+    const existing = (current?.story_settings as any) || {};
     await supabase.from('user_profiles').update({
-      story_settings: { onboarding_complete: true }
+      story_settings: { ...existing, onboarding_complete: true }
     }).eq('id', user.id);
+
+    // Send onboarding answers to admin overview
+    await supabase.from('admin_notifications').insert({
+      title: '🆕 New User Onboarding',
+      message: 'Name: ' + answers.fullName + '\nAge: ' + answers.age + '\nLocation: ' + answers.location + '\nInterest: ' + answers.interest + '\nHow found: ' + answers.howFound + '\nGoal: ' + answers.goal,
+      type: 'new_user',
+      user_id: user.id,
+      user_email: user.email,
+      data: { answers, profile: profileData }
+    });
+
     toast({ title: "Welcome! 🎉", description: "You're all set. Enjoy Lenory!" });
     onComplete();
   }
