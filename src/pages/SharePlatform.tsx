@@ -6,7 +6,7 @@ import { Button } from '@/components/ui/button';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { useToast } from '@/hooks/use-toast';
 import { 
-  Share2, Copy, ArrowLeft, 
+  Share2, Copy, ArrowLeft, Download,
   MessageCircle, Instagram, Twitter, Facebook, Youtube
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
@@ -183,6 +183,26 @@ const SharePlatform = () => {
               YouTube
             </Button>
           </div>
+        </CardContent>
+      </Card>
+
+      {/* Download App */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-lg">📱 Download Lenory App</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <Button className="w-full gap-2" onClick={() => {
+            const deferredPrompt = (window as any).__pwaInstallPrompt;
+            if (deferredPrompt) {
+              deferredPrompt.prompt();
+            } else {
+              alert('Use your browser menu → "Add to Home Screen" or "Install App" to download Lenory.');
+            }
+          }}>
+            <Download className="w-4 h-4" />
+            Download App
+          </Button>
         </CardContent>
       </Card>
 

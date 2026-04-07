@@ -21,6 +21,7 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { Input } from '@/components/ui/input';
 import { SuggestedUsers } from './SuggestedUsers';
 import { ProductCard } from './ProductCard';
+import CreatePostWizard from '@/components/Posts/CreatePostWizard';
 
 interface Post {
   id: string;
@@ -330,7 +331,7 @@ const SoundDrilldown: React.FC<{
             </div>
             <button onClick={onClose} className="text-muted-foreground"><X className="w-5 h-5" /></button>
           </div>
-          <Button size="sm" className="w-full mt-3 gap-2" onClick={() => { navigate('/create-post'); onClose(); }}>
+          <Button size="sm" className="w-full mt-3 gap-2" onClick={() => { onClose(); }}>
             <Music2 className="w-4 h-4" /> Use this sound
           </Button>
         </div>
@@ -565,7 +566,7 @@ const EnhancedShareMenu: React.FC<{
           </button>
           {isOwnPost && (
             <>
-              <button onClick={() => { navigate(`/create-post?edit=${post.id}`); onClose(); }} className="flex items-center gap-3 w-full p-3 rounded-lg hover:bg-muted/50">
+              <button onClick={() => { onClose(); }} className="flex items-center gap-3 w-full p-3 rounded-lg hover:bg-muted/50">
                 <Edit className="w-5 h-5 text-muted-foreground" />
                 <span className="text-sm">Edit Post</span>
               </button>
@@ -1118,12 +1119,13 @@ const TikTokFeed: React.FC = () => {
       .from('user_notifications')
       .select('*', { count: 'exact', head: true })
       .eq('user_id', user.id)
-      .eq('is_read', false);
+      .eq('is_read_receipt', false);
     setNotifCount(notifs || 0);
   };
 
   const handleLike = async (postId: string) => {
     if (!user) return;
+    const post = posts.find(p => p.id === postId);
     const existing = (postLikes[postId] || []).find((l: any) => l.user_id === user.id);
     if (existing) {
       await supabase.from('post_likes').delete().eq('id', existing.id);
@@ -1134,6 +1136,32 @@ const TikTokFeed: React.FC = () => {
       if (data) {
         setPostLikes(prev => ({ ...prev, [postId]: [...(prev[postId] || []), data] }));
         await supabase.from('posts').update({ likes_count: (postLikes[postId]?.length || 0) + 1 }).eq('id', postId);
+        // Deduct 2 stars for like + distribute earnings + notify creator
+        if (autoSpend && post && post.user_id !== user.id) {
+          const starBal = myProfile?.star_balance || 0;
+          if (starBal >= 2) {
+            await supabase.rpc('spend_stars', { p_amount: 2, p_type: 'like', p_meta: { post_id: postId } });
+            const starValue = 300;
+            const creatorEarn = 2 * starValue * (post.music_track_id ? 0.30 : 0.40);
+            const viewerEarn = 2 * starValue * 0.35;
+            // Credit creator
+            const { data: cp } = await supabase.from('user_profiles').select('wallet_balance, total_earned').eq('id', post.user_id).single();
+            if (cp) await supabase.from('user_profiles').update({ wallet_balance: (cp.wallet_balance||0)+creatorEarn, total_earned: (cp.total_earned||0)+creatorEarn }).eq('id', post.user_id);
+            // Credit viewer cashback
+            const { data: vp } = await supabase.from('user_profiles').select('wallet_balance').eq('id', user.id).single();
+            if (vp) await supabase.from('user_profiles').update({ wallet_balance: (vp.wallet_balance||0)+viewerEarn }).eq('id', user.id);
+            // Notify creator with avatar and post info
+            await (supabase as any).from('user_notifications').insert({
+              user_id: post.user_id, title: '❤️ New Like',
+              message: (myProfile?.username||'Someone')+' liked your post "'+post.title?.slice(0,40)+'"',
+              type: 'info', notification_category: 'reaction', related_id: postId,
+              action_data: { username: myProfile?.username, avatar_url: myProfile?.avatar_url, liker_id: user.id, post_id: postId, post_title: post.title, amount_earned: creatorEarn }
+            });
+            toast({ title: '❤️ Liked!', description: '2⭐ spent · ₦'+viewerEarn.toFixed(0)+' cashback' });
+          } else {
+            setStarNotification('no_earn');
+          }
+        }
       }
     }
   };
@@ -1149,8 +1177,41 @@ const TikTokFeed: React.FC = () => {
     }
   };
 
+  const [showCreatePost, setShowCreatePost] = useState(false);
+  const [editPost, setEditPost] = useState<any>(null);
+  const [showTipDialog, setShowTipDialog] = useState(false);
+  const [tipPost, setTipPost] = useState<Post | null>(null);
+  const [tipAmount, setTipAmount] = useState(5);
+
   const handleSendStar = async (post: Post) => {
-    toast({ title: '⭐ Send Stars', description: 'Star tipping coming soon!' });
+    setTipPost(post);
+    setTipAmount(5);
+    setShowTipDialog(true);
+  };
+
+  const confirmTip = async () => {
+    if (!user || !tipPost) return;
+    if (tipAmount < 5 || tipAmount > 100) { toast({ title: 'Invalid amount', description: 'Min 5, Max 100 stars' }); return; }
+    const starBal = myProfile?.star_balance || 0;
+    if (starBal < tipAmount) { setStarNotification('no_earn'); setShowTipDialog(false); return; }
+    const starValue = 300;
+    const creatorShare = tipPost.music_track_id ? 0.30 : 0.40;
+    const viewerShare = 0.35;
+    const totalValue = tipAmount * starValue;
+    await supabase.rpc('spend_stars', { p_amount: tipAmount, p_type: 'tip', p_meta: { post_id: tipPost.id } });
+    const { data: cp } = await supabase.from('user_profiles').select('wallet_balance, total_earned').eq('id', tipPost.user_id).single();
+    if (cp) await supabase.from('user_profiles').update({ wallet_balance: (cp.wallet_balance||0)+totalValue*creatorShare, total_earned: (cp.total_earned||0)+totalValue*creatorShare }).eq('id', tipPost.user_id);
+    const { data: vp } = await supabase.from('user_profiles').select('wallet_balance').eq('id', user.id).single();
+    if (vp) await supabase.from('user_profiles').update({ wallet_balance: (vp.wallet_balance||0)+totalValue*viewerShare }).eq('id', user.id);
+    await (supabase as any).from('user_notifications').insert({
+      user_id: tipPost.user_id, title: '⭐ Star Tip!',
+      message: (myProfile?.username||'Someone')+' sent you '+tipAmount+' stars',
+      type: 'success', notification_category: 'tip',
+      action_data: { tipper_id: user.id, username: myProfile?.username, avatar_url: myProfile?.avatar_url, post_id: tipPost.id, stars: tipAmount }
+    });
+    toast({ title: '⭐ '+tipAmount+' Stars sent!', description: '₦'+(totalValue*viewerShare).toFixed(0)+' cashback' });
+    setShowTipDialog(false);
+    loadMyProfile();
   };
 
   const requireLogin = (msg?: string) => {
@@ -1218,7 +1279,7 @@ const TikTokFeed: React.FC = () => {
                   <p className="text-5xl">🎬</p>
                   <h3 className="text-xl font-bold text-white">No content yet</h3>
                   <p className="text-white/60 text-sm">Be the first to post!</p>
-                  <Button onClick={() => user ? navigate('/create-post') : requireLogin('Login to create posts')}>
+                  <Button onClick={() => { if (!user) { requireLogin('Login to create posts'); return; } setEditPost(null); setShowCreatePost(true); }}>
                     <Plus className="w-4 h-4 mr-1" /> Create Post
                   </Button>
                 </div>
@@ -1342,9 +1403,9 @@ const TikTokFeed: React.FC = () => {
             <div className="flex items-center justify-around py-1.5 px-1 bg-black/80 backdrop-blur-md border-t border-white/10">
               <NavBtn icon={Home} label="Home" active onClick={() => feedRef.current?.scrollTo({ top: 0, behavior: 'smooth' })} />
               <NavBtn icon={Search} label="Explore" onClick={() => navigate('/explore')} />
-              <NavBtn icon={BookOpen} label="Stories" onClick={() => user ? navigate('/storylines') : requireLogin('Login for stories')} />
+              <NavBtn icon={BookOpen} label="Stories" onClick={() => user ? navigate('/explore') : requireLogin('Login for stories')} />
               <button
-                onClick={() => user ? navigate('/create-post') : requireLogin('Login to post')}
+                onClick={() => { if (!user) { requireLogin('Login to post'); return; } setEditPost(null); setShowCreatePost(true); }}
                 className="w-12 h-9 rounded-xl bg-primary flex items-center justify-center -mt-4 shadow-lg shadow-primary/40"
               >
                 <Plus className="w-6 h-6 text-primary-foreground" />
@@ -1479,6 +1540,37 @@ const TikTokFeed: React.FC = () => {
 
       {/* Login modal */}
       <LoginModal open={showLoginModal} onOpenChange={setShowLoginModal} message={loginMessage} />
+
+      {/* Create/Edit Post Wizard */}
+      <CreatePostWizard
+        isOpen={showCreatePost}
+        onOpenChange={setShowCreatePost}
+        postToEdit={editPost}
+        onPostCreated={() => { setShowCreatePost(false); fetchPosts(); }}
+      />
+
+      {/* Star Tip Dialog */}
+      <AnimatePresence>
+        {showTipDialog && tipPost && (
+          <motion.div className="fixed inset-0 z-50" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
+            <div className="absolute inset-0 bg-black/50" onClick={() => setShowTipDialog(false)} />
+            <motion.div className="absolute bottom-0 left-0 right-0 max-w-[480px] mx-auto bg-card rounded-t-2xl p-6" initial={{ y: '100%' }} animate={{ y: 0 }} exit={{ y: '100%' }}>
+              <h3 className="font-bold text-base mb-3">⭐ Send Stars to Creator</h3>
+              <p className="text-sm text-muted-foreground mb-4">Support @{users[tipPost.user_id]?.username || 'creator'}</p>
+              <div className="flex gap-2 mb-4 flex-wrap">
+                {[5, 10, 20, 50, 100].map(amt => (
+                  <Button key={amt} size="sm" variant={tipAmount === amt ? 'default' : 'outline'} onClick={() => setTipAmount(amt)}>{amt} ⭐</Button>
+                ))}
+              </div>
+              <p className="text-xs text-muted-foreground mb-4">₦{(tipAmount * 300 * 0.35).toFixed(0)} cashback · ₦{(tipAmount * 300 * 0.40).toFixed(0)} to creator</p>
+              <div className="flex gap-2">
+                <Button className="flex-1" onClick={confirmTip}>Send {tipAmount} ⭐</Button>
+                <Button variant="outline" className="flex-1" onClick={() => setShowTipDialog(false)}>Cancel</Button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </>
   );
 };

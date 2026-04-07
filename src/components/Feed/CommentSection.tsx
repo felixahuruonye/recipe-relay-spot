@@ -172,6 +172,49 @@ export const CommentSection = ({ postId }: { postId: string }) => {
     if (error) {
       toast({ title: 'Error', description: 'Failed to add comment', variant: 'destructive' });
     } else {
+      // Update comment count on post
+      const { data: postData } = await supabase.from('posts').select('user_id, title, comments_count').eq('id', postId).single();
+      if (postData) {
+        await supabase.from('posts').update({ comments_count: (postData.comments_count || 0) + 1 }).eq('id', postId);
+
+        // Send notification to post creator with commenter info
+        if (postData.user_id !== user.id) {
+          const { data: myProfile } = await supabase.from('user_profiles').select('username, avatar_url').eq('id', user.id).single();
+          await (supabase as any).from('user_notifications').insert({
+            user_id: postData.user_id,
+            title: '💬 New Comment',
+            message: (myProfile?.username || 'Someone') + ' commented: "' + newComment.trim().slice(0, 60) + '"',
+            type: 'info',
+            notification_category: 'comment',
+            related_id: postId,
+            action_data: {
+              username: myProfile?.username,
+              avatar_url: myProfile?.avatar_url,
+              commenter_id: user.id,
+              post_id: postId,
+              post_title: postData.title,
+              comment_body: newComment.trim().slice(0, 100)
+            }
+          });
+        }
+
+        // Deduct 2 stars for commenting (auto-spend check done on caller side)
+        try {
+          const { data: settings } = await supabase.from('user_profiles').select('story_settings, star_balance').eq('id', user.id).single();
+          const autoSpend = (settings?.story_settings as any)?.auto_spend;
+          if (autoSpend && (settings?.star_balance || 0) >= 2 && postData.user_id !== user.id) {
+            await supabase.rpc('spend_stars', { p_amount: 2, p_type: 'comment', p_meta: { post_id: postId } });
+            const starValue = 300;
+            const creatorEarn = 2 * starValue * 0.40;
+            const viewerEarn = 2 * starValue * 0.35;
+            const { data: cp } = await supabase.from('user_profiles').select('wallet_balance, total_earned').eq('id', postData.user_id).single();
+            if (cp) await supabase.from('user_profiles').update({ wallet_balance: (cp.wallet_balance||0)+creatorEarn, total_earned: (cp.total_earned||0)+creatorEarn }).eq('id', postData.user_id);
+            const { data: vp } = await supabase.from('user_profiles').select('wallet_balance').eq('id', user.id).single();
+            if (vp) await supabase.from('user_profiles').update({ wallet_balance: (vp.wallet_balance||0)+viewerEarn }).eq('id', user.id);
+            toast({ title: '💬 Commented!', description: '2⭐ spent · ₦'+viewerEarn.toFixed(0)+' cashback' });
+          }
+        } catch (e) { console.error('Star deduction error:', e); }
+      }
       setNewComment('');
       fetchComments();
     }
