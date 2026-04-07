@@ -15,6 +15,7 @@ interface MusicTrack {
   duration_seconds: number;
   genre: string;
   source: string;
+  youtube_id?: string;
 }
 
 interface MusicBrowserProps {
@@ -22,26 +23,22 @@ interface MusicBrowserProps {
   onSelect: (track: MusicTrack | null) => void;
 }
 
-const JAMENDO_CLIENT_ID = '2c9a11b6'; // Public Jamendo API client ID
-
 const MusicBrowser: React.FC<MusicBrowserProps> = ({ selectedTrackId, onSelect }) => {
-  const [tab, setTab] = useState<'community' | 'jamendo'>('community');
+  const [tab, setTab] = useState<'community' | 'lenory_free'>('community');
   const [search, setSearch] = useState('');
   const [communityTracks, setCommunityTracks] = useState<MusicTrack[]>([]);
-  const [jamendoTracks, setJamendoTracks] = useState<MusicTrack[]>([]);
+  const [freeTracks, setFreeTracks] = useState<MusicTrack[]>([]);
   const [loading, setLoading] = useState(false);
   const [playingId, setPlayingId] = useState<string | null>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
+  const ytPlayerRef = useRef<HTMLIFrameElement | null>(null);
 
   useEffect(() => {
     loadCommunityTracks();
-    searchJamendo('afrobeats'); // Auto-load popular tracks
   }, []);
 
   useEffect(() => {
-    return () => {
-      audioRef.current?.pause();
-    };
+    return () => { audioRef.current?.pause(); };
   }, []);
 
   const loadCommunityTracks = async () => {
@@ -54,27 +51,18 @@ const MusicBrowser: React.FC<MusicBrowserProps> = ({ selectedTrackId, onSelect }
     setCommunityTracks((data as MusicTrack[]) || []);
   };
 
-  const searchJamendo = async (query: string) => {
+  const searchFreeSounds = async (query: string) => {
     if (!query.trim()) return;
     setLoading(true);
     try {
-      const res = await fetch(
-        `https://api.jamendo.com/v3.0/tracks/?client_id=${JAMENDO_CLIENT_ID}&format=json&limit=20&search=${encodeURIComponent(query)}&include=musicinfo&audioformat=mp32`
-      );
-      const json = await res.json();
-      const tracks: MusicTrack[] = (json.results || []).map((t: any) => ({
-        id: `jamendo-${t.id}`,
-        title: t.name,
-        artist_name: t.artist_name,
-        audio_url: t.audio,
-        cover_url: t.image,
-        duration_seconds: t.duration,
-        genre: t.musicinfo?.tags?.genres?.[0] || 'Unknown',
-        source: 'jamendo',
-      }));
-      setJamendoTracks(tracks);
-    } catch {
-      setJamendoTracks([]);
+      const { data, error } = await supabase.functions.invoke('music-search', {
+        body: { query }
+      });
+      if (error) throw error;
+      setFreeTracks(data?.tracks || []);
+    } catch (e) {
+      console.error('Music search error:', e);
+      setFreeTracks([]);
     } finally {
       setLoading(false);
     }
@@ -84,14 +72,22 @@ const MusicBrowser: React.FC<MusicBrowserProps> = ({ selectedTrackId, onSelect }
     if (playingId === track.id) {
       audioRef.current?.pause();
       setPlayingId(null);
-    } else {
-      if (audioRef.current) audioRef.current.pause();
+      return;
+    }
+    if (audioRef.current) audioRef.current.pause();
+
+    // For community tracks, use audio_url directly
+    if (track.source !== 'lenory_free') {
       const audio = new Audio(track.audio_url);
       audio.volume = 0.5;
       audio.play().catch(() => {});
       audio.onended = () => setPlayingId(null);
       audioRef.current = audio;
       setPlayingId(track.id);
+    } else if (track.youtube_id) {
+      // For Lenory Free Sounds, we can't preview directly (YouTube needs iframe)
+      // Just select it
+      handleSelect(track);
     }
   };
 
@@ -111,7 +107,6 @@ const MusicBrowser: React.FC<MusicBrowserProps> = ({ selectedTrackId, onSelect }
     }
   };
 
-  const tracks = tab === 'community' ? communityTracks : jamendoTracks;
   const filteredCommunity = search.trim()
     ? communityTracks.filter(t =>
         t.title.toLowerCase().includes(search.toLowerCase()) ||
@@ -121,7 +116,6 @@ const MusicBrowser: React.FC<MusicBrowserProps> = ({ selectedTrackId, onSelect }
 
   return (
     <div className="space-y-3">
-      {/* Tabs */}
       <div className="flex gap-1 bg-muted rounded-lg p-0.5">
         <button
           onClick={() => setTab('community')}
@@ -132,51 +126,46 @@ const MusicBrowser: React.FC<MusicBrowserProps> = ({ selectedTrackId, onSelect }
           <Music2 className="w-3 h-3 inline mr-1" /> Community
         </button>
         <button
-          onClick={() => setTab('jamendo')}
+          onClick={() => setTab('lenory_free')}
           className={`flex-1 text-xs font-semibold py-1.5 rounded-md transition-colors ${
-            tab === 'jamendo' ? 'bg-background text-foreground shadow-sm' : 'text-muted-foreground'
+            tab === 'lenory_free' ? 'bg-background text-foreground shadow-sm' : 'text-muted-foreground'
           }`}
         >
-          <Globe className="w-3 h-3 inline mr-1" /> Jamendo
+          <Globe className="w-3 h-3 inline mr-1" /> Lenory Free Sounds
         </button>
       </div>
 
-      {/* Search */}
       <div className="flex gap-2">
         <div className="relative flex-1">
           <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground" />
           <Input
             value={search}
             onChange={e => setSearch(e.target.value)}
-            placeholder={tab === 'jamendo' ? 'Search Jamendo music...' : 'Search community tracks...'}
+            placeholder={tab === 'lenory_free' ? 'Search songs (Spotify+YouTube)...' : 'Search community tracks...'}
             className="pl-8 h-8 text-xs"
             onKeyDown={e => {
-              if (e.key === 'Enter' && tab === 'jamendo') searchJamendo(search);
+              if (e.key === 'Enter' && tab === 'lenory_free') searchFreeSounds(search);
             }}
           />
         </div>
-        {tab === 'jamendo' && (
-          <Button size="sm" variant="outline" onClick={() => searchJamendo(search)} disabled={loading} className="h-8 text-xs">
+        {tab === 'lenory_free' && (
+          <Button size="sm" variant="outline" onClick={() => searchFreeSounds(search)} disabled={loading} className="h-8 text-xs">
             {loading ? <Loader2 className="w-3 h-3 animate-spin" /> : 'Search'}
           </Button>
         )}
       </div>
 
-      {/* Selected track */}
       {selectedTrackId && (
         <div className="flex items-center gap-2 p-2 bg-primary/10 rounded-lg border border-primary/20">
           <Check className="w-4 h-4 text-primary shrink-0" />
           <span className="text-xs font-medium text-primary truncate">Music selected ✓</span>
-          <Button size="sm" variant="ghost" className="ml-auto h-6 text-[10px]" onClick={() => onSelect(null)}>
-            Remove
-          </Button>
+          <Button size="sm" variant="ghost" className="ml-auto h-6 text-[10px]" onClick={() => onSelect(null)}>Remove</Button>
         </div>
       )}
 
-      {/* Track list */}
       <ScrollArea className="h-[220px]">
         <div className="space-y-1">
-          {(tab === 'community' ? filteredCommunity : jamendoTracks).map(track => (
+          {(tab === 'community' ? filteredCommunity : freeTracks).map(track => (
             <div
               key={track.id}
               className={`flex items-center gap-2 p-2 rounded-lg cursor-pointer transition-colors hover:bg-muted/50 ${
@@ -184,7 +173,6 @@ const MusicBrowser: React.FC<MusicBrowserProps> = ({ selectedTrackId, onSelect }
               }`}
               onClick={() => handleSelect(track)}
             >
-              {/* Cover */}
               <div className="w-9 h-9 rounded-md bg-muted shrink-0 overflow-hidden flex items-center justify-center">
                 {track.cover_url ? (
                   <img src={track.cover_url} alt="" className="w-full h-full object-cover" />
@@ -192,42 +180,34 @@ const MusicBrowser: React.FC<MusicBrowserProps> = ({ selectedTrackId, onSelect }
                   <Music2 className="w-4 h-4 text-muted-foreground" />
                 )}
               </div>
-
-              {/* Info */}
               <div className="flex-1 min-w-0">
                 <p className="text-xs font-medium truncate">{track.title}</p>
                 <p className="text-[10px] text-muted-foreground truncate">{track.artist_name}</p>
               </div>
-
-              {/* Duration & source */}
               <div className="flex items-center gap-1.5 shrink-0">
                 {track.duration_seconds > 0 && (
                   <span className="text-[10px] text-muted-foreground">{formatDuration(track.duration_seconds)}</span>
                 )}
                 <Badge variant="outline" className="text-[8px] h-4 px-1">
-                  {track.source === 'jamendo' ? '🌐' : '👤'}
+                  {track.source === 'lenory_free' ? '🎵 Free' : '👤'}
                 </Badge>
               </div>
-
-              {/* Play button */}
-              <button
-                onClick={e => { e.stopPropagation(); togglePlay(track); }}
-                className="w-7 h-7 rounded-full bg-primary/10 flex items-center justify-center hover:bg-primary/20 shrink-0"
-              >
-                {playingId === track.id ? (
-                  <Pause className="w-3 h-3 text-primary" />
-                ) : (
-                  <Play className="w-3 h-3 text-primary ml-0.5" />
-                )}
-              </button>
+              {track.source !== 'lenory_free' && (
+                <button
+                  onClick={e => { e.stopPropagation(); togglePlay(track); }}
+                  className="w-7 h-7 rounded-full bg-primary/10 flex items-center justify-center hover:bg-primary/20 shrink-0"
+                >
+                  {playingId === track.id ? <Pause className="w-3 h-3 text-primary" /> : <Play className="w-3 h-3 text-primary ml-0.5" />}
+                </button>
+              )}
             </div>
           ))}
 
-          {tracks.length === 0 && !loading && (
+          {((tab === 'community' && filteredCommunity.length === 0) || (tab === 'lenory_free' && freeTracks.length === 0)) && !loading && (
             <div className="text-center py-8 text-muted-foreground">
               <Music2 className="w-8 h-8 mx-auto mb-2 opacity-40" />
               <p className="text-xs">
-                {tab === 'jamendo' ? 'Search for free music above' : 'No community tracks yet'}
+                {tab === 'lenory_free' ? 'Search for songs above (2⭐ per use)' : 'No community tracks yet'}
               </p>
             </div>
           )}
@@ -235,15 +215,15 @@ const MusicBrowser: React.FC<MusicBrowserProps> = ({ selectedTrackId, onSelect }
           {loading && (
             <div className="text-center py-8">
               <Loader2 className="w-6 h-6 mx-auto animate-spin text-primary" />
-              <p className="text-xs text-muted-foreground mt-2">Searching...</p>
+              <p className="text-xs text-muted-foreground mt-2">Searching Spotify...</p>
             </div>
           )}
         </div>
       </ScrollArea>
 
-      {tab === 'jamendo' && (
+      {tab === 'lenory_free' && (
         <p className="text-[10px] text-muted-foreground text-center">
-          Music from Jamendo · Free for creators · CC licensed
+          Powered by Spotify + YouTube · 2⭐ per use · No royalties
         </p>
       )}
     </div>
