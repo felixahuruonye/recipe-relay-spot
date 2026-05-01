@@ -396,9 +396,38 @@ const CreatePostWizard: React.FC<CreatePostWizardProps> = ({ onPostCreated, isOp
             selectedTrackId={selectedMusicTrack?.id}
             onSelect={(track) => {
               setSelectedMusicTrack(track);
-              setSelectedMusic(track?.audio_url || '');
+              setSelectedMusic(track?.audio_url || track?.youtube_id || '');
+              if (track?.duration_seconds) setMusicDuration(Math.min(track.duration_seconds, 30));
             }}
           />
+          {selectedMusicTrack && (
+            <div className="p-3 bg-muted/50 rounded-xl space-y-2">
+              <Label className="text-xs font-semibold flex items-center gap-1"><Music className="w-3 h-3" /> Sync Music to Media</Label>
+              <div className="space-y-1">
+                <div className="flex items-center justify-between text-[10px] text-muted-foreground">
+                  <span>Start at: {musicStart}s</span>
+                  <span>Length: {musicDuration}s</span>
+                </div>
+                <input
+                  type="range"
+                  min={0}
+                  max={Math.max(0, (selectedMusicTrack.duration_seconds || 60) - 5)}
+                  value={musicStart}
+                  onChange={e => setMusicStart(parseInt(e.target.value))}
+                  className="w-full accent-primary"
+                />
+                <input
+                  type="range"
+                  min={5}
+                  max={Math.min(60, selectedMusicTrack.duration_seconds || 30)}
+                  value={musicDuration}
+                  onChange={e => setMusicDuration(parseInt(e.target.value))}
+                  className="w-full accent-primary"
+                />
+              </div>
+              <p className="text-[10px] text-muted-foreground">Drag to choose what part of the song plays with your post (min 5s for images).</p>
+            </div>
+          )}
         </div>
       );
       case 4: return (
