@@ -878,7 +878,8 @@ const TikTokFeed: React.FC = () => {
   const [activeSendPost, setActiveSendPost] = useState<Post | null>(null);
   const [showSearch, setShowSearch] = useState(false);
   const [showSoundDrilldown, setShowSoundDrilldown] = useState(false);
-  const [activeSoundTrack, setActiveSoundTrack] = useState<{ name: string; artist: string; id?: string }>({ name: '', artist: '' });
+  const [activeSoundTrack, setActiveSoundTrack] = useState<{ name: string; artist: string; id?: string; sourceLabel: string; coverUrl?: string; artistAvatar?: string }>({ name: '', artist: '', sourceLabel: 'Original sound' });
+  const [useSoundTrack, setUseSoundTrack] = useState<any>(null);
   const [processedPosts, setProcessedPosts] = useState<Set<string>>(new Set());
   const [musicTracks, setMusicTracks] = useState<Record<string, MusicTrack>>({});
   const [myProfile, setMyProfile] = useState<UserProfile | null>(null);
