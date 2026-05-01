@@ -730,6 +730,10 @@ const TikTokPost: React.FC<{
 
       <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-transparent to-black/30 pointer-events-none z-20" />
 
+      {/* Hidden YouTube background audio for Lenory Free tracks */}
+      {mTrack?.youtube_id && (
+        <YouTubeAudio videoId={mTrack.youtube_id} playing={isActive && !isMuted} muted={isMuted} volume={40} loop />
+      )}
       {/* Earning labels */}
       {isActive && isVideo && (
         <div className="absolute top-20 left-1/2 -translate-x-1/2 z-30">
