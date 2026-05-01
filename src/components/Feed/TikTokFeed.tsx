@@ -22,6 +22,7 @@ import { Input } from '@/components/ui/input';
 import { SuggestedUsers } from './SuggestedUsers';
 import { ProductCard } from './ProductCard';
 import CreatePostWizard from '@/components/Posts/CreatePostWizard';
+import YouTubeAudio from '@/components/Music/YouTubeAudio';
 
 interface Post {
   id: string;
@@ -45,8 +46,11 @@ interface MusicTrack {
   id: string;
   title: string;
   artist_name: string;
-  audio_url: string;
+  audio_url?: string;
   source?: string;
+  youtube_id?: string;
+  cover_url?: string;
+  artist_id?: string;
 }
 
 interface UserProfile {
@@ -285,57 +289,69 @@ const SoundDrilldown: React.FC<{
   trackName: string;
   trackArtist: string;
   trackId?: string;
-  originalPostId?: string;
-}> = ({ open, onClose, trackName, trackArtist, trackId, originalPostId }) => {
-  const navigate = useNavigate();
+  sourceLabel: string; // 'Original sound' | 'Community' | 'Lenory Free'
+  coverUrl?: string;
+  artistAvatar?: string;
+  onUseSound: () => void;
+}> = ({ open, onClose, trackName, trackArtist, trackId, sourceLabel, coverUrl, artistAvatar, onUseSound }) => {
   const [posts, setPosts] = useState<any[]>([]);
+  const [totalUses, setTotalUses] = useState(0);
 
   useEffect(() => {
-    if (!open) return;
-    loadPosts();
-  }, [open, trackId]);
-
-  const loadPosts = async () => {
-    if (trackId) {
+    if (!open || !trackId) return;
+    (async () => {
       const { data } = await supabase
         .from('posts')
-        .select('id, title, media_urls, view_count')
+        .select('id, title, media_urls, view_count, likes_count, comments_count, user_id')
         .eq('music_track_id', trackId)
         .eq('status', 'approved')
-        .order('created_at', { ascending: true })
-        .limit(20);
+        .order('view_count', { ascending: false })
+        .limit(30);
       setPosts(data || []);
-    }
-  };
+      setTotalUses(data?.length || 0);
+    })();
+  }, [open, trackId]);
 
   if (!open) return null;
+
+  const totalViews = posts.reduce((s, p) => s + (p.view_count || 0), 0);
+  const totalLikes = posts.reduce((s, p) => s + (p.likes_count || 0), 0);
 
   return (
     <motion.div className="fixed inset-0 z-50" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
       <div className="absolute inset-0 bg-black/60" onClick={onClose} />
       <motion.div
-        className="absolute bottom-0 left-0 right-0 max-w-[480px] mx-auto bg-card rounded-t-2xl max-h-[70vh] overflow-hidden"
+        className="absolute bottom-0 left-0 right-0 max-w-[480px] mx-auto bg-card rounded-t-2xl max-h-[80vh] overflow-hidden"
         initial={{ y: '100%' }} animate={{ y: 0 }} exit={{ y: '100%' }}
         transition={{ type: 'spring', damping: 25 }}
       >
         <div className="p-4 border-b border-border">
           <div className="flex items-center justify-between">
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-full bg-gradient-to-br from-purple-500 to-pink-500 flex items-center justify-center animate-spin" style={{ animationDuration: '3s' }}>
-                <Disc className="w-5 h-5 text-white" />
+            <div className="flex items-center gap-3 min-w-0 flex-1">
+              <div className="w-12 h-12 rounded-full overflow-hidden bg-gradient-to-br from-purple-500 to-pink-500 flex items-center justify-center shrink-0" style={{ animation: 'spin 4s linear infinite' }}>
+                {coverUrl ? <img src={coverUrl} className="w-full h-full object-cover" /> : <Disc className="w-6 h-6 text-white" />}
               </div>
-              <div>
-                <p className="font-bold text-sm">{trackName}</p>
-                <p className="text-xs text-muted-foreground">{trackArtist}</p>
+              <div className="min-w-0 flex-1">
+                <p className="font-bold text-sm truncate">{trackName}</p>
+                <div className="flex items-center gap-1.5">
+                  {artistAvatar && <Avatar className="w-4 h-4"><AvatarImage src={artistAvatar} /><AvatarFallback className="text-[8px]">{trackArtist[0]}</AvatarFallback></Avatar>}
+                  <p className="text-xs text-muted-foreground truncate">{trackArtist}</p>
+                </div>
+                <Badge variant="outline" className="text-[9px] h-4 mt-0.5">{sourceLabel}</Badge>
               </div>
             </div>
             <button onClick={onClose} className="text-muted-foreground"><X className="w-5 h-5" /></button>
           </div>
-          <Button size="sm" className="w-full mt-3 gap-2" onClick={() => { onClose(); }}>
+          <div className="flex items-center gap-3 mt-3 text-[11px] text-muted-foreground">
+            <span>📹 {totalUses} posts</span>
+            <span>👁 {totalViews.toLocaleString()} views</span>
+            <span>❤️ {totalLikes.toLocaleString()} likes</span>
+          </div>
+          <Button size="sm" className="w-full mt-3 gap-2" onClick={onUseSound}>
             <Music2 className="w-4 h-4" /> Use this sound
           </Button>
         </div>
-        <ScrollArea className="max-h-[calc(70vh-120px)]">
+        <ScrollArea className="max-h-[calc(80vh-180px)]">
           <div className="p-4 grid grid-cols-3 gap-1">
             {posts.map((p, i) => (
               <div key={p.id} className="aspect-[9/16] rounded-lg overflow-hidden bg-muted relative">
@@ -349,7 +365,7 @@ const SoundDrilldown: React.FC<{
                 </div>
                 {i === 0 && (
                   <div className="absolute top-1 left-1 bg-primary px-1.5 py-0.5 rounded text-[8px] text-primary-foreground font-bold">
-                    Original
+                    Top
                   </div>
                 )}
               </div>
@@ -634,16 +650,16 @@ const TikTokPost: React.FC<{
   const hasMedia = post.media_urls && post.media_urls.length > 0;
   const isVideo = hasMedia && (post.media_urls[0]?.match(/\.(mp4|webm|ogg|mov)$/i) || post.media_urls[0]?.includes('video'));
 
-  // Background music
+  // Background music — supports both audio_url (community) and youtube_id (Lenory Free)
   useEffect(() => {
-    if (!mTrack?.audio_url) return;
+    if (!mTrack?.audio_url || mTrack?.youtube_id) return;
     const audio = new Audio(mTrack.audio_url);
     audio.loop = true;
-    audio.volume = 0.3;
+    audio.volume = 0.4;
     musicAudioRef.current = audio;
     if (isActive && !isMuted) audio.play().catch(() => {});
     return () => { audio.pause(); audio.src = ''; };
-  }, [mTrack?.audio_url]);
+  }, [mTrack?.audio_url, mTrack?.youtube_id]);
 
   useEffect(() => {
     if (musicAudioRef.current) {
@@ -726,6 +742,10 @@ const TikTokPost: React.FC<{
 
       <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-transparent to-black/30 pointer-events-none z-20" />
 
+      {/* Hidden YouTube background audio for Lenory Free tracks */}
+      {mTrack?.youtube_id && (
+        <YouTubeAudio videoId={mTrack.youtube_id} playing={isActive && !isMuted} muted={isMuted} volume={40} loop />
+      )}
       {/* Earning labels */}
       {isActive && isVideo && (
         <div className="absolute top-20 left-1/2 -translate-x-1/2 z-30">
@@ -858,7 +878,8 @@ const TikTokFeed: React.FC = () => {
   const [activeSendPost, setActiveSendPost] = useState<Post | null>(null);
   const [showSearch, setShowSearch] = useState(false);
   const [showSoundDrilldown, setShowSoundDrilldown] = useState(false);
-  const [activeSoundTrack, setActiveSoundTrack] = useState<{ name: string; artist: string; id?: string }>({ name: '', artist: '' });
+  const [activeSoundTrack, setActiveSoundTrack] = useState<{ name: string; artist: string; id?: string; sourceLabel: string; coverUrl?: string; artistAvatar?: string }>({ name: '', artist: '', sourceLabel: 'Original sound' });
+  const [useSoundTrack, setUseSoundTrack] = useState<any>(null);
   const [processedPosts, setProcessedPosts] = useState<Set<string>>(new Set());
   const [musicTracks, setMusicTracks] = useState<Record<string, MusicTrack>>({});
   const [myProfile, setMyProfile] = useState<UserProfile | null>(null);
@@ -1071,7 +1092,7 @@ const TikTokFeed: React.FC = () => {
         if (musicTrackIds.length > 0) {
           const { data: musicData } = await supabase
             .from('music_tracks')
-            .select('id, title, artist_name, audio_url, source')
+            .select('id, title, artist_name, audio_url, source, youtube_id, cover_url, artist_id')
             .in('id', musicTrackIds);
           const mMap: Record<string, MusicTrack> = {};
           musicData?.forEach((m: any) => { mMap[m.id] = m; });
@@ -1308,10 +1329,14 @@ const TikTokFeed: React.FC = () => {
                     onSendToFriend={() => { setActiveSendPost(post); setShowSendToFriend(true); }}
                     onSoundDrilldown={() => {
                       const mTrack = post.music_track_id ? musicTracks[post.music_track_id] : undefined;
+                      const sourceLabel = !mTrack ? 'Original sound' : (mTrack.source === 'lenory_free' ? 'Lenory Free' : 'Community');
                       setActiveSoundTrack({
                         name: mTrack?.title || 'Original sound',
                         artist: mTrack?.artist_name || users[post.user_id]?.username || 'Unknown',
                         id: post.music_track_id || undefined,
+                        sourceLabel,
+                        coverUrl: mTrack?.cover_url,
+                        artistAvatar: !mTrack ? users[post.user_id]?.avatar_url : undefined,
                       });
                       setShowSoundDrilldown(true);
                     }}

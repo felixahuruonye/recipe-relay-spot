@@ -5,17 +5,21 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Search, Play, Pause, Music2, Check, Loader2, Globe } from 'lucide-react';
+import YouTubeAudio from './YouTubeAudio';
 
 interface MusicTrack {
   id: string;
   title: string;
   artist_name: string;
-  audio_url: string;
+  audio_url?: string;
   cover_url?: string;
   duration_seconds: number;
-  genre: string;
+  genre?: string;
   source: string;
   youtube_id?: string;
+  spotify_id?: string;
+  external_id?: string;
+  artist_id?: string;
 }
 
 interface MusicBrowserProps {
@@ -30,16 +34,11 @@ const MusicBrowser: React.FC<MusicBrowserProps> = ({ selectedTrackId, onSelect }
   const [freeTracks, setFreeTracks] = useState<MusicTrack[]>([]);
   const [loading, setLoading] = useState(false);
   const [playingId, setPlayingId] = useState<string | null>(null);
+  const [previewYtId, setPreviewYtId] = useState<string | null>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
-  const ytPlayerRef = useRef<HTMLIFrameElement | null>(null);
 
-  useEffect(() => {
-    loadCommunityTracks();
-  }, []);
-
-  useEffect(() => {
-    return () => { audioRef.current?.pause(); };
-  }, []);
+  useEffect(() => { loadCommunityTracks(); }, []);
+  useEffect(() => () => { audioRef.current?.pause(); }, []);
 
   const loadCommunityTracks = async () => {
     const { data } = await supabase
@@ -55,9 +54,7 @@ const MusicBrowser: React.FC<MusicBrowserProps> = ({ selectedTrackId, onSelect }
     if (!query.trim()) return;
     setLoading(true);
     try {
-      const { data, error } = await supabase.functions.invoke('music-search', {
-        body: { query }
-      });
+      const { data, error } = await supabase.functions.invoke('music-search', { body: { query } });
       if (error) throw error;
       setFreeTracks(data?.tracks || []);
     } catch (e) {
@@ -69,29 +66,35 @@ const MusicBrowser: React.FC<MusicBrowserProps> = ({ selectedTrackId, onSelect }
   };
 
   const togglePlay = (track: MusicTrack) => {
+    // Stop current
+    audioRef.current?.pause();
     if (playingId === track.id) {
-      audioRef.current?.pause();
       setPlayingId(null);
+      setPreviewYtId(null);
       return;
     }
-    if (audioRef.current) audioRef.current.pause();
 
-    // For community tracks, use audio_url directly
-    if (track.source !== 'lenory_free') {
+    // Lenory Free → use YouTube preview
+    if (track.source === 'lenory_free' && track.youtube_id) {
+      setPreviewYtId(track.youtube_id);
+      setPlayingId(track.id);
+      return;
+    }
+
+    // Community → audio_url
+    if (track.audio_url) {
       const audio = new Audio(track.audio_url);
       audio.volume = 0.5;
       audio.play().catch(() => {});
       audio.onended = () => setPlayingId(null);
       audioRef.current = audio;
       setPlayingId(track.id);
-    } else if (track.youtube_id) {
-      // For Lenory Free Sounds, we can't preview directly (YouTube needs iframe)
-      // Just select it
-      handleSelect(track);
+      setPreviewYtId(null);
     }
   };
 
   const formatDuration = (s: number) => {
+    if (!s) return '';
     const m = Math.floor(s / 60);
     const sec = s % 60;
     return `${m}:${sec.toString().padStart(2, '0')}`;
@@ -100,11 +103,9 @@ const MusicBrowser: React.FC<MusicBrowserProps> = ({ selectedTrackId, onSelect }
   const handleSelect = (track: MusicTrack) => {
     audioRef.current?.pause();
     setPlayingId(null);
-    if (selectedTrackId === track.id) {
-      onSelect(null);
-    } else {
-      onSelect(track);
-    }
+    setPreviewYtId(null);
+    if (selectedTrackId === track.id) onSelect(null);
+    else onSelect(track);
   };
 
   const filteredCommunity = search.trim()
@@ -117,21 +118,11 @@ const MusicBrowser: React.FC<MusicBrowserProps> = ({ selectedTrackId, onSelect }
   return (
     <div className="space-y-3">
       <div className="flex gap-1 bg-muted rounded-lg p-0.5">
-        <button
-          onClick={() => setTab('community')}
-          className={`flex-1 text-xs font-semibold py-1.5 rounded-md transition-colors ${
-            tab === 'community' ? 'bg-background text-foreground shadow-sm' : 'text-muted-foreground'
-          }`}
-        >
+        <button onClick={() => setTab('community')} className={`flex-1 text-xs font-semibold py-1.5 rounded-md transition-colors ${tab === 'community' ? 'bg-background text-foreground shadow-sm' : 'text-muted-foreground'}`}>
           <Music2 className="w-3 h-3 inline mr-1" /> Community
         </button>
-        <button
-          onClick={() => setTab('lenory_free')}
-          className={`flex-1 text-xs font-semibold py-1.5 rounded-md transition-colors ${
-            tab === 'lenory_free' ? 'bg-background text-foreground shadow-sm' : 'text-muted-foreground'
-          }`}
-        >
-          <Globe className="w-3 h-3 inline mr-1" /> Lenory Free Sounds
+        <button onClick={() => setTab('lenory_free')} className={`flex-1 text-xs font-semibold py-1.5 rounded-md transition-colors ${tab === 'lenory_free' ? 'bg-background text-foreground shadow-sm' : 'text-muted-foreground'}`}>
+          <Globe className="w-3 h-3 inline mr-1" /> Lenory Free
         </button>
       </div>
 
@@ -143,9 +134,7 @@ const MusicBrowser: React.FC<MusicBrowserProps> = ({ selectedTrackId, onSelect }
             onChange={e => setSearch(e.target.value)}
             placeholder={tab === 'lenory_free' ? 'Search songs (Spotify+YouTube)...' : 'Search community tracks...'}
             className="pl-8 h-8 text-xs"
-            onKeyDown={e => {
-              if (e.key === 'Enter' && tab === 'lenory_free') searchFreeSounds(search);
-            }}
+            onKeyDown={e => { if (e.key === 'Enter' && tab === 'lenory_free') searchFreeSounds(search); }}
           />
         </div>
         {tab === 'lenory_free' && (
@@ -163,45 +152,48 @@ const MusicBrowser: React.FC<MusicBrowserProps> = ({ selectedTrackId, onSelect }
         </div>
       )}
 
-      <ScrollArea className="h-[220px]">
+      <ScrollArea className="h-[260px]">
         <div className="space-y-1">
-          {(tab === 'community' ? filteredCommunity : freeTracks).map(track => (
-            <div
-              key={track.id}
-              className={`flex items-center gap-2 p-2 rounded-lg cursor-pointer transition-colors hover:bg-muted/50 ${
-                selectedTrackId === track.id ? 'bg-primary/10 ring-1 ring-primary/30' : ''
-              }`}
-              onClick={() => handleSelect(track)}
-            >
-              <div className="w-9 h-9 rounded-md bg-muted shrink-0 overflow-hidden flex items-center justify-center">
-                {track.cover_url ? (
-                  <img src={track.cover_url} alt="" className="w-full h-full object-cover" />
-                ) : (
-                  <Music2 className="w-4 h-4 text-muted-foreground" />
+          {(tab === 'community' ? filteredCommunity : freeTracks).map(track => {
+            const isPlaying = playingId === track.id;
+            const canPreview = track.source === 'lenory_free' ? !!track.youtube_id : !!track.audio_url;
+            return (
+              <div
+                key={track.id}
+                className={`flex items-center gap-2 p-2 rounded-lg cursor-pointer transition-colors hover:bg-muted/50 ${selectedTrackId === track.id ? 'bg-primary/10 ring-1 ring-primary/30' : ''}`}
+                onClick={() => handleSelect(track)}
+              >
+                <div className="w-9 h-9 rounded-md bg-muted shrink-0 overflow-hidden flex items-center justify-center">
+                  {track.cover_url ? (
+                    <img src={track.cover_url} alt="" className="w-full h-full object-cover" />
+                  ) : (
+                    <Music2 className="w-4 h-4 text-muted-foreground" />
+                  )}
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="text-xs font-medium truncate">{track.title}</p>
+                  <p className="text-[10px] text-muted-foreground truncate">{track.artist_name}</p>
+                </div>
+                <div className="flex items-center gap-1.5 shrink-0">
+                  {!!track.duration_seconds && (
+                    <span className="text-[10px] text-muted-foreground">{formatDuration(track.duration_seconds)}</span>
+                  )}
+                  <Badge variant="outline" className="text-[8px] h-4 px-1">
+                    {track.source === 'lenory_free' ? '🎵 Free' : '👤'}
+                  </Badge>
+                </div>
+                {canPreview && (
+                  <button
+                    onClick={e => { e.stopPropagation(); togglePlay(track); }}
+                    className="w-7 h-7 rounded-full bg-primary/10 flex items-center justify-center hover:bg-primary/20 shrink-0"
+                    title={isPlaying ? 'Stop preview' : 'Preview'}
+                  >
+                    {isPlaying ? <Pause className="w-3 h-3 text-primary" /> : <Play className="w-3 h-3 text-primary ml-0.5" />}
+                  </button>
                 )}
               </div>
-              <div className="flex-1 min-w-0">
-                <p className="text-xs font-medium truncate">{track.title}</p>
-                <p className="text-[10px] text-muted-foreground truncate">{track.artist_name}</p>
-              </div>
-              <div className="flex items-center gap-1.5 shrink-0">
-                {track.duration_seconds > 0 && (
-                  <span className="text-[10px] text-muted-foreground">{formatDuration(track.duration_seconds)}</span>
-                )}
-                <Badge variant="outline" className="text-[8px] h-4 px-1">
-                  {track.source === 'lenory_free' ? '🎵 Free' : '👤'}
-                </Badge>
-              </div>
-              {track.source !== 'lenory_free' && (
-                <button
-                  onClick={e => { e.stopPropagation(); togglePlay(track); }}
-                  className="w-7 h-7 rounded-full bg-primary/10 flex items-center justify-center hover:bg-primary/20 shrink-0"
-                >
-                  {playingId === track.id ? <Pause className="w-3 h-3 text-primary" /> : <Play className="w-3 h-3 text-primary ml-0.5" />}
-                </button>
-              )}
-            </div>
-          ))}
+            );
+          })}
 
           {((tab === 'community' && filteredCommunity.length === 0) || (tab === 'lenory_free' && freeTracks.length === 0)) && !loading && (
             <div className="text-center py-8 text-muted-foreground">
@@ -215,7 +207,7 @@ const MusicBrowser: React.FC<MusicBrowserProps> = ({ selectedTrackId, onSelect }
           {loading && (
             <div className="text-center py-8">
               <Loader2 className="w-6 h-6 mx-auto animate-spin text-primary" />
-              <p className="text-xs text-muted-foreground mt-2">Searching Spotify...</p>
+              <p className="text-xs text-muted-foreground mt-2">Searching Spotify + YouTube...</p>
             </div>
           )}
         </div>
@@ -225,6 +217,11 @@ const MusicBrowser: React.FC<MusicBrowserProps> = ({ selectedTrackId, onSelect }
         <p className="text-[10px] text-muted-foreground text-center">
           Powered by Spotify + YouTube · 2⭐ per use · No royalties
         </p>
+      )}
+
+      {/* Hidden YouTube preview player for Lenory Free tracks */}
+      {previewYtId && (
+        <YouTubeAudio videoId={previewYtId} playing={!!previewYtId} muted={false} volume={60} loop={false} onEnded={() => { setPlayingId(null); setPreviewYtId(null); }} />
       )}
     </div>
   );

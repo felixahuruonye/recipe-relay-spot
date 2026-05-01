@@ -19,6 +19,7 @@ interface CreatePostWizardProps {
   isOpen?: boolean;
   onOpenChange?: (isOpen: boolean) => void;
   postToEdit?: any;
+  preselectedTrack?: any;
 }
 
 const STEPS = [
@@ -40,7 +41,7 @@ const starPriceOptions = [
   100, 200, 300, 500, 1000, 2000, 5000, 10000, 50000, 100000
 ];
 
-const CreatePostWizard: React.FC<CreatePostWizardProps> = ({ onPostCreated, isOpen, onOpenChange, postToEdit }) => {
+const CreatePostWizard: React.FC<CreatePostWizardProps> = ({ onPostCreated, isOpen, onOpenChange, postToEdit, preselectedTrack }) => {
   const { user } = useAuth();
   const { toast } = useToast();
   const [step, setStep] = useState(0);
@@ -64,10 +65,15 @@ const CreatePostWizard: React.FC<CreatePostWizardProps> = ({ onPostCreated, isOp
   // Step 4: Vibe Sync
   const [selectedMusic, setSelectedMusic] = useState<string>('');
   const [selectedMusicTrack, setSelectedMusicTrack] = useState<any>(null);
+  const [musicStart, setMusicStart] = useState(0); // seconds
+  const [musicDuration, setMusicDuration] = useState(15); // seconds (drag)
 
   // Step 5: Value
   const [starPrice, setStarPrice] = useState(0);
   const [userStarBalance, setUserStarBalance] = useState(0);
+
+  // Storyline option
+  const [alsoPostToStoryline, setAlsoPostToStoryline] = useState(false);
 
   const isPaidTier = starPrice >= 100;
   const postingFee = isPaidTier ? 40 : 0;
@@ -91,6 +97,15 @@ const CreatePostWizard: React.FC<CreatePostWizardProps> = ({ onPostCreated, isOp
     }
   }, [postToEdit]);
 
+  // Apply preselected music track when opened from "Use this sound"
+  useEffect(() => {
+    if (isOpen && preselectedTrack) {
+      setSelectedMusicTrack(preselectedTrack);
+      setSelectedMusic(preselectedTrack.audio_url || preselectedTrack.youtube_id || '');
+      setStep(0);
+    }
+  }, [isOpen, preselectedTrack]);
+
   // Reset on close
   useEffect(() => {
     if (!isOpen) {
@@ -98,7 +113,8 @@ const CreatePostWizard: React.FC<CreatePostWizardProps> = ({ onPostCreated, isOp
       if (!postToEdit) {
         setMediaFiles([]); setMediaPreviews([]); setTitle(''); setBody('');
         setCategory(''); setTags([]); setTagInput(''); setStarPrice(0);
-        setSelectedMusic(''); setThumbnailFile(null); setThumbnailPreview('');
+        setSelectedMusic(''); setSelectedMusicTrack(null); setThumbnailFile(null); setThumbnailPreview('');
+        setMusicStart(0); setMusicDuration(15); setAlsoPostToStoryline(false);
       }
     }
   }, [isOpen]);
@@ -170,6 +186,29 @@ const CreatePostWizard: React.FC<CreatePostWizardProps> = ({ onPostCreated, isOp
     return supabase.storage.from('post-media').getPublicUrl(name).data.publicUrl;
   };
 
+  const ensureMusicTrackId = async (): Promise<string | null> => {
+    if (!selectedMusicTrack) return null;
+    // If id is a real DB uuid (no 'spotify-' prefix), return as-is
+    if (!selectedMusicTrack.id?.startsWith('spotify-')) return selectedMusicTrack.id;
+    // Lenory Free: upsert into music_tracks
+    const ext = selectedMusicTrack.spotify_id || selectedMusicTrack.external_id;
+    if (!ext) return null;
+    const { data: existing } = await supabase.from('music_tracks').select('id').eq('external_id', ext).maybeSingle();
+    if (existing?.id) return existing.id;
+    const { data: created } = await supabase.from('music_tracks').insert({
+      title: selectedMusicTrack.title,
+      artist_name: selectedMusicTrack.artist_name,
+      cover_url: selectedMusicTrack.cover_url,
+      duration_seconds: selectedMusicTrack.duration_seconds || 0,
+      source: 'lenory_free',
+      external_id: ext,
+      youtube_id: selectedMusicTrack.youtube_id,
+      audio_url: '',
+      status: 'active',
+    }).select('id').single();
+    return created?.id || null;
+  };
+
   const handleSubmit = async () => {
     if (!user || !title.trim() || !body.trim() || !category) return;
     if (isPaidTier && !canAffordFee) {
@@ -185,19 +224,48 @@ const CreatePostWizard: React.FC<CreatePostWizardProps> = ({ onPostCreated, isOp
       const mediaUrls = await uploadMedia();
       const thumbUrl = await uploadThumbnail();
       const bodyWithTags = tags.length > 0 ? `${body.trim()}\n\n${tags.map(t => `#${t}`).join(' ')}` : body.trim();
+      const musicTrackId = await ensureMusicTrackId();
 
       if (postToEdit?.id) {
         await supabase.from('posts').update({
           title: title.trim(), body: bodyWithTags, category,
           media_urls: mediaUrls, star_price: starPrice, thumbnail_url: thumbUrl,
-        }).eq('id', postToEdit.id);
+          music_track_id: musicTrackId,
+          music_start_seconds: musicStart,
+          music_duration_seconds: musicDuration,
+        } as any).eq('id', postToEdit.id);
         toast({ title: 'Post updated!' });
       } else {
-        await supabase.from('posts').insert({
+        const { data: newPost } = await supabase.from('posts').insert({
           title: title.trim(), body: bodyWithTags, category,
           media_urls: mediaUrls, user_id: user.id, status: 'approved',
           star_price: starPrice, post_status: 'new', thumbnail_url: thumbUrl,
-        });
+          music_track_id: musicTrackId,
+          music_start_seconds: musicStart,
+          music_duration_seconds: musicDuration,
+        } as any).select('id').single();
+
+        // Increment musician usage_count
+        if (musicTrackId) {
+          await supabase.rpc('execute_admin_sql' as any, { query: `SELECT 1` }).then(() => {});
+          const { data: tr } = await supabase.from('music_tracks').select('usage_count').eq('id', musicTrackId).maybeSingle();
+          await supabase.from('music_tracks').update({ usage_count: (tr?.usage_count || 0) + 1 }).eq('id', musicTrackId);
+        }
+
+        // Optionally also post to storyline
+        if (alsoPostToStoryline && mediaUrls[0]) {
+          const isVid = /\.(mp4|webm|ogg|mov)$/i.test(mediaUrls[0]);
+          await supabase.from('user_storylines').insert({
+            user_id: user.id,
+            media_url: mediaUrls[0],
+            media_type: isVid ? 'video' : 'image',
+            caption: title.trim(),
+            preview_url: thumbUrl || mediaUrls[0],
+            star_price: starPrice,
+            status: 'active',
+          } as any);
+        }
+
         toast({ title: '🎉 Post created!', description: isPaidTier ? `${postingFee} Stars deducted` : 'Your post is live!' });
       }
 
@@ -328,9 +396,38 @@ const CreatePostWizard: React.FC<CreatePostWizardProps> = ({ onPostCreated, isOp
             selectedTrackId={selectedMusicTrack?.id}
             onSelect={(track) => {
               setSelectedMusicTrack(track);
-              setSelectedMusic(track?.audio_url || '');
+              setSelectedMusic(track?.audio_url || track?.youtube_id || '');
+              if (track?.duration_seconds) setMusicDuration(Math.min(track.duration_seconds, 30));
             }}
           />
+          {selectedMusicTrack && (
+            <div className="p-3 bg-muted/50 rounded-xl space-y-2">
+              <Label className="text-xs font-semibold flex items-center gap-1"><Music className="w-3 h-3" /> Sync Music to Media</Label>
+              <div className="space-y-1">
+                <div className="flex items-center justify-between text-[10px] text-muted-foreground">
+                  <span>Start at: {musicStart}s</span>
+                  <span>Length: {musicDuration}s</span>
+                </div>
+                <input
+                  type="range"
+                  min={0}
+                  max={Math.max(0, (selectedMusicTrack.duration_seconds || 60) - 5)}
+                  value={musicStart}
+                  onChange={e => setMusicStart(parseInt(e.target.value))}
+                  className="w-full accent-primary"
+                />
+                <input
+                  type="range"
+                  min={5}
+                  max={Math.min(60, selectedMusicTrack.duration_seconds || 30)}
+                  value={musicDuration}
+                  onChange={e => setMusicDuration(parseInt(e.target.value))}
+                  className="w-full accent-primary"
+                />
+              </div>
+              <p className="text-[10px] text-muted-foreground">Drag to choose what part of the song plays with your post (min 5s for images).</p>
+            </div>
+          )}
         </div>
       );
       case 4: return (
@@ -378,7 +475,22 @@ const CreatePostWizard: React.FC<CreatePostWizardProps> = ({ onPostCreated, isOp
             <div><span className="text-muted-foreground">Caption:</span> <span className="line-clamp-2">{body}</span></div>
             {tags.length > 0 && <div className="flex flex-wrap gap-1">{tags.map(t => <Badge key={t} variant="outline" className="text-xs">#{t}</Badge>)}</div>}
             <div><span className="text-muted-foreground">Star Price:</span> <span className="font-bold text-yellow-500">{starPrice === 0 ? 'Free' : `${starPrice} ⭐`}</span></div>
+            {selectedMusicTrack && <div><span className="text-muted-foreground">Music:</span> <span>♪ {selectedMusicTrack.title} — {selectedMusicTrack.artist_name}</span></div>}
           </div>
+          {!postToEdit && mediaPreviews.length > 0 && (
+            <button
+              type="button"
+              onClick={() => setAlsoPostToStoryline(v => !v)}
+              className={`w-full p-3 rounded-xl border-2 transition-colors text-left ${alsoPostToStoryline ? 'border-primary bg-primary/10' : 'border-border bg-muted/30'}`}
+            >
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-sm font-semibold flex items-center gap-1.5">📖 Add to Storyline {alsoPostToStoryline && <Check className="w-4 h-4 text-primary" />}</p>
+                  <p className="text-[10px] text-muted-foreground">Also share this as a 24-hour story</p>
+                </div>
+              </div>
+            </button>
+          )}
         </div>
       );
     }
