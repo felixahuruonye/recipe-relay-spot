@@ -1329,10 +1329,14 @@ const TikTokFeed: React.FC = () => {
                     onSendToFriend={() => { setActiveSendPost(post); setShowSendToFriend(true); }}
                     onSoundDrilldown={() => {
                       const mTrack = post.music_track_id ? musicTracks[post.music_track_id] : undefined;
+                      const sourceLabel = !mTrack ? 'Original sound' : (mTrack.source === 'lenory_free' ? 'Lenory Free' : 'Community');
                       setActiveSoundTrack({
                         name: mTrack?.title || 'Original sound',
                         artist: mTrack?.artist_name || users[post.user_id]?.username || 'Unknown',
                         id: post.music_track_id || undefined,
+                        sourceLabel,
+                        coverUrl: mTrack?.cover_url,
+                        artistAvatar: !mTrack ? users[post.user_id]?.avatar_url : undefined,
                       });
                       setShowSoundDrilldown(true);
                     }}
