@@ -1516,6 +1516,8 @@ export type Database = {
           likes_count: number | null
           media_type: string | null
           media_urls: string[] | null
+          music_duration_seconds: number | null
+          music_start_seconds: number | null
           music_track_id: string | null
           post_status: string | null
           rating: number | null
@@ -1546,6 +1548,8 @@ export type Database = {
           likes_count?: number | null
           media_type?: string | null
           media_urls?: string[] | null
+          music_duration_seconds?: number | null
+          music_start_seconds?: number | null
           music_track_id?: string | null
           post_status?: string | null
           rating?: number | null
@@ -1576,6 +1580,8 @@ export type Database = {
           likes_count?: number | null
           media_type?: string | null
           media_urls?: string[] | null
+          music_duration_seconds?: number | null
+          music_start_seconds?: number | null
           music_track_id?: string | null
           post_status?: string | null
           rating?: number | null

@@ -1,0 +1,2 @@
+ALTER TABLE public.posts ADD COLUMN IF NOT EXISTS music_start_seconds INTEGER DEFAULT 0;
+ALTER TABLE public.posts ADD COLUMN IF NOT EXISTS music_duration_seconds INTEGER DEFAULT 15;
