@@ -41,7 +41,7 @@ const starPriceOptions = [
   100, 200, 300, 500, 1000, 2000, 5000, 10000, 50000, 100000
 ];
 
-const CreatePostWizard: React.FC<CreatePostWizardProps> = ({ onPostCreated, isOpen, onOpenChange, postToEdit }) => {
+const CreatePostWizard: React.FC<CreatePostWizardProps> = ({ onPostCreated, isOpen, onOpenChange, postToEdit, preselectedTrack }) => {
   const { user } = useAuth();
   const { toast } = useToast();
   const [step, setStep] = useState(0);
@@ -65,10 +65,15 @@ const CreatePostWizard: React.FC<CreatePostWizardProps> = ({ onPostCreated, isOp
   // Step 4: Vibe Sync
   const [selectedMusic, setSelectedMusic] = useState<string>('');
   const [selectedMusicTrack, setSelectedMusicTrack] = useState<any>(null);
+  const [musicStart, setMusicStart] = useState(0); // seconds
+  const [musicDuration, setMusicDuration] = useState(15); // seconds (drag)
 
   // Step 5: Value
   const [starPrice, setStarPrice] = useState(0);
   const [userStarBalance, setUserStarBalance] = useState(0);
+
+  // Storyline option
+  const [alsoPostToStoryline, setAlsoPostToStoryline] = useState(false);
 
   const isPaidTier = starPrice >= 100;
   const postingFee = isPaidTier ? 40 : 0;
