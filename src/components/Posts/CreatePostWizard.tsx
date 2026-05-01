@@ -97,6 +97,15 @@ const CreatePostWizard: React.FC<CreatePostWizardProps> = ({ onPostCreated, isOp
     }
   }, [postToEdit]);
 
+  // Apply preselected music track when opened from "Use this sound"
+  useEffect(() => {
+    if (isOpen && preselectedTrack) {
+      setSelectedMusicTrack(preselectedTrack);
+      setSelectedMusic(preselectedTrack.audio_url || preselectedTrack.youtube_id || '');
+      setStep(0);
+    }
+  }, [isOpen, preselectedTrack]);
+
   // Reset on close
   useEffect(() => {
     if (!isOpen) {
@@ -104,7 +113,8 @@ const CreatePostWizard: React.FC<CreatePostWizardProps> = ({ onPostCreated, isOp
       if (!postToEdit) {
         setMediaFiles([]); setMediaPreviews([]); setTitle(''); setBody('');
         setCategory(''); setTags([]); setTagInput(''); setStarPrice(0);
-        setSelectedMusic(''); setThumbnailFile(null); setThumbnailPreview('');
+        setSelectedMusic(''); setSelectedMusicTrack(null); setThumbnailFile(null); setThumbnailPreview('');
+        setMusicStart(0); setMusicDuration(15); setAlsoPostToStoryline(false);
       }
     }
   }, [isOpen]);
