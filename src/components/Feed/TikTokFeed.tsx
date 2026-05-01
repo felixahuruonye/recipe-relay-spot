@@ -46,8 +46,11 @@ interface MusicTrack {
   id: string;
   title: string;
   artist_name: string;
-  audio_url: string;
+  audio_url?: string;
   source?: string;
+  youtube_id?: string;
+  cover_url?: string;
+  artist_id?: string;
 }
 
 interface UserProfile {
