@@ -186,6 +186,29 @@ const CreatePostWizard: React.FC<CreatePostWizardProps> = ({ onPostCreated, isOp
     return supabase.storage.from('post-media').getPublicUrl(name).data.publicUrl;
   };
 
+  const ensureMusicTrackId = async (): Promise<string | null> => {
+    if (!selectedMusicTrack) return null;
+    // If id is a real DB uuid (no 'spotify-' prefix), return as-is
+    if (!selectedMusicTrack.id?.startsWith('spotify-')) return selectedMusicTrack.id;
+    // Lenory Free: upsert into music_tracks
+    const ext = selectedMusicTrack.spotify_id || selectedMusicTrack.external_id;
+    if (!ext) return null;
+    const { data: existing } = await supabase.from('music_tracks').select('id').eq('external_id', ext).maybeSingle();
+    if (existing?.id) return existing.id;
+    const { data: created } = await supabase.from('music_tracks').insert({
+      title: selectedMusicTrack.title,
+      artist_name: selectedMusicTrack.artist_name,
+      cover_url: selectedMusicTrack.cover_url,
+      duration_seconds: selectedMusicTrack.duration_seconds || 0,
+      source: 'lenory_free',
+      external_id: ext,
+      youtube_id: selectedMusicTrack.youtube_id,
+      audio_url: '',
+      status: 'active',
+    }).select('id').single();
+    return created?.id || null;
+  };
+
   const handleSubmit = async () => {
     if (!user || !title.trim() || !body.trim() || !category) return;
     if (isPaidTier && !canAffordFee) {
@@ -201,19 +224,48 @@ const CreatePostWizard: React.FC<CreatePostWizardProps> = ({ onPostCreated, isOp
       const mediaUrls = await uploadMedia();
       const thumbUrl = await uploadThumbnail();
       const bodyWithTags = tags.length > 0 ? `${body.trim()}\n\n${tags.map(t => `#${t}`).join(' ')}` : body.trim();
+      const musicTrackId = await ensureMusicTrackId();
 
       if (postToEdit?.id) {
         await supabase.from('posts').update({
           title: title.trim(), body: bodyWithTags, category,
           media_urls: mediaUrls, star_price: starPrice, thumbnail_url: thumbUrl,
-        }).eq('id', postToEdit.id);
+          music_track_id: musicTrackId,
+          music_start_seconds: musicStart,
+          music_duration_seconds: musicDuration,
+        } as any).eq('id', postToEdit.id);
         toast({ title: 'Post updated!' });
       } else {
-        await supabase.from('posts').insert({
+        const { data: newPost } = await supabase.from('posts').insert({
           title: title.trim(), body: bodyWithTags, category,
           media_urls: mediaUrls, user_id: user.id, status: 'approved',
           star_price: starPrice, post_status: 'new', thumbnail_url: thumbUrl,
-        });
+          music_track_id: musicTrackId,
+          music_start_seconds: musicStart,
+          music_duration_seconds: musicDuration,
+        } as any).select('id').single();
+
+        // Increment musician usage_count
+        if (musicTrackId) {
+          await supabase.rpc('execute_admin_sql' as any, { query: `SELECT 1` }).then(() => {});
+          const { data: tr } = await supabase.from('music_tracks').select('usage_count').eq('id', musicTrackId).maybeSingle();
+          await supabase.from('music_tracks').update({ usage_count: (tr?.usage_count || 0) + 1 }).eq('id', musicTrackId);
+        }
+
+        // Optionally also post to storyline
+        if (alsoPostToStoryline && mediaUrls[0]) {
+          const isVid = /\.(mp4|webm|ogg|mov)$/i.test(mediaUrls[0]);
+          await supabase.from('user_storylines').insert({
+            user_id: user.id,
+            media_url: mediaUrls[0],
+            media_type: isVid ? 'video' : 'image',
+            caption: title.trim(),
+            preview_url: thumbUrl || mediaUrls[0],
+            star_price: starPrice,
+            status: 'active',
+          } as any);
+        }
+
         toast({ title: '🎉 Post created!', description: isPaidTier ? `${postingFee} Stars deducted` : 'Your post is live!' });
       }
 
