@@ -493,7 +493,6 @@ const CreatePostWizard: React.FC<CreatePostWizardProps> = ({ onPostCreated, isOp
           )}
         </div>
       );
-      );
     }
   };
 
