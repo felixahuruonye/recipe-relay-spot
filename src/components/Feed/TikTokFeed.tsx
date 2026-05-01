@@ -22,6 +22,7 @@ import { Input } from '@/components/ui/input';
 import { SuggestedUsers } from './SuggestedUsers';
 import { ProductCard } from './ProductCard';
 import CreatePostWizard from '@/components/Posts/CreatePostWizard';
+import YouTubeAudio from '@/components/Music/YouTubeAudio';
 
 interface Post {
   id: string;
