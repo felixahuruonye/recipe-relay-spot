@@ -579,6 +579,42 @@ export type Database = {
         }
         Relationships: []
       }
+      exams: {
+        Row: {
+          created_at: string
+          duration: number
+          id: string
+          questions: Json
+          results: Json
+          score: number
+          subject: string
+          type: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          duration: number
+          id?: string
+          questions: Json
+          results: Json
+          score: number
+          subject: string
+          type: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          duration?: number
+          id?: string
+          questions?: Json
+          results?: Json
+          score?: number
+          subject?: string
+          type?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       followers: {
         Row: {
           created_at: string
@@ -951,6 +987,36 @@ export type Database = {
           total_cost?: number
           user_id?: string
           worker_count?: number
+        }
+        Relationships: []
+      }
+      memories: {
+        Row: {
+          category: string
+          content: string
+          created_at: string
+          id: string
+          importance: number | null
+          title: string
+          user_id: string
+        }
+        Insert: {
+          category: string
+          content: string
+          created_at?: string
+          id?: string
+          importance?: number | null
+          title: string
+          user_id: string
+        }
+        Update: {
+          category?: string
+          content?: string
+          created_at?: string
+          id?: string
+          importance?: number | null
+          title?: string
+          user_id?: string
         }
         Relationships: []
       }
@@ -1643,6 +1709,48 @@ export type Database = {
         }
         Relationships: []
       }
+      profiles: {
+        Row: {
+          avatar_url: string | null
+          created_at: string
+          credits: number | null
+          email: string | null
+          id: string
+          name: string | null
+          onboarding_completed: boolean | null
+          onboarding_data: Json | null
+          preferences: Json | null
+          updated_at: string
+          xp: number | null
+        }
+        Insert: {
+          avatar_url?: string | null
+          created_at?: string
+          credits?: number | null
+          email?: string | null
+          id: string
+          name?: string | null
+          onboarding_completed?: boolean | null
+          onboarding_data?: Json | null
+          preferences?: Json | null
+          updated_at?: string
+          xp?: number | null
+        }
+        Update: {
+          avatar_url?: string | null
+          created_at?: string
+          credits?: number | null
+          email?: string | null
+          id?: string
+          name?: string | null
+          onboarding_completed?: boolean | null
+          onboarding_data?: Json | null
+          preferences?: Json | null
+          updated_at?: string
+          xp?: number | null
+        }
+        Relationships: []
+      }
       referrals: {
         Row: {
           completed_at: string | null
@@ -2132,6 +2240,39 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      study_plans: {
+        Row: {
+          created_at: string
+          current_day: number | null
+          description: string | null
+          id: string
+          plan: Json
+          title: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          current_day?: number | null
+          description?: string | null
+          id?: string
+          plan: Json
+          title: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          current_day?: number | null
+          description?: string | null
+          id?: string
+          plan?: Json
+          title?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
       }
       system_errors: {
         Row: {
