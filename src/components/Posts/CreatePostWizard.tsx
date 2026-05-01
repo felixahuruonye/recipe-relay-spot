@@ -19,6 +19,7 @@ interface CreatePostWizardProps {
   isOpen?: boolean;
   onOpenChange?: (isOpen: boolean) => void;
   postToEdit?: any;
+  preselectedTrack?: any;
 }
 
 const STEPS = [
