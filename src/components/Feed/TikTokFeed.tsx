@@ -1079,7 +1079,7 @@ const TikTokFeed: React.FC = () => {
         if (musicTrackIds.length > 0) {
           const { data: musicData } = await supabase
             .from('music_tracks')
-            .select('id, title, artist_name, audio_url, source')
+            .select('id, title, artist_name, audio_url, source, youtube_id, cover_url, artist_id')
             .in('id', musicTrackIds);
           const mMap: Record<string, MusicTrack> = {};
           musicData?.forEach((m: any) => { mMap[m.id] = m; });
