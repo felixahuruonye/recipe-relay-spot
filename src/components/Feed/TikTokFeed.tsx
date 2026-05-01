@@ -638,16 +638,16 @@ const TikTokPost: React.FC<{
   const hasMedia = post.media_urls && post.media_urls.length > 0;
   const isVideo = hasMedia && (post.media_urls[0]?.match(/\.(mp4|webm|ogg|mov)$/i) || post.media_urls[0]?.includes('video'));
 
-  // Background music
+  // Background music — supports both audio_url (community) and youtube_id (Lenory Free)
   useEffect(() => {
-    if (!mTrack?.audio_url) return;
+    if (!mTrack?.audio_url || mTrack?.youtube_id) return;
     const audio = new Audio(mTrack.audio_url);
     audio.loop = true;
-    audio.volume = 0.3;
+    audio.volume = 0.4;
     musicAudioRef.current = audio;
     if (isActive && !isMuted) audio.play().catch(() => {});
     return () => { audio.pause(); audio.src = ''; };
-  }, [mTrack?.audio_url]);
+  }, [mTrack?.audio_url, mTrack?.youtube_id]);
 
   useEffect(() => {
     if (musicAudioRef.current) {
