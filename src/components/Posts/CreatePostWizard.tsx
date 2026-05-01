@@ -475,8 +475,24 @@ const CreatePostWizard: React.FC<CreatePostWizardProps> = ({ onPostCreated, isOp
             <div><span className="text-muted-foreground">Caption:</span> <span className="line-clamp-2">{body}</span></div>
             {tags.length > 0 && <div className="flex flex-wrap gap-1">{tags.map(t => <Badge key={t} variant="outline" className="text-xs">#{t}</Badge>)}</div>}
             <div><span className="text-muted-foreground">Star Price:</span> <span className="font-bold text-yellow-500">{starPrice === 0 ? 'Free' : `${starPrice} ⭐`}</span></div>
+            {selectedMusicTrack && <div><span className="text-muted-foreground">Music:</span> <span>♪ {selectedMusicTrack.title} — {selectedMusicTrack.artist_name}</span></div>}
           </div>
+          {!postToEdit && mediaPreviews.length > 0 && (
+            <button
+              type="button"
+              onClick={() => setAlsoPostToStoryline(v => !v)}
+              className={`w-full p-3 rounded-xl border-2 transition-colors text-left ${alsoPostToStoryline ? 'border-primary bg-primary/10' : 'border-border bg-muted/30'}`}
+            >
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-sm font-semibold flex items-center gap-1.5">📖 Add to Storyline {alsoPostToStoryline && <Check className="w-4 h-4 text-primary" />}</p>
+                  <p className="text-[10px] text-muted-foreground">Also share this as a 24-hour story</p>
+                </div>
+              </div>
+            </button>
+          )}
         </div>
+      );
       );
     }
   };
