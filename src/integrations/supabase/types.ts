@@ -1117,6 +1117,7 @@ export type Database = {
           title: string
           updated_at: string | null
           usage_count: number | null
+          youtube_id: string | null
         }
         Insert: {
           artist_id?: string | null
@@ -1133,6 +1134,7 @@ export type Database = {
           title: string
           updated_at?: string | null
           usage_count?: number | null
+          youtube_id?: string | null
         }
         Update: {
           artist_id?: string | null
@@ -1149,6 +1151,7 @@ export type Database = {
           title?: string
           updated_at?: string | null
           usage_count?: number | null
+          youtube_id?: string | null
         }
         Relationships: []
       }
