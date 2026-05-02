@@ -583,7 +583,7 @@ const EnhancedShareMenu: React.FC<{
           </button>
           {isOwnPost && (
             <>
-              <button onClick={() => { onClose(); }} className="flex items-center gap-3 w-full p-3 rounded-lg hover:bg-muted/50">
+              <button onClick={() => { onEdit?.(); onClose(); }} className="flex items-center gap-3 w-full p-3 rounded-lg hover:bg-muted/50">
                 <Edit className="w-5 h-5 text-muted-foreground" />
                 <span className="text-sm">Edit Post</span>
               </button>
