@@ -593,9 +593,9 @@ const CreatePostWizard: React.FC<CreatePostWizardProps> = ({ onPostCreated, isOp
         <div className="px-4 pt-4 pb-2">
           <div className="flex items-center justify-between mb-2">
             <h2 className="text-sm font-bold">{postToEdit ? 'Edit Post' : 'Create Post To Earn'}</h2>
-            <span className="text-xs text-muted-foreground">{step + 1}/6</span>
+            <span className="text-xs text-muted-foreground">{step + 1}/{TOTAL_STEPS}</span>
           </div>
-          <Progress value={((step + 1) / 6) * 100} className="h-1.5" />
+          <Progress value={((step + 1) / TOTAL_STEPS) * 100} className="h-1.5" />
           {/* Step indicators */}
           <div className="flex justify-between mt-2">
             {STEPS.map((s, i) => (
