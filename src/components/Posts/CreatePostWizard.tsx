@@ -626,9 +626,9 @@ const CreatePostWizard: React.FC<CreatePostWizardProps> = ({ onPostCreated, isOp
             </Button>
           )}
           <div className="flex-1" />
-          {step < 5 ? (
+          {step < TOTAL_STEPS - 1 ? (
             <Button size="sm" onClick={() => setStep(s => s + 1)} disabled={!canProceed()} className="gap-1">
-              Next <ArrowRight className="w-3.5 h-3.5" />
+              {step === TOTAL_STEPS - 2 ? 'Preview' : 'Next'} <ArrowRight className="w-3.5 h-3.5" />
             </Button>
           ) : (
             <Button size="sm" onClick={handleSubmit} disabled={loading || (isPaidTier && !canAffordFee)}
