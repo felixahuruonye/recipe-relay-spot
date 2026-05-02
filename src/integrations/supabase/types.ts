@@ -1112,6 +1112,7 @@ export type Database = {
           external_id: string | null
           genre: string | null
           id: string
+          last_used_at: string | null
           source: string | null
           status: string | null
           title: string
@@ -1129,6 +1130,7 @@ export type Database = {
           external_id?: string | null
           genre?: string | null
           id?: string
+          last_used_at?: string | null
           source?: string | null
           status?: string | null
           title: string
@@ -1146,6 +1148,7 @@ export type Database = {
           external_id?: string | null
           genre?: string | null
           id?: string
+          last_used_at?: string | null
           source?: string | null
           status?: string | null
           title?: string
