@@ -40,6 +40,22 @@ const MusicBrowser: React.FC<MusicBrowserProps> = ({ selectedTrackId, onSelect }
   useEffect(() => { loadCommunityTracks(); }, []);
   useEffect(() => () => { audioRef.current?.pause(); }, []);
 
+  // Load default trending Lenory Free tracks when switching to that tab
+  useEffect(() => {
+    if (tab === 'lenory_free' && freeTracks.length === 0 && !search.trim()) {
+      searchFreeSounds('trending hits');
+    }
+  }, [tab]);
+
+  // Debounced auto-search for Lenory Free
+  useEffect(() => {
+    if (tab !== 'lenory_free') return;
+    const q = search.trim();
+    if (q.length < 2) return;
+    const t = setTimeout(() => { searchFreeSounds(q); }, 500);
+    return () => clearTimeout(t);
+  }, [search, tab]);
+
   const loadCommunityTracks = async () => {
     const { data } = await supabase
       .from('music_tracks')
