@@ -28,8 +28,10 @@ const STEPS = [
   { label: 'Canvas', icon: Sparkles, desc: 'Tags & caption' },
   { label: 'Vibe Sync', icon: Music, desc: 'Add music' },
   { label: 'Value', icon: Coins, desc: 'Set earnings' },
-  { label: 'Launch', icon: Check, desc: 'Review & post' },
+  { label: 'Edit', icon: Eye, desc: 'Preview & tweak' },
+  { label: 'Launch', icon: Check, desc: 'Confirm & post' },
 ];
+const TOTAL_STEPS = STEPS.length; // 7
 
 const categories = [
   'Wealth', 'Tech', 'Music', 'Lifestyle', 'Education',
