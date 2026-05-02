@@ -94,6 +94,18 @@ const CreatePostWizard: React.FC<CreatePostWizardProps> = ({ onPostCreated, isOp
       setMediaPreviews(postToEdit.media_urls || []);
       setStarPrice(postToEdit.star_price || 0);
       setThumbnailPreview(postToEdit.thumbnail_url || '');
+      setMusicStart(postToEdit.music_start_seconds || 0);
+      setMusicDuration(postToEdit.music_duration_seconds || 15);
+      // Load existing music track
+      if (postToEdit.music_track_id) {
+        (async () => {
+          const { data } = await supabase.from('music_tracks').select('*').eq('id', postToEdit.music_track_id).maybeSingle();
+          if (data) {
+            setSelectedMusicTrack(data);
+            setSelectedMusic(data.audio_url || data.youtube_id || '');
+          }
+        })();
+      }
     }
   }, [postToEdit]);
 
@@ -102,6 +114,7 @@ const CreatePostWizard: React.FC<CreatePostWizardProps> = ({ onPostCreated, isOp
     if (isOpen && preselectedTrack) {
       setSelectedMusicTrack(preselectedTrack);
       setSelectedMusic(preselectedTrack.audio_url || preselectedTrack.youtube_id || '');
+      if (preselectedTrack.duration_seconds) setMusicDuration(Math.min(preselectedTrack.duration_seconds, 30));
       setStep(0);
     }
   }, [isOpen, preselectedTrack]);

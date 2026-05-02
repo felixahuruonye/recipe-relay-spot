@@ -517,7 +517,8 @@ const EnhancedShareMenu: React.FC<{
   post: Post;
   isOwnPost: boolean;
   onDelete?: () => void;
-}> = ({ open, onClose, post, isOwnPost, onDelete }) => {
+  onEdit?: () => void;
+}> = ({ open, onClose, post, isOwnPost, onDelete, onEdit }) => {
   const { toast } = useToast();
   const navigate = useNavigate();
 
@@ -582,7 +583,7 @@ const EnhancedShareMenu: React.FC<{
           </button>
           {isOwnPost && (
             <>
-              <button onClick={() => { onClose(); }} className="flex items-center gap-3 w-full p-3 rounded-lg hover:bg-muted/50">
+              <button onClick={() => { onEdit?.(); onClose(); }} className="flex items-center gap-3 w-full p-3 rounded-lg hover:bg-muted/50">
                 <Edit className="w-5 h-5 text-muted-foreground" />
                 <span className="text-sm">Edit Post</span>
               </button>
@@ -1525,6 +1526,11 @@ const TikTokFeed: React.FC = () => {
             onClose={() => setShowShareMenu(false)}
             post={activeSharePost}
             isOwnPost={activeSharePost.user_id === user?.id}
+            onEdit={() => {
+              setEditPost(activeSharePost);
+              setUseSoundTrack(null);
+              setShowCreatePost(true);
+            }}
             onDelete={() => {
               setPosts(prev => prev.filter(p => p.id !== activeSharePost.id));
             }}
@@ -1554,6 +1560,17 @@ const TikTokFeed: React.FC = () => {
             trackName={activeSoundTrack.name}
             trackArtist={activeSoundTrack.artist}
             trackId={activeSoundTrack.id}
+            sourceLabel={activeSoundTrack.sourceLabel}
+            coverUrl={activeSoundTrack.coverUrl}
+            artistAvatar={activeSoundTrack.artistAvatar}
+            onUseSound={() => {
+              if (!user) { requireLogin('Login to use this sound'); return; }
+              const track = activeSoundTrack.id ? musicTracks[activeSoundTrack.id] : null;
+              setUseSoundTrack(track || { id: activeSoundTrack.id, title: activeSoundTrack.name, artist_name: activeSoundTrack.artist, cover_url: activeSoundTrack.coverUrl });
+              setEditPost(null);
+              setShowSoundDrilldown(false);
+              setShowCreatePost(true);
+            }}
           />
         )}
       </AnimatePresence>
@@ -1569,8 +1586,9 @@ const TikTokFeed: React.FC = () => {
       {/* Create/Edit Post Wizard */}
       <CreatePostWizard
         isOpen={showCreatePost}
-        onOpenChange={setShowCreatePost}
+        onOpenChange={(open) => { setShowCreatePost(open); if (!open) { setEditPost(null); setUseSoundTrack(null); } }}
         postToEdit={editPost}
+        preselectedTrack={useSoundTrack}
         onPostCreated={() => { setShowCreatePost(false); fetchPosts(); }}
       />
 
