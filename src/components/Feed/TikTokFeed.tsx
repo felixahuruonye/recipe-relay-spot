@@ -295,27 +295,52 @@ const SoundDrilldown: React.FC<{
   onUseSound: () => void;
 }> = ({ open, onClose, trackName, trackArtist, trackId, sourceLabel, coverUrl, artistAvatar, onUseSound }) => {
   const [posts, setPosts] = useState<any[]>([]);
-  const [totalUses, setTotalUses] = useState(0);
+  const [trackUsageCount, setTrackUsageCount] = useState(0);
 
-  useEffect(() => {
-    if (!open || !trackId) return;
-    (async () => {
-      const { data } = await supabase
+  const loadData = async () => {
+    if (!trackId) return;
+    const [{ data: postRows }, { data: trackRow }] = await Promise.all([
+      supabase
         .from('posts')
         .select('id, title, media_urls, view_count, likes_count, comments_count, user_id')
         .eq('music_track_id', trackId)
         .eq('status', 'approved')
         .order('view_count', { ascending: false })
-        .limit(30);
-      setPosts(data || []);
-      setTotalUses(data?.length || 0);
-    })();
+        .limit(30),
+      supabase
+        .from('music_tracks')
+        .select('usage_count')
+        .eq('id', trackId)
+        .maybeSingle(),
+    ]);
+    setPosts(postRows || []);
+    setTrackUsageCount(trackRow?.usage_count ?? postRows?.length ?? 0);
+  };
+
+  useEffect(() => {
+    if (!open || !trackId) return;
+    loadData();
+
+    // Real-time refresh: posts using this sound + track usage_count
+    const channel = supabase
+      .channel(`sound-drilldown-${trackId}`)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'posts', filter: `music_track_id=eq.${trackId}` }, () => loadData())
+      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'music_tracks', filter: `id=eq.${trackId}` }, () => loadData())
+      .subscribe();
+
+    const interval = setInterval(loadData, 15000); // safety poll for view counts
+
+    return () => {
+      supabase.removeChannel(channel);
+      clearInterval(interval);
+    };
   }, [open, trackId]);
 
   if (!open) return null;
 
   const totalViews = posts.reduce((s, p) => s + (p.view_count || 0), 0);
   const totalLikes = posts.reduce((s, p) => s + (p.likes_count || 0), 0);
+  const totalComments = posts.reduce((s, p) => s + (p.comments_count || 0), 0);
 
   return (
     <motion.div className="fixed inset-0 z-50" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
@@ -342,10 +367,12 @@ const SoundDrilldown: React.FC<{
             </div>
             <button onClick={onClose} className="text-muted-foreground"><X className="w-5 h-5" /></button>
           </div>
-          <div className="flex items-center gap-3 mt-3 text-[11px] text-muted-foreground">
-            <span>📹 {totalUses} posts</span>
+          <div className="flex items-center gap-3 mt-3 text-[11px] text-muted-foreground flex-wrap">
+            <span title="Times used across all posts">🎵 {trackUsageCount.toLocaleString()} uses</span>
+            <span>📹 {posts.length} posts</span>
             <span>👁 {totalViews.toLocaleString()} views</span>
             <span>❤️ {totalLikes.toLocaleString()} likes</span>
+            <span>💬 {totalComments.toLocaleString()} comments</span>
           </div>
           <Button size="sm" className="w-full mt-3 gap-2" onClick={onUseSound}>
             <Music2 className="w-4 h-4" /> Use this sound

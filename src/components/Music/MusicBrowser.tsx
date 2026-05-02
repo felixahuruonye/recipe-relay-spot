@@ -20,6 +20,8 @@ interface MusicTrack {
   spotify_id?: string;
   external_id?: string;
   artist_id?: string;
+  usage_count?: number;
+  last_used_at?: string;
 }
 
 interface MusicBrowserProps {
@@ -57,11 +59,16 @@ const MusicBrowser: React.FC<MusicBrowserProps> = ({ selectedTrackId, onSelect }
   }, [search, tab]);
 
   const loadCommunityTracks = async () => {
+    // Deterministic trending order: most-used first, then most-recently used,
+    // then oldest (stable id tiebreak) so the top sound stays consistent.
     const { data } = await supabase
       .from('music_tracks')
       .select('*')
       .eq('status', 'active')
-      .order('usage_count', { ascending: false })
+      .order('usage_count', { ascending: false, nullsFirst: false })
+      .order('last_used_at', { ascending: false, nullsFirst: false })
+      .order('created_at', { ascending: true })
+      .order('id', { ascending: true })
       .limit(50);
     setCommunityTracks((data as MusicTrack[]) || []);
   };
@@ -160,13 +167,29 @@ const MusicBrowser: React.FC<MusicBrowserProps> = ({ selectedTrackId, onSelect }
         )}
       </div>
 
-      {selectedTrackId && (
-        <div className="flex items-center gap-2 p-2 bg-primary/10 rounded-lg border border-primary/20">
-          <Check className="w-4 h-4 text-primary shrink-0" />
-          <span className="text-xs font-medium text-primary truncate">Music selected ✓</span>
-          <Button size="sm" variant="ghost" className="ml-auto h-6 text-[10px]" onClick={() => onSelect(null)}>Remove</Button>
-        </div>
-      )}
+      {selectedTrackId && (() => {
+        const sel = [...communityTracks, ...freeTracks].find(t => t.id === selectedTrackId);
+        const canReplay = sel && (sel.source === 'lenory_free' ? !!sel.youtube_id : !!sel.audio_url);
+        const isReplaying = sel && playingId === sel.id;
+        return (
+          <div className="flex items-center gap-2 p-2 bg-primary/10 rounded-lg border border-primary/20">
+            <Check className="w-4 h-4 text-primary shrink-0" />
+            <span className="text-xs font-medium text-primary truncate">Music selected ✓</span>
+            {sel && canReplay && (
+              <button
+                type="button"
+                onClick={() => togglePlay(sel)}
+                className="ml-auto h-6 px-2 rounded-full bg-primary/20 hover:bg-primary/30 flex items-center gap-1 text-[10px] font-semibold text-primary"
+                title="Replay snippet"
+              >
+                {isReplaying ? <Pause className="w-3 h-3" /> : <Play className="w-3 h-3" />}
+                {isReplaying ? 'Stop' : 'Replay'}
+              </button>
+            )}
+            <Button size="sm" variant="ghost" className={`${sel && canReplay ? '' : 'ml-auto'} h-6 text-[10px]`} onClick={() => onSelect(null)}>Remove</Button>
+          </div>
+        );
+      })()}
 
       <ScrollArea className="h-[260px]">
         <div className="space-y-1">
@@ -200,6 +223,11 @@ const MusicBrowser: React.FC<MusicBrowserProps> = ({ selectedTrackId, onSelect }
                 <div className="flex items-center gap-1.5 shrink-0">
                   {!!track.duration_seconds && (
                     <span className="text-[10px] text-muted-foreground">{formatDuration(track.duration_seconds)}</span>
+                  )}
+                  {tab === 'community' && (track.usage_count || 0) > 0 && (
+                    <Badge variant="secondary" className="text-[8px] h-4 px-1" title="Times used in posts">
+                      {track.usage_count}× used
+                    </Badge>
                   )}
                   <Badge variant="outline" className="text-[8px] h-4 px-1">
                     {track.source === 'lenory_free' ? '🎵 Free' : '👤'}

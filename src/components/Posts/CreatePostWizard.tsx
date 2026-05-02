@@ -28,8 +28,10 @@ const STEPS = [
   { label: 'Canvas', icon: Sparkles, desc: 'Tags & caption' },
   { label: 'Vibe Sync', icon: Music, desc: 'Add music' },
   { label: 'Value', icon: Coins, desc: 'Set earnings' },
-  { label: 'Launch', icon: Check, desc: 'Review & post' },
+  { label: 'Edit', icon: Eye, desc: 'Preview & tweak' },
+  { label: 'Launch', icon: Check, desc: 'Confirm & post' },
 ];
+const TOTAL_STEPS = STEPS.length; // 7
 
 const categories = [
   'Wealth', 'Tech', 'Music', 'Lifestyle', 'Education',
@@ -474,7 +476,90 @@ const CreatePostWizard: React.FC<CreatePostWizardProps> = ({ onPostCreated, isOp
       );
       case 5: return (
         <div className="space-y-4">
-          <h3 className="font-bold text-base text-center">Review Your Post 🚀</h3>
+          <div className="text-center">
+            <h3 className="font-bold text-base">Preview & Edit ✏️</h3>
+            <p className="text-[11px] text-muted-foreground">Make last-minute tweaks before launch.</p>
+          </div>
+
+          {mediaPreviews.length > 0 && (
+            <div className="flex gap-2 overflow-x-auto pb-1">
+              {mediaPreviews.map((p, i) => (
+                <img key={i} src={p} alt="" className="w-24 h-16 object-cover rounded-lg shrink-0 border border-border" />
+              ))}
+            </div>
+          )}
+
+          <div className="space-y-3 p-3 rounded-xl border border-border bg-muted/30">
+            <div className="space-y-1">
+              <Label className="text-[11px]">Title</Label>
+              <Input value={title} onChange={e => setTitle(e.target.value)} maxLength={100} className="h-8 text-sm" />
+            </div>
+            <div className="space-y-1">
+              <Label className="text-[11px]">Caption</Label>
+              <Textarea value={body} onChange={e => setBody(e.target.value)} rows={3} maxLength={2000} className="text-sm" />
+            </div>
+            <div className="space-y-1">
+              <Label className="text-[11px]">Category</Label>
+              <Select value={category} onValueChange={setCategory}>
+                <SelectTrigger className="h-8 text-sm"><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  {categories.map(c => <SelectItem key={c} value={c}>{c}</SelectItem>)}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-1">
+              <Label className="text-[11px] flex items-center gap-1"><Hash className="w-3 h-3" /> Tags</Label>
+              <div className="flex gap-2">
+                <Input value={tagInput} onChange={e => setTagInput(e.target.value)} placeholder="Add tag"
+                  onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); addTag(); } }} className="h-8 text-xs flex-1" />
+                <Button type="button" size="sm" variant="outline" onClick={addTag} className="h-8">Add</Button>
+              </div>
+              {tags.length > 0 && (
+                <div className="flex flex-wrap gap-1 mt-1">
+                  {tags.map(t => (
+                    <Badge key={t} variant="secondary" className="gap-1 text-[10px] cursor-pointer" onClick={() => setTags(prev => prev.filter(x => x !== t))}>
+                      #{t} <X className="w-2.5 h-2.5" />
+                    </Badge>
+                  ))}
+                </div>
+              )}
+            </div>
+            <div className="space-y-1">
+              <Label className="text-[11px] flex items-center gap-1"><Star className="w-3 h-3 text-yellow-500" /> Star Price</Label>
+              <Select value={starPrice.toString()} onValueChange={v => setStarPrice(parseInt(v))}>
+                <SelectTrigger className="h-8 text-sm"><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  {starPriceOptions.map(p => (
+                    <SelectItem key={p} value={p.toString()}>
+                      {p === 0 ? 'Free' : `${p} Stars`}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            {selectedMusicTrack && (
+              <div className="text-[11px] text-muted-foreground flex items-center justify-between">
+                <span>♪ {selectedMusicTrack.title} — {selectedMusicTrack.artist_name}</span>
+                <button type="button" onClick={() => setStep(3)} className="text-primary text-[10px] underline">Change</button>
+              </div>
+            )}
+          </div>
+
+          {!postToEdit && mediaPreviews.length > 0 && (
+            <button
+              type="button"
+              onClick={() => setAlsoPostToStoryline(v => !v)}
+              className={`w-full p-3 rounded-xl border-2 transition-colors text-left ${alsoPostToStoryline ? 'border-primary bg-primary/10' : 'border-border bg-muted/30'}`}
+            >
+              <p className="text-sm font-semibold flex items-center gap-1.5">📖 Add to Storyline {alsoPostToStoryline && <Check className="w-4 h-4 text-primary" />}</p>
+              <p className="text-[10px] text-muted-foreground">Also share this as a 24-hour story</p>
+            </button>
+          )}
+        </div>
+      );
+      case 6: return (
+        <div className="space-y-4">
+          <h3 className="font-bold text-base text-center">Ready to Launch 🚀</h3>
           {mediaPreviews.length > 0 && (
             <div className="flex gap-2 overflow-x-auto">
               {mediaPreviews.map((p, i) => (
@@ -489,21 +574,13 @@ const CreatePostWizard: React.FC<CreatePostWizardProps> = ({ onPostCreated, isOp
             {tags.length > 0 && <div className="flex flex-wrap gap-1">{tags.map(t => <Badge key={t} variant="outline" className="text-xs">#{t}</Badge>)}</div>}
             <div><span className="text-muted-foreground">Star Price:</span> <span className="font-bold text-yellow-500">{starPrice === 0 ? 'Free' : `${starPrice} ⭐`}</span></div>
             {selectedMusicTrack && <div><span className="text-muted-foreground">Music:</span> <span>♪ {selectedMusicTrack.title} — {selectedMusicTrack.artist_name}</span></div>}
-          </div>
-          {!postToEdit && mediaPreviews.length > 0 && (
-            <button
-              type="button"
-              onClick={() => setAlsoPostToStoryline(v => !v)}
-              className={`w-full p-3 rounded-xl border-2 transition-colors text-left ${alsoPostToStoryline ? 'border-primary bg-primary/10' : 'border-border bg-muted/30'}`}
-            >
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm font-semibold flex items-center gap-1.5">📖 Add to Storyline {alsoPostToStoryline && <Check className="w-4 h-4 text-primary" />}</p>
-                  <p className="text-[10px] text-muted-foreground">Also share this as a 24-hour story</p>
-                </div>
+            {alsoPostToStoryline && <div className="text-primary text-xs">📖 Will also be added to your Storyline</div>}
+            {isPaidTier && (
+              <div className={canAffordFee ? 'text-yellow-600 text-xs' : 'text-destructive text-xs font-semibold'}>
+                ⭐ Posting fee: {postingFee} Stars {canAffordFee ? '✓' : `(insufficient)`}
               </div>
-            </button>
-          )}
+            )}
+          </div>
         </div>
       );
     }
@@ -516,9 +593,9 @@ const CreatePostWizard: React.FC<CreatePostWizardProps> = ({ onPostCreated, isOp
         <div className="px-4 pt-4 pb-2">
           <div className="flex items-center justify-between mb-2">
             <h2 className="text-sm font-bold">{postToEdit ? 'Edit Post' : 'Create Post To Earn'}</h2>
-            <span className="text-xs text-muted-foreground">{step + 1}/6</span>
+            <span className="text-xs text-muted-foreground">{step + 1}/{TOTAL_STEPS}</span>
           </div>
-          <Progress value={((step + 1) / 6) * 100} className="h-1.5" />
+          <Progress value={((step + 1) / TOTAL_STEPS) * 100} className="h-1.5" />
           {/* Step indicators */}
           <div className="flex justify-between mt-2">
             {STEPS.map((s, i) => (
@@ -549,9 +626,9 @@ const CreatePostWizard: React.FC<CreatePostWizardProps> = ({ onPostCreated, isOp
             </Button>
           )}
           <div className="flex-1" />
-          {step < 5 ? (
+          {step < TOTAL_STEPS - 1 ? (
             <Button size="sm" onClick={() => setStep(s => s + 1)} disabled={!canProceed()} className="gap-1">
-              Next <ArrowRight className="w-3.5 h-3.5" />
+              {step === TOTAL_STEPS - 2 ? 'Preview' : 'Next'} <ArrowRight className="w-3.5 h-3.5" />
             </Button>
           ) : (
             <Button size="sm" onClick={handleSubmit} disabled={loading || (isPaidTier && !canAffordFee)}
