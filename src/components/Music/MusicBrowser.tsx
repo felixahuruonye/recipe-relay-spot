@@ -59,11 +59,16 @@ const MusicBrowser: React.FC<MusicBrowserProps> = ({ selectedTrackId, onSelect }
   }, [search, tab]);
 
   const loadCommunityTracks = async () => {
+    // Deterministic trending order: most-used first, then most-recently used,
+    // then oldest (stable id tiebreak) so the top sound stays consistent.
     const { data } = await supabase
       .from('music_tracks')
       .select('*')
       .eq('status', 'active')
-      .order('usage_count', { ascending: false })
+      .order('usage_count', { ascending: false, nullsFirst: false })
+      .order('last_used_at', { ascending: false, nullsFirst: false })
+      .order('created_at', { ascending: true })
+      .order('id', { ascending: true })
       .limit(50);
     setCommunityTracks((data as MusicTrack[]) || []);
   };
