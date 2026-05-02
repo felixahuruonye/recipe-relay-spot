@@ -224,6 +224,11 @@ const MusicBrowser: React.FC<MusicBrowserProps> = ({ selectedTrackId, onSelect }
                   {!!track.duration_seconds && (
                     <span className="text-[10px] text-muted-foreground">{formatDuration(track.duration_seconds)}</span>
                   )}
+                  {tab === 'community' && (track.usage_count || 0) > 0 && (
+                    <Badge variant="secondary" className="text-[8px] h-4 px-1" title="Times used in posts">
+                      {track.usage_count}× used
+                    </Badge>
+                  )}
                   <Badge variant="outline" className="text-[8px] h-4 px-1">
                     {track.source === 'lenory_free' ? '🎵 Free' : '👤'}
                   </Badge>
