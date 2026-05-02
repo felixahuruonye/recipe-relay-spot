@@ -20,6 +20,8 @@ interface MusicTrack {
   spotify_id?: string;
   external_id?: string;
   artist_id?: string;
+  usage_count?: number;
+  last_used_at?: string;
 }
 
 interface MusicBrowserProps {
