@@ -170,24 +170,31 @@ const MusicBrowser: React.FC<MusicBrowserProps> = ({ selectedTrackId, onSelect }
 
       <ScrollArea className="h-[260px]">
         <div className="space-y-1">
-          {(tab === 'community' ? filteredCommunity : freeTracks).map(track => {
+          {(tab === 'community' ? filteredCommunity : freeTracks).map((track, idx) => {
             const isPlaying = playingId === track.id;
             const canPreview = track.source === 'lenory_free' ? !!track.youtube_id : !!track.audio_url;
+            const isTopTrending = idx === 0 && (tab === 'community' ? filteredCommunity.length > 1 : freeTracks.length > 1);
             return (
               <div
                 key={track.id}
                 className={`flex items-center gap-2 p-2 rounded-lg cursor-pointer transition-colors hover:bg-muted/50 ${selectedTrackId === track.id ? 'bg-primary/10 ring-1 ring-primary/30' : ''}`}
                 onClick={() => handleSelect(track)}
               >
-                <div className="w-9 h-9 rounded-md bg-muted shrink-0 overflow-hidden flex items-center justify-center">
+                <div className="w-9 h-9 rounded-md bg-muted shrink-0 overflow-hidden flex items-center justify-center relative">
                   {track.cover_url ? (
                     <img src={track.cover_url} alt="" className="w-full h-full object-cover" />
                   ) : (
                     <Music2 className="w-4 h-4 text-muted-foreground" />
                   )}
+                  {isTopTrending && (
+                    <span className="absolute -top-1 -left-1 text-[10px]">🔥</span>
+                  )}
                 </div>
                 <div className="flex-1 min-w-0">
-                  <p className="text-xs font-medium truncate">{track.title}</p>
+                  <p className="text-xs font-medium truncate flex items-center gap-1">
+                    {track.title}
+                    {isTopTrending && <Badge variant="secondary" className="text-[8px] h-3.5 px-1">Trending</Badge>}
+                  </p>
                   <p className="text-[10px] text-muted-foreground truncate">{track.artist_name}</p>
                 </div>
                 <div className="flex items-center gap-1.5 shrink-0">
