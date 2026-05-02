@@ -517,7 +517,8 @@ const EnhancedShareMenu: React.FC<{
   post: Post;
   isOwnPost: boolean;
   onDelete?: () => void;
-}> = ({ open, onClose, post, isOwnPost, onDelete }) => {
+  onEdit?: () => void;
+}> = ({ open, onClose, post, isOwnPost, onDelete, onEdit }) => {
   const { toast } = useToast();
   const navigate = useNavigate();
 
