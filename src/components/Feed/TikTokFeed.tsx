@@ -40,7 +40,7 @@ interface Post {
   star_price?: number;
   media_type?: string;
   music_track_id?: string;
-}
+  tags?: string[] | null;
 
 interface MusicTrack {
   id: string;
