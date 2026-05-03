@@ -932,6 +932,9 @@ const Feed = () => {
             if (item.type === 'product') {
               return <ProductCard key={item.key} product={item.data} />;
             }
+            if (item.type === 'trending-stories') {
+              return <TrendingStoriesCard key={item.key} />;
+            }
             const post = item.data as Post;
             return (
               <div key={item.key} data-post-card data-post-id={post.id}>
