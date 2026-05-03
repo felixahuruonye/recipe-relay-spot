@@ -536,6 +536,22 @@ const Feed = () => {
     }
   }, [userProfile, showOldPosts]);
 
+  // Scroll to specific post when ?post=ID is in URL (deep-link from notifications/comments)
+  useEffect(() => {
+    const targetPostId = searchParams.get('post');
+    if (!targetPostId || posts.length === 0) return;
+    const t = setTimeout(() => {
+      const el = document.querySelector(`[data-post-id="${targetPostId}"]`);
+      if (el) {
+        el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        (el as HTMLElement).style.transition = 'box-shadow 0.4s';
+        (el as HTMLElement).style.boxShadow = '0 0 0 3px hsl(var(--primary))';
+        setTimeout(() => { (el as HTMLElement).style.boxShadow = ''; }, 2000);
+      }
+    }, 400);
+    return () => clearTimeout(t);
+  }, [posts, searchParams]);
+
   useEffect(() => {
     if (!user) return;
     const channel = supabase
