@@ -23,23 +23,31 @@ export const WalletBalance = () => {
       
       // Subscribe to real-time updates
       const channel = supabase
-        .channel('wallet-changes')
+        .channel('wallet-changes-' + user.id)
         .on('postgres_changes', {
           event: '*',
           schema: 'public',
           table: 'user_profiles',
           filter: `id=eq.${user.id}`
-        }, () => {
-          fetchBalances();
-        })
+        }, () => { fetchBalances(); })
         .on('postgres_changes', {
-          event: 'INSERT',
+          event: '*',
           schema: 'public',
           table: 'wallet_history',
           filter: `user_id=eq.${user.id}`
-        }, () => {
-          fetchTransactions();
-        })
+        }, () => { fetchTransactions(); fetchBalances(); })
+        .on('postgres_changes', {
+          event: '*',
+          schema: 'public',
+          table: 'withdrawal_history',
+          filter: `user_id=eq.${user.id}`
+        }, () => { fetchTransactions(); fetchBalances(); })
+        .on('postgres_changes', {
+          event: 'INSERT',
+          schema: 'public',
+          table: 'view_transactions',
+          filter: `uploader_id=eq.${user.id}`
+        }, () => { fetchTransactions(); fetchBalances(); })
         .subscribe();
 
       return () => {
