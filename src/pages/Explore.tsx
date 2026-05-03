@@ -49,6 +49,30 @@ const Explore = () => {
   const [recentPosts, setRecentPosts] = useState<(TrendingPost & { user_profiles?: any })[]>([]);
   const [timeWindow, setTimeWindow] = useState<'1h' | '24h' | '7d' | '30d'>('24h');
   const [loading, setLoading] = useState(true);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [searchResults, setSearchResults] = useState<TrendingPost[]>([]);
+  const [searchType, setSearchType] = useState<'tag' | 'category' | 'text' | null>(null);
+
+  // Read ?q= and ?type= from URL (deep-link from clicking tags/category in feed)
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const q = params.get('q');
+    const type = params.get('type') as 'tag' | 'category' | null;
+    if (!q) return;
+    setSearchQuery(q);
+    setSearchType(type || 'text');
+    (async () => {
+      let query = supabase.from('posts').select('*').eq('status', 'approved');
+      if (type === 'tag') query = query.contains('tags', [q]);
+      else if (type === 'category') query = query.eq('category', q);
+      else query = query.or(`title.ilike.%${q}%,body.ilike.%${q}%`);
+      const { data } = await query.order('view_count', { ascending: false }).limit(50);
+      setSearchResults((data as any) || []);
+      // Track popularity
+      supabase.rpc('track_search', { search_keyword: q }).then(() => {});
+    })();
+  }, []);
+
 
   useEffect(() => {
     fetchTrendingData();
