@@ -895,7 +895,7 @@ const Feed = () => {
             }
             const post = item.data as Post;
             return (
-              <div key={item.key} data-post-card>
+              <div key={item.key} data-post-card data-post-id={post.id}>
                 <FeedPostCard
                   post={post}
                   postUser={users[post.user_id]}
