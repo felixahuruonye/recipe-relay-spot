@@ -674,6 +674,7 @@ const TikTokPost: React.FC<{
   const videoRef = useRef<HTMLVideoElement>(null);
   const musicAudioRef = useRef<HTMLAudioElement>(null);
   const [imageTimer, setImageTimer] = useState(5);
+  const [isPaused, setIsPaused] = useState(false);
   const imageTimerRef = useRef<NodeJS.Timeout | null>(null);
   const hasMedia = post.media_urls && post.media_urls.length > 0;
   const isVideo = hasMedia && (post.media_urls[0]?.match(/\.(mp4|webm|ogg|mov)$/i) || post.media_urls[0]?.includes('video'));
