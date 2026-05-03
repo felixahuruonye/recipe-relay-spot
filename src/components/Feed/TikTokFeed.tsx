@@ -41,6 +41,7 @@ interface Post {
   media_type?: string;
   music_track_id?: string;
   tags?: string[] | null;
+}
 
 interface MusicTrack {
   id: string;
