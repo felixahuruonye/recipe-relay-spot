@@ -863,8 +863,24 @@ const TikTokPost: React.FC<{
             {post.title}
             {post.body && hasMedia && <span className="text-white/70"> {post.body.slice(0, 80)}</span>}
           </p>
-          <div className="flex items-center gap-2">
-            <Badge variant="outline" className="text-[10px] h-5 px-2 border-white/30 text-white bg-white/10">{post.category}</Badge>
+          <div className="flex items-center gap-2 flex-wrap">
+            <Badge
+              variant="outline"
+              onClick={(e) => { e.stopPropagation(); navigate(`/explore?q=${encodeURIComponent(post.category)}&type=category`); }}
+              className="text-[10px] h-5 px-2 border-white/30 text-white bg-white/10 cursor-pointer hover:bg-white/20"
+            >
+              {post.category}
+            </Badge>
+            {Array.isArray(post.tags) && post.tags.slice(0, 3).map((tag) => (
+              <Badge
+                key={tag}
+                variant="outline"
+                onClick={(e) => { e.stopPropagation(); navigate(`/explore?q=${encodeURIComponent(tag)}&type=tag`); }}
+                className="text-[10px] h-5 px-2 border-primary/40 text-primary bg-primary/10 cursor-pointer hover:bg-primary/20"
+              >
+                #{tag}
+              </Badge>
+            ))}
             {post.star_price && post.star_price > 0 && (
               <Badge className="bg-yellow-500/90 text-black text-[10px] gap-0.5 font-bold">
                 <Star className="w-3 h-3 fill-current" /> {post.star_price}
