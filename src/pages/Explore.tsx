@@ -162,6 +162,45 @@ const Explore = () => {
         <p className="text-muted-foreground">Discover what's trending in the community</p>
       </div>
 
+      {searchQuery && (
+        <Card className="border-primary/40">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-base flex items-center justify-between">
+              <span>
+                Results for{' '}
+                <span className="text-primary">
+                  {searchType === 'tag' ? '#' : ''}{searchQuery}
+                </span>{' '}
+                <Badge variant="outline" className="ml-2 text-[10px]">{searchType}</Badge>
+              </span>
+              <Badge variant="secondary">{searchResults.length} posts</Badge>
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            {searchResults.length === 0 ? (
+              <p className="text-sm text-muted-foreground">No posts yet — be the first to post with this {searchType}!</p>
+            ) : (
+              <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+                {searchResults.map((p) => (
+                  <button key={p.id} onClick={() => navigate(`/?post=${p.id}`)} className="text-left group">
+                    {p.media_urls?.[0] ? (
+                      <img src={p.media_urls[0]} className="w-full aspect-square object-cover rounded-md group-hover:opacity-80" alt={p.title} />
+                    ) : (
+                      <div className="w-full aspect-square rounded-md bg-gradient-to-br from-primary/30 to-accent/30" />
+                    )}
+                    <p className="text-xs mt-1 line-clamp-2">{p.title}</p>
+                    <p className="text-[10px] text-muted-foreground flex items-center gap-2">
+                      <Eye className="w-3 h-3" /> {p.view_count || 0}
+                      <Heart className="w-3 h-3" /> {p.likes_count || 0}
+                    </p>
+                  </button>
+                ))}
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      )}
+
       {/* Time Window */}
       <div className="flex justify-center gap-2 flex-wrap">
         {[
