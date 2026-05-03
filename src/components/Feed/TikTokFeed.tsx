@@ -756,6 +756,8 @@ const TikTokPost: React.FC<{
           playsInline
           muted={isMuted}
           onEnded={onVideoEnd}
+          onPlay={() => setIsPaused(false)}
+          onPause={() => setIsPaused(true)}
           onClick={() => { if (videoRef.current?.paused) videoRef.current.play().catch(() => {}); else videoRef.current?.pause(); }}
         />
       ) : hasMedia ? (
