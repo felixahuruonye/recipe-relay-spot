@@ -988,7 +988,7 @@ const TikTokFeed: React.FC = () => {
     setShowSuggestedUsers(activeIndex > 0 && activeIndex % 5 === 0);
   }, [activeIndex]);
 
-  // Record view when post changes
+  // Record view when post changes (RPC handles insert + earnings)
   useEffect(() => {
     if (posts.length === 0) return;
     const post = posts[activeIndex];
@@ -998,12 +998,10 @@ const TikTokFeed: React.FC = () => {
       ...prev,
       [post.id]: (prev[post.id] ?? post.view_count ?? 0) + (prev[post.id] !== undefined ? 0 : 1)
     }));
-
-    if (user && !processedPosts.has(post.id) && !processingRef.current.has(post.id)) {
-      supabase.from('post_views').insert({ post_id: post.id, user_id: user.id }).then(() => {
-        supabase.from('posts').update({ view_count: (post.view_count || 0) + 1 }).eq('id', post.id).then(() => {});
-      });
-    }
+    // NOTE: do NOT insert into post_views here — process_post_view RPC will
+    // handle it atomically and emit the uploader's earning notification.
+    // Manually inserting first caused the RPC to short-circuit as "already_viewed"
+    // and skip the wallet credit + notification for the uploader.
   }, [activeIndex, posts]);
 
   // Process earning
