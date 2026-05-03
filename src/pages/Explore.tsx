@@ -49,6 +49,30 @@ const Explore = () => {
   const [recentPosts, setRecentPosts] = useState<(TrendingPost & { user_profiles?: any })[]>([]);
   const [timeWindow, setTimeWindow] = useState<'1h' | '24h' | '7d' | '30d'>('24h');
   const [loading, setLoading] = useState(true);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [searchResults, setSearchResults] = useState<TrendingPost[]>([]);
+  const [searchType, setSearchType] = useState<'tag' | 'category' | 'text' | null>(null);
+
+  // Read ?q= and ?type= from URL (deep-link from clicking tags/category in feed)
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const q = params.get('q');
+    const type = params.get('type') as 'tag' | 'category' | null;
+    if (!q) return;
+    setSearchQuery(q);
+    setSearchType(type || 'text');
+    (async () => {
+      let query = supabase.from('posts').select('*').eq('status', 'approved');
+      if (type === 'tag') query = query.contains('tags', [q]);
+      else if (type === 'category') query = query.eq('category', q);
+      else query = query.or(`title.ilike.%${q}%,body.ilike.%${q}%`);
+      const { data } = await query.order('view_count', { ascending: false }).limit(50);
+      setSearchResults((data as any) || []);
+      // Track popularity
+      supabase.rpc('track_search', { search_keyword: q }).then(() => {});
+    })();
+  }, []);
+
 
   useEffect(() => {
     fetchTrendingData();
@@ -137,6 +161,45 @@ const Explore = () => {
         <h1 className="text-3xl font-bold text-primary">🔥 Explore</h1>
         <p className="text-muted-foreground">Discover what's trending in the community</p>
       </div>
+
+      {searchQuery && (
+        <Card className="border-primary/40">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-base flex items-center justify-between">
+              <span>
+                Results for{' '}
+                <span className="text-primary">
+                  {searchType === 'tag' ? '#' : ''}{searchQuery}
+                </span>{' '}
+                <Badge variant="outline" className="ml-2 text-[10px]">{searchType}</Badge>
+              </span>
+              <Badge variant="secondary">{searchResults.length} posts</Badge>
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            {searchResults.length === 0 ? (
+              <p className="text-sm text-muted-foreground">No posts yet — be the first to post with this {searchType}!</p>
+            ) : (
+              <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+                {searchResults.map((p) => (
+                  <button key={p.id} onClick={() => navigate(`/?post=${p.id}`)} className="text-left group">
+                    {p.media_urls?.[0] ? (
+                      <img src={p.media_urls[0]} className="w-full aspect-square object-cover rounded-md group-hover:opacity-80" alt={p.title} />
+                    ) : (
+                      <div className="w-full aspect-square rounded-md bg-gradient-to-br from-primary/30 to-accent/30" />
+                    )}
+                    <p className="text-xs mt-1 line-clamp-2">{p.title}</p>
+                    <p className="text-[10px] text-muted-foreground flex items-center gap-2">
+                      <Eye className="w-3 h-3" /> {p.view_count || 0}
+                      <Heart className="w-3 h-3" /> {p.likes_count || 0}
+                    </p>
+                  </button>
+                ))}
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      )}
 
       {/* Time Window */}
       <div className="flex justify-center gap-2 flex-wrap">

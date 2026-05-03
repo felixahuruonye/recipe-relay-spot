@@ -40,6 +40,7 @@ interface Post {
   star_price?: number;
   media_type?: string;
   music_track_id?: string;
+  tags?: string[] | null;
 }
 
 interface MusicTrack {
@@ -671,9 +672,11 @@ const TikTokPost: React.FC<{
   isFollowing, isOwnPost, isMuted, autoScroll, onToggleMute, onLike, onFollow,
   onComment, onShare, onSendToFriend, onSoundDrilldown, onProfile, onRequireLogin, onVideoEnd, onImageTimerEnd, onSendStar, isLoggedIn, hasSeenBefore
 }) => {
+  const navigate = useNavigate();
   const videoRef = useRef<HTMLVideoElement>(null);
   const musicAudioRef = useRef<HTMLAudioElement>(null);
   const [imageTimer, setImageTimer] = useState(5);
+  const [isPaused, setIsPaused] = useState(false);
   const imageTimerRef = useRef<NodeJS.Timeout | null>(null);
   const hasMedia = post.media_urls && post.media_urls.length > 0;
   const isVideo = hasMedia && (post.media_urls[0]?.match(/\.(mp4|webm|ogg|mov)$/i) || post.media_urls[0]?.includes('video'));
@@ -755,6 +758,8 @@ const TikTokPost: React.FC<{
           playsInline
           muted={isMuted}
           onEnded={onVideoEnd}
+          onPlay={() => setIsPaused(false)}
+          onPause={() => setIsPaused(true)}
           onClick={() => { if (videoRef.current?.paused) videoRef.current.play().catch(() => {}); else videoRef.current?.pause(); }}
         />
       ) : hasMedia ? (
@@ -772,7 +777,7 @@ const TikTokPost: React.FC<{
 
       {/* Hidden YouTube background audio for Lenory Free tracks */}
       {mTrack?.youtube_id && (
-        <YouTubeAudio videoId={mTrack.youtube_id} playing={isActive && !isMuted} muted={isMuted} volume={40} loop />
+        <YouTubeAudio videoId={mTrack.youtube_id} playing={isActive && !isMuted && !isPaused} muted={isMuted} volume={40} loop />
       )}
       {/* Earning labels */}
       {isActive && isVideo && (
@@ -859,8 +864,24 @@ const TikTokPost: React.FC<{
             {post.title}
             {post.body && hasMedia && <span className="text-white/70"> {post.body.slice(0, 80)}</span>}
           </p>
-          <div className="flex items-center gap-2">
-            <Badge variant="outline" className="text-[10px] h-5 px-2 border-white/30 text-white bg-white/10">{post.category}</Badge>
+          <div className="flex items-center gap-2 flex-wrap">
+            <Badge
+              variant="outline"
+              onClick={(e) => { e.stopPropagation(); navigate(`/explore?q=${encodeURIComponent(post.category)}&type=category`); }}
+              className="text-[10px] h-5 px-2 border-white/30 text-white bg-white/10 cursor-pointer hover:bg-white/20"
+            >
+              {post.category}
+            </Badge>
+            {Array.isArray(post.tags) && post.tags.slice(0, 3).map((tag) => (
+              <Badge
+                key={tag}
+                variant="outline"
+                onClick={(e) => { e.stopPropagation(); navigate(`/explore?q=${encodeURIComponent(tag)}&type=tag`); }}
+                className="text-[10px] h-5 px-2 border-primary/40 text-primary bg-primary/10 cursor-pointer hover:bg-primary/20"
+              >
+                #{tag}
+              </Badge>
+            ))}
             {post.star_price && post.star_price > 0 && (
               <Badge className="bg-yellow-500/90 text-black text-[10px] gap-0.5 font-bold">
                 <Star className="w-3 h-3 fill-current" /> {post.star_price}
@@ -988,7 +1009,7 @@ const TikTokFeed: React.FC = () => {
     setShowSuggestedUsers(activeIndex > 0 && activeIndex % 5 === 0);
   }, [activeIndex]);
 
-  // Record view when post changes
+  // Record view when post changes (RPC handles insert + earnings)
   useEffect(() => {
     if (posts.length === 0) return;
     const post = posts[activeIndex];
@@ -998,12 +1019,10 @@ const TikTokFeed: React.FC = () => {
       ...prev,
       [post.id]: (prev[post.id] ?? post.view_count ?? 0) + (prev[post.id] !== undefined ? 0 : 1)
     }));
-
-    if (user && !processedPosts.has(post.id) && !processingRef.current.has(post.id)) {
-      supabase.from('post_views').insert({ post_id: post.id, user_id: user.id }).then(() => {
-        supabase.from('posts').update({ view_count: (post.view_count || 0) + 1 }).eq('id', post.id).then(() => {});
-      });
-    }
+    // NOTE: do NOT insert into post_views here — process_post_view RPC will
+    // handle it atomically and emit the uploader's earning notification.
+    // Manually inserting first caused the RPC to short-circuit as "already_viewed"
+    // and skip the wallet credit + notification for the uploader.
   }, [activeIndex, posts]);
 
   // Process earning
