@@ -775,7 +775,7 @@ const TikTokPost: React.FC<{
 
       {/* Hidden YouTube background audio for Lenory Free tracks */}
       {mTrack?.youtube_id && (
-        <YouTubeAudio videoId={mTrack.youtube_id} playing={isActive && !isMuted} muted={isMuted} volume={40} loop />
+        <YouTubeAudio videoId={mTrack.youtube_id} playing={isActive && !isMuted && !isPaused} muted={isMuted} volume={40} loop />
       )}
       {/* Earning labels */}
       {isActive && isVideo && (
