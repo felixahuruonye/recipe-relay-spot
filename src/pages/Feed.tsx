@@ -790,12 +790,31 @@ const Feed = () => {
     return <LenoryLoader label="Loading feed..." />;
   }
 
+  // Algorithmic personalization: deterministic shuffle per user so A, B, C see different orders
+  const seedFromString = (s: string) => {
+    let h = 2166136261;
+    for (let i = 0; i < s.length; i++) { h ^= s.charCodeAt(i); h = Math.imul(h, 16777619); }
+    return h >>> 0;
+  };
+  const userSeed = seedFromString((user?.id || 'guest') + new Date().toDateString());
+  const scoredPosts = [...posts]
+    .map((p) => {
+      const ageHrs = Math.max(1, (Date.now() - new Date(p.created_at).getTime()) / 3600000);
+      const engagement = (p.view_count || 0) + (p.likes_count || 0) * 4 + (p.comments_count || 0) * 6;
+      const personal = ((seedFromString(p.id) ^ userSeed) % 1000) / 1000; // per-user noise
+      const score = engagement / Math.pow(ageHrs, 0.7) + personal * 5;
+      return { post: p, score };
+    })
+    .sort((a, b) => b.score - a.score)
+    .map((x) => x.post);
+
   // Build mixed feed items
-  const feedItems: { type: 'post' | 'product' | 'suggested'; data: any; key: string }[] = [];
+  const feedItems: { type: 'post' | 'product' | 'suggested' | 'trending-stories'; data: any; key: string }[] = [];
   let productIndex = 0;
   let suggestedInserted = false;
+  const usedSuggestedKeys = new Set<string>();
 
-  posts.forEach((post, i) => {
+  scoredPosts.forEach((post, i) => {
     feedItems.push({ type: 'post', data: post, key: `post-${post.id}` });
     if ((i + 1) % 3 === 0 && productIndex < products.length) {
       feedItems.push({ type: 'product', data: products[productIndex], key: `product-${products[productIndex].id}` });
@@ -804,6 +823,10 @@ const Feed = () => {
     if (i === 1 && !suggestedInserted) {
       feedItems.push({ type: 'suggested', data: null, key: 'suggested-users' });
       suggestedInserted = true;
+    }
+    // Trending stories card every 6 posts
+    if ((i + 1) % 6 === 0) {
+      feedItems.push({ type: 'trending-stories', data: null, key: `trending-stories-${i}` });
     }
   });
 
