@@ -672,6 +672,7 @@ const TikTokPost: React.FC<{
   isFollowing, isOwnPost, isMuted, autoScroll, onToggleMute, onLike, onFollow,
   onComment, onShare, onSendToFriend, onSoundDrilldown, onProfile, onRequireLogin, onVideoEnd, onImageTimerEnd, onSendStar, isLoggedIn, hasSeenBefore
 }) => {
+  const navigate = useNavigate();
   const videoRef = useRef<HTMLVideoElement>(null);
   const musicAudioRef = useRef<HTMLAudioElement>(null);
   const [imageTimer, setImageTimer] = useState(5);
