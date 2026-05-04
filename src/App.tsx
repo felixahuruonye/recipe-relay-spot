@@ -25,6 +25,7 @@ import VIPSubscription from "./pages/VIPSubscription";
 import SavedSearches from "./pages/SavedSearches";
 import TikTokFeed from "./components/Feed/TikTokFeed";
 import MusicianDashboard from "./pages/MusicianDashboard";
+import Storyline from "./pages/Storyline";
 
 const queryClient = new QueryClient();
 
@@ -109,14 +110,11 @@ const App = () => (
                 <VIPSubscription />
               </ProtectedRoute>
             } />
-            <Route path="/contact-admin" element={
+            <Route path="/contact-admin" element={<ContactAdmin />} />
+            <Route path="/share" element={<SharePlatform />} />
+            <Route path="/storyline" element={
               <ProtectedRoute>
-                <ContactAdmin />
-              </ProtectedRoute>
-            } />
-            <Route path="/share" element={
-              <ProtectedRoute>
-                <SharePlatform />
+                <Storyline />
               </ProtectedRoute>
             } />
             <Route path="/saved-searches" element={
