@@ -1438,11 +1438,7 @@ const TikTokFeed: React.FC = () => {
   ];
 
   if (loading) {
-    return (
-      <div className="h-[100dvh] bg-black flex items-center justify-center">
-        <div className="w-10 h-10 border-3 border-white border-t-transparent rounded-full animate-spin" />
-      </div>
-    );
+    return <LenoryLoader label="Loading feed..." />;
   }
 
   return (
@@ -1466,8 +1462,16 @@ const TikTokFeed: React.FC = () => {
                 </div>
               </div>
             ) : (
-              posts.map((post, index) => (
-                <React.Fragment key={post.id}>
+              feedSlides.map((slide, index) => {
+                if (slide.type === 'suggested' || slide.type === 'trending-stories') {
+                  return <MixedFeedCard key={slide.key} type={slide.type} />;
+                }
+                if (slide.type === 'product') {
+                  return <MixedFeedCard key={slide.key} type="product" product={slide.product} />;
+                }
+                const post = slide.post;
+                return (
+                <React.Fragment key={slide.key}>
                   <TikTokPost
                     post={post}
                     postUser={users[post.user_id]}
@@ -1516,25 +1520,9 @@ const TikTokFeed: React.FC = () => {
                     isLoggedIn={!!user}
                     hasSeenBefore={processedPosts.has(post.id)}
                   />
-                  {/* Show suggested users every 5 posts */}
-                  {index > 0 && index % 5 === 0 && index === activeIndex && showSuggestedUsers && (
-                    <div className="h-[100dvh] snap-start snap-always bg-background flex items-center justify-center p-4">
-                      <div className="w-full max-w-md">
-                        <h3 className="text-lg font-bold mb-4 text-center">People You May Know</h3>
-                        <SuggestedUsers />
-                      </div>
-                    </div>
-                  )}
-                  {/* Show marketplace product every 3 posts */}
-                  {index > 0 && index % 3 === 0 && products[Math.floor(index / 3) % products.length] && (
-                    <div className="h-[100dvh] snap-start snap-always bg-black flex items-center justify-center p-4">
-                      <div className="w-full max-w-md">
-                        <ProductCard product={products[Math.floor(index / 3) % products.length] as any} />
-                      </div>
-                    </div>
-                  )}
                 </React.Fragment>
-              ))
+              );
+              })
             )}
           </div>
 
