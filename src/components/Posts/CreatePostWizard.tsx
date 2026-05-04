@@ -343,6 +343,7 @@ const CreatePostWizard: React.FC<CreatePostWizardProps> = ({ onPostCreated, isOp
           {hasVideo && (
             <div className="space-y-2 p-3 bg-muted/50 rounded-xl">
               <Label className="text-xs font-semibold flex items-center gap-1"><Image className="w-3.5 h-3.5" /> Video Thumbnail</Label>
+              <p className="text-[10px] text-muted-foreground">Add a thumbnail image so your video displays clearly on the app and home feed. Without a thumbnail, your post may not display well.</p>
               {thumbnailPreview ? (
                 <div className="relative w-24 h-16 rounded-lg overflow-hidden">
                   <img src={thumbnailPreview} className="w-full h-full object-cover" />
