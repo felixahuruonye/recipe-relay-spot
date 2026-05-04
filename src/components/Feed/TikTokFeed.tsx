@@ -140,7 +140,7 @@ const StarNotificationCard: React.FC<{
       initial={{ opacity: 0, y: 50, scale: 0.9 }}
       animate={{ opacity: 1, y: 0, scale: 1 }}
       exit={{ opacity: 0, y: 50, scale: 0.9 }}
-      className="fixed bottom-20 left-1/2 -translate-x-1/2 z-50 w-[90%] max-w-[400px]"
+      className="fixed left-1/2 top-1/2 z-50 w-[90%] max-w-[400px] -translate-x-1/2 -translate-y-1/2"
     >
       <div className="bg-card/95 backdrop-blur-xl rounded-2xl p-5 shadow-2xl border border-border">
         <h3 className="font-bold text-base mb-1">{cfg.title}</h3>
