@@ -1008,6 +1008,35 @@ const TikTokFeed: React.FC = () => {
   const viewCooldownRef = useRef<number>(0);
   const dailyViewsRef = useRef<number>(0);
 
+  const feedSlides = useMemo<FeedSlide[]>(() => {
+    const seed = seedFromString(`${user?.id || 'guest'}-${new Date().toDateString()}`);
+    const orderedPosts = [...posts]
+      .map((p) => {
+        const ageHrs = Math.max(1, (Date.now() - new Date(p.created_at).getTime()) / 3600000);
+        const engagement = (postViewCounts[p.id] ?? p.view_count ?? 0) + (postLikes[p.id]?.length || p.likes_count || 0) * 4 + (postCommentCounts[p.id] || p.comments_count || 0) * 6;
+        const personal = ((seedFromString(p.id) ^ seed) % 1000) / 1000;
+        return { post: p, score: engagement / Math.pow(ageHrs, 0.7) + personal * 8 + (p.boosted ? 20 : 0) };
+      })
+      .sort((a, b) => b.score - a.score)
+      .map((x) => x.post);
+
+    const productSeed = seed % Math.max(products.length, 1);
+    const productOrder = products.length ? [...products.slice(productSeed), ...products.slice(0, productSeed)] : [];
+    const slides: FeedSlide[] = [];
+    let productIndex = 0;
+    orderedPosts.forEach((post, index) => {
+      slides.push({ type: 'post', key: `post-${post.id}`, post, postIndex: index });
+      if (index === 1) slides.push({ type: 'suggested', key: 'suggested-users' });
+      if ((index + 1) % 3 === 0 && productOrder.length > 0) {
+        const product = productOrder[productIndex % productOrder.length];
+        slides.push({ type: 'product', key: `product-${product.id}-${index}`, product });
+        productIndex += 1;
+      }
+      if ((index + 1) % 6 === 0) slides.push({ type: 'trending-stories', key: `trending-stories-${index}` });
+    });
+    return slides;
+  }, [posts, products, user?.id, postLikes, postViewCounts, postCommentCounts]);
+
   // Fetch posts
   useEffect(() => { fetchPosts(); fetchProducts(); }, []);
 
