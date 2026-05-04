@@ -1576,7 +1576,7 @@ const TikTokFeed: React.FC = () => {
             <div className="flex items-center justify-around py-1.5 px-1 bg-black/80 backdrop-blur-md border-t border-white/10">
               <NavBtn icon={Home} label="Home" active onClick={() => feedRef.current?.scrollTo({ top: 0, behavior: 'smooth' })} />
               <NavBtn icon={Search} label="Explore" onClick={() => navigate('/explore')} />
-              <NavBtn icon={BookOpen} label="Stories" onClick={() => user ? navigate('/explore') : requireLogin('Login for stories')} />
+              <NavBtn icon={BookOpen} label="Stories" onClick={() => user ? navigate('/storyline') : requireLogin('Login for stories')} />
               <button
                 onClick={() => { if (!user) { requireLogin('Login to post'); return; } setEditPost(null); setShowCreatePost(true); }}
                 className="w-12 h-9 rounded-xl bg-primary flex items-center justify-center -mt-4 shadow-lg shadow-primary/40"
