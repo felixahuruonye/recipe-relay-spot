@@ -1087,14 +1087,14 @@ const TikTokFeed: React.FC = () => {
       const scrollTop = el.scrollTop;
       const vh = window.innerHeight;
       const newIndex = Math.round(scrollTop / vh);
-      if (newIndex !== activeIndex && newIndex >= 0 && newIndex < posts.length) {
+      if (newIndex !== activeIndex && newIndex >= 0 && newIndex < feedSlides.length) {
         setActiveIndex(newIndex);
         if (navigator.vibrate) navigator.vibrate(10);
       }
     };
     el.addEventListener('scroll', handleScroll, { passive: true });
     return () => el.removeEventListener('scroll', handleScroll);
-  }, [activeIndex, posts.length]);
+  }, [activeIndex, feedSlides.length]);
 
   // Show suggested users every 5 posts
   useEffect(() => {
@@ -1103,9 +1103,9 @@ const TikTokFeed: React.FC = () => {
 
   // Record view when post changes (RPC handles insert + earnings)
   useEffect(() => {
-    if (posts.length === 0) return;
-    const post = posts[activeIndex];
-    if (!post) return;
+    const slide = feedSlides[activeIndex];
+    if (!slide || slide.type !== 'post') return;
+    const post = slide.post;
 
     setPostViewCounts(prev => ({
       ...prev,
@@ -1115,7 +1115,7 @@ const TikTokFeed: React.FC = () => {
     // handle it atomically and emit the uploader's earning notification.
     // Manually inserting first caused the RPC to short-circuit as "already_viewed"
     // and skip the wallet credit + notification for the uploader.
-  }, [activeIndex, posts]);
+  }, [activeIndex, feedSlides]);
 
   // Process earning
   const processEarning = useCallback((post: Post) => {
@@ -1177,10 +1177,10 @@ const TikTokFeed: React.FC = () => {
   const scrollToNext = useCallback(() => {
     if (!feedRef.current || !autoScroll) return;
     const nextIndex = activeIndex + 1;
-    if (nextIndex < posts.length) {
+    if (nextIndex < feedSlides.length) {
       feedRef.current.scrollTo({ top: nextIndex * window.innerHeight, behavior: 'smooth' });
     }
-  }, [activeIndex, posts.length, autoScroll]);
+  }, [activeIndex, feedSlides.length, autoScroll]);
 
   const fetchPosts = async () => {
     try {
