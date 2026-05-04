@@ -709,9 +709,18 @@ const TikTokPost: React.FC<{
   const musicAudioRef = useRef<HTMLAudioElement>(null);
   const [imageTimer, setImageTimer] = useState(5);
   const [isPaused, setIsPaused] = useState(false);
+  const [mediaIndex, setMediaIndex] = useState(0);
   const imageTimerRef = useRef<NodeJS.Timeout | null>(null);
-  const hasMedia = post.media_urls && post.media_urls.length > 0;
-  const isVideo = hasMedia && (post.media_urls[0]?.match(/\.(mp4|webm|ogg|mov)$/i) || post.media_urls[0]?.includes('video'));
+  const mediaItems = post.media_urls || [];
+  const hasMedia = mediaItems.length > 0;
+  const activeMedia = mediaItems[Math.min(mediaIndex, Math.max(mediaItems.length - 1, 0))];
+  const displayMedia = post.thumbnail_url && activeMedia?.match(/\.(mp4|webm|ogg|mov)$/i) ? post.thumbnail_url : activeMedia;
+  const isVideo = hasMedia && (activeMedia?.match(/\.(mp4|webm|ogg|mov)$/i) || activeMedia?.includes('video'));
+  const externalVideoUrl = post.body?.match(/https?:\/\/(?:www\.)?(?:youtube\.com\/watch\?v=|youtu\.be\/|vimeo\.com\/|tiktok\.com\/[^\s]+|instagram\.com\/reel\/)[^\s]+/i)?.[0];
+
+  useEffect(() => {
+    setMediaIndex(0);
+  }, [post.id]);
 
   // Background music — supports both audio_url (community) and youtube_id (Lenory Free)
   useEffect(() => {
@@ -729,7 +738,7 @@ const TikTokPost: React.FC<{
       if (isActive && !isMuted) musicAudioRef.current.play().catch(() => {});
       else musicAudioRef.current.pause();
     }
-  }, [isActive, isMuted]);
+  }, [isActive, isMuted, activeMedia]);
 
   // Video play/pause
   useEffect(() => {
