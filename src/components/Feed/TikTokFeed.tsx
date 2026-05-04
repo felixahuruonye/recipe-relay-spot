@@ -1507,13 +1507,13 @@ const TikTokFeed: React.FC = () => {
                     onProfile={() => user ? navigate(`/profile/${post.user_id}`) : requireLogin('Login to view profiles')}
                     onRequireLogin={requireLogin}
                     onVideoEnd={() => {
-                      const p = posts[activeIndex];
-                      if (p && user) processEarning(p);
+                      const slide = feedSlides[activeIndex];
+                      if (slide?.type === 'post' && user) processEarning(slide.post);
                       scrollToNext();
                     }}
                     onImageTimerEnd={() => {
-                      const p = posts[activeIndex];
-                      if (p && user) processEarning(p);
+                      const slide = feedSlides[activeIndex];
+                      if (slide?.type === 'post' && user) processEarning(slide.post);
                       if (autoScroll) setTimeout(scrollToNext, 1000);
                     }}
                     onSendStar={() => handleSendStar(post)}
