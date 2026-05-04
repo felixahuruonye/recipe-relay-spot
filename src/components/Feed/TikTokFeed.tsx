@@ -1248,7 +1248,7 @@ const TikTokFeed: React.FC = () => {
           setMusicTracks(mMap);
         }
 
-        setPosts(allPosts);
+        setPosts(allPosts as Post[]);
         setUsers(usersMap);
         setPostLikes(likesMap);
         setPostCommentCounts(commentCountMap);
@@ -1260,8 +1260,19 @@ const TikTokFeed: React.FC = () => {
   };
 
   const fetchProducts = async () => {
-    const { data } = await supabase.from('products').select('*').eq('status', 'active').limit(10);
-    setProducts((data as any[]) || []);
+    const { data } = await supabase
+      .from('products')
+      .select('*')
+      .eq('status', 'active')
+      .order('featured', { ascending: false })
+      .order('created_at', { ascending: false })
+      .limit(18);
+    const sellerIds = [...new Set((data || []).map((p) => p.seller_user_id))];
+    const { data: profiles } = sellerIds.length
+      ? await supabase.from('user_profiles').select('id, username, avatar_url, vip').in('id', sellerIds)
+      : { data: [] as any[] };
+    const profileMap = new Map((profiles || []).map((p: any) => [p.id, p]));
+    setProducts(((data as any[]) || []).map((p) => ({ ...p, user_profiles: profileMap.get(p.seller_user_id) })));
   };
 
   const loadFollowing = async () => {
