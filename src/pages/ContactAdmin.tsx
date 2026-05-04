@@ -29,17 +29,19 @@ const ContactAdmin = () => {
   ];
 
   const handleSubmit = async () => {
-    if (!user) {
-      toast({ title: 'Error', description: 'Please login first.', variant: 'destructive' });
-      return;
-    }
-
     if (!reason || !message.trim()) {
       toast({ title: 'Missing Info', description: 'Please select a reason and write your message.', variant: 'destructive' });
       return;
     }
 
     setSending(true);
+
+    if (!user) {
+      window.location.href = `mailto:lenoryai@gmail.com?subject=${encodeURIComponent(`Lenory Contact: ${reason}`)}&body=${encodeURIComponent(message.trim())}`;
+      toast({ title: 'Opening email app', description: 'Send the message to lenoryai@gmail.com.' });
+      setSending(false);
+      return;
+    }
 
     const { error } = await supabase.from('admin_questions').insert({
       user_id: user.id,
@@ -120,7 +122,7 @@ const ContactAdmin = () => {
           </Button>
 
           <p className="text-xs text-muted-foreground text-center">
-            Admin will respond to your message via notifications. Make sure to check your notifications regularly.
+            Logged-in users get replies in notifications. Public messages open email to lenoryai@gmail.com.
           </p>
         </CardContent>
       </Card>

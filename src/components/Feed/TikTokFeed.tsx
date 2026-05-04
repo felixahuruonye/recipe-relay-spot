@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useRef, useCallback } from 'react';
+import React, { useEffect, useState, useRef, useCallback, useMemo } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/integrations/supabase/client';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
@@ -8,7 +8,7 @@ import { Switch } from '@/components/ui/switch';
 import {
   Heart, MessageCircle, Share2, Star, Volume2, VolumeX,
   Plus, Music2, Eye, UserPlus, Send, Copy, Disc,
-  Home, Search, BookOpen, MessageSquare, Menu, X, Clock, Trash2, Edit, Flag, EyeOff
+  Home, Search, BookOpen, MessageSquare, Menu, X, Clock, Trash2, Edit, Flag, EyeOff, ChevronLeft, ChevronRight, ExternalLink
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { useToast } from '@/hooks/use-toast';
@@ -21,8 +21,10 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { Input } from '@/components/ui/input';
 import { SuggestedUsers } from './SuggestedUsers';
 import { ProductCard } from './ProductCard';
+import { TrendingStoriesCard } from './TrendingStoriesCard';
 import CreatePostWizard from '@/components/Posts/CreatePostWizard';
 import YouTubeAudio from '@/components/Music/YouTubeAudio';
+import { LenoryLoader } from '@/components/Loading/LenoryLoader';
 
 interface Post {
   id: string;
@@ -41,6 +43,7 @@ interface Post {
   media_type?: string;
   music_track_id?: string;
   tags?: string[] | null;
+  thumbnail_url?: string | null;
 }
 
 interface MusicTrack {
@@ -71,7 +74,24 @@ interface Product {
   price_ngn: number;
   images: string[];
   seller_user_id: string;
+  featured?: boolean | null;
+  user_profiles?: { username: string; avatar_url: string; vip: boolean };
 }
+
+type FeedSlide =
+  | { type: 'post'; key: string; post: Post; postIndex: number }
+  | { type: 'suggested'; key: string }
+  | { type: 'product'; key: string; product: Product }
+  | { type: 'trending-stories'; key: string };
+
+const seedFromString = (s: string) => {
+  let h = 2166136261;
+  for (let i = 0; i < s.length; i += 1) {
+    h ^= s.charCodeAt(i);
+    h = Math.imul(h, 16777619);
+  }
+  return h >>> 0;
+};
 
 // ── Star Notification Card ──
 const StarNotificationCard: React.FC<{
@@ -120,7 +140,7 @@ const StarNotificationCard: React.FC<{
       initial={{ opacity: 0, y: 50, scale: 0.9 }}
       animate={{ opacity: 1, y: 0, scale: 1 }}
       exit={{ opacity: 0, y: 50, scale: 0.9 }}
-      className="fixed bottom-20 left-1/2 -translate-x-1/2 z-50 w-[90%] max-w-[400px]"
+      className="fixed left-1/2 top-1/2 z-50 w-[90%] max-w-[400px] -translate-x-1/2 -translate-y-1/2"
     >
       <div className="bg-card/95 backdrop-blur-xl rounded-2xl p-5 shadow-2xl border border-border">
         <h3 className="font-bold text-base mb-1">{cfg.title}</h3>
@@ -165,6 +185,18 @@ const StarFloatAnimation: React.FC<{ amount: number; visible: boolean }> = ({ am
         </motion.span>
       </div>
     </motion.div>
+  );
+};
+
+const MixedFeedCard: React.FC<{ type: 'suggested' | 'product' | 'trending-stories'; product?: Product }> = ({ type, product }) => {
+  return (
+    <div className="h-[100dvh] snap-start snap-always bg-background flex items-center justify-center p-4 overflow-y-auto">
+      <div className="w-full max-w-md py-16">
+        {type === 'suggested' && <SuggestedUsers />}
+        {type === 'product' && product && <ProductCard product={product as any} />}
+        {type === 'trending-stories' && <TrendingStoriesCard />}
+      </div>
+    </div>
   );
 };
 
@@ -677,9 +709,18 @@ const TikTokPost: React.FC<{
   const musicAudioRef = useRef<HTMLAudioElement>(null);
   const [imageTimer, setImageTimer] = useState(5);
   const [isPaused, setIsPaused] = useState(false);
+  const [mediaIndex, setMediaIndex] = useState(0);
   const imageTimerRef = useRef<NodeJS.Timeout | null>(null);
-  const hasMedia = post.media_urls && post.media_urls.length > 0;
-  const isVideo = hasMedia && (post.media_urls[0]?.match(/\.(mp4|webm|ogg|mov)$/i) || post.media_urls[0]?.includes('video'));
+  const mediaItems = post.media_urls || [];
+  const hasMedia = mediaItems.length > 0;
+  const activeMedia = mediaItems[Math.min(mediaIndex, Math.max(mediaItems.length - 1, 0))];
+  const displayMedia = post.thumbnail_url && activeMedia?.match(/\.(mp4|webm|ogg|mov)$/i) ? post.thumbnail_url : activeMedia;
+  const isVideo = hasMedia && (activeMedia?.match(/\.(mp4|webm|ogg|mov)$/i) || activeMedia?.includes('video'));
+  const externalVideoUrl = post.body?.match(/https?:\/\/(?:www\.)?(?:youtube\.com\/watch\?v=|youtu\.be\/|vimeo\.com\/|tiktok\.com\/[^\s]+|instagram\.com\/reel\/)[^\s]+/i)?.[0];
+
+  useEffect(() => {
+    setMediaIndex(0);
+  }, [post.id]);
 
   // Background music — supports both audio_url (community) and youtube_id (Lenory Free)
   useEffect(() => {
@@ -697,7 +738,7 @@ const TikTokPost: React.FC<{
       if (isActive && !isMuted) musicAudioRef.current.play().catch(() => {});
       else musicAudioRef.current.pause();
     }
-  }, [isActive, isMuted]);
+  }, [isActive, isMuted, activeMedia]);
 
   // Video play/pause
   useEffect(() => {
@@ -746,13 +787,15 @@ const TikTokPost: React.FC<{
   return (
     <div className="relative w-full h-[100dvh] snap-start snap-always bg-black flex items-center justify-center overflow-hidden">
       {hasMedia && !isVideo && (
-        <div className="absolute inset-0 bg-cover bg-center blur-2xl scale-110 opacity-30" style={{ backgroundImage: `url(${post.media_urls[0]})` }} />
+        <div className="absolute inset-0 bg-cover bg-center blur-2xl scale-110 opacity-30" style={{ backgroundImage: `url(${displayMedia})` }} />
       )}
 
       {hasMedia && isVideo ? (
         <video
+          key={activeMedia}
           ref={videoRef}
-          src={post.media_urls[0]}
+          src={activeMedia}
+          poster={post.thumbnail_url || undefined}
           className="absolute inset-0 w-full h-full object-cover"
           loop={!autoScroll}
           playsInline
@@ -763,7 +806,7 @@ const TikTokPost: React.FC<{
           onClick={() => { if (videoRef.current?.paused) videoRef.current.play().catch(() => {}); else videoRef.current?.pause(); }}
         />
       ) : hasMedia ? (
-        <img src={post.media_urls[0]} alt={post.title} className="relative z-10 max-w-full max-h-full object-contain" loading="lazy" />
+        <img src={displayMedia} alt={post.title} className="relative z-10 max-w-full max-h-full object-contain" loading="lazy" />
       ) : (
         <div className="absolute inset-0 bg-gradient-to-br from-primary/80 via-accent/60 to-primary/40 flex items-center justify-center p-8">
           <div className="text-center space-y-4 max-w-lg">
@@ -774,6 +817,26 @@ const TikTokPost: React.FC<{
       )}
 
       <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-transparent to-black/30 pointer-events-none z-20" />
+
+      {mediaItems.length > 1 && (
+        <>
+          <div className="absolute top-16 left-1/2 -translate-x-1/2 z-30 flex gap-1">
+            {mediaItems.map((_, i) => <span key={i} className={`h-1.5 w-6 rounded-full ${i === mediaIndex ? 'bg-white' : 'bg-white/35'}`} />)}
+          </div>
+          <button aria-label="Previous media" onClick={() => setMediaIndex((i) => (i - 1 + mediaItems.length) % mediaItems.length)} className="absolute left-2 top-1/2 z-30 -translate-y-1/2 rounded-full bg-black/35 p-2 backdrop-blur-sm">
+            <ChevronLeft className="w-5 h-5 text-white" />
+          </button>
+          <button aria-label="Next media" onClick={() => setMediaIndex((i) => (i + 1) % mediaItems.length)} className="absolute right-14 top-1/2 z-30 -translate-y-1/2 rounded-full bg-black/35 p-2 backdrop-blur-sm">
+            <ChevronRight className="w-5 h-5 text-white" />
+          </button>
+        </>
+      )}
+
+      {externalVideoUrl && (
+        <button onClick={() => window.open(externalVideoUrl, '_blank', 'noopener,noreferrer')} className="absolute top-20 left-3 z-30 flex items-center gap-1 rounded-full bg-black/45 px-3 py-1.5 text-[11px] font-semibold text-white backdrop-blur-sm">
+          <ExternalLink className="w-3.5 h-3.5" /> Open video
+        </button>
+      )}
 
       {/* Hidden YouTube background audio for Lenory Free tracks */}
       {mTrack?.youtube_id && (
@@ -945,6 +1008,35 @@ const TikTokFeed: React.FC = () => {
   const viewCooldownRef = useRef<number>(0);
   const dailyViewsRef = useRef<number>(0);
 
+  const feedSlides = useMemo<FeedSlide[]>(() => {
+    const seed = seedFromString(`${user?.id || 'guest'}-${new Date().toDateString()}`);
+    const orderedPosts = [...posts]
+      .map((p) => {
+        const ageHrs = Math.max(1, (Date.now() - new Date(p.created_at).getTime()) / 3600000);
+        const engagement = (postViewCounts[p.id] ?? p.view_count ?? 0) + (postLikes[p.id]?.length || p.likes_count || 0) * 4 + (postCommentCounts[p.id] || p.comments_count || 0) * 6;
+        const personal = ((seedFromString(p.id) ^ seed) % 1000) / 1000;
+        return { post: p, score: engagement / Math.pow(ageHrs, 0.7) + personal * 8 + (p.boosted ? 20 : 0) };
+      })
+      .sort((a, b) => b.score - a.score)
+      .map((x) => x.post);
+
+    const productSeed = seed % Math.max(products.length, 1);
+    const productOrder = products.length ? [...products.slice(productSeed), ...products.slice(0, productSeed)] : [];
+    const slides: FeedSlide[] = [];
+    let productIndex = 0;
+    orderedPosts.forEach((post, index) => {
+      slides.push({ type: 'post', key: `post-${post.id}`, post, postIndex: index });
+      if (index === 1) slides.push({ type: 'suggested', key: 'suggested-users' });
+      if ((index + 1) % 3 === 0 && productOrder.length > 0) {
+        const product = productOrder[productIndex % productOrder.length];
+        slides.push({ type: 'product', key: `product-${product.id}-${index}`, product });
+        productIndex += 1;
+      }
+      if ((index + 1) % 6 === 0) slides.push({ type: 'trending-stories', key: `trending-stories-${index}` });
+    });
+    return slides;
+  }, [posts, products, user?.id, postLikes, postViewCounts, postCommentCounts]);
+
   // Fetch posts
   useEffect(() => { fetchPosts(); fetchProducts(); }, []);
 
@@ -995,25 +1087,35 @@ const TikTokFeed: React.FC = () => {
       const scrollTop = el.scrollTop;
       const vh = window.innerHeight;
       const newIndex = Math.round(scrollTop / vh);
-      if (newIndex !== activeIndex && newIndex >= 0 && newIndex < posts.length) {
+      if (newIndex !== activeIndex && newIndex >= 0 && newIndex < feedSlides.length) {
         setActiveIndex(newIndex);
         if (navigator.vibrate) navigator.vibrate(10);
       }
     };
     el.addEventListener('scroll', handleScroll, { passive: true });
     return () => el.removeEventListener('scroll', handleScroll);
-  }, [activeIndex, posts.length]);
+  }, [activeIndex, feedSlides.length]);
 
   // Show suggested users every 5 posts
   useEffect(() => {
     setShowSuggestedUsers(activeIndex > 0 && activeIndex % 5 === 0);
   }, [activeIndex]);
 
+  useEffect(() => {
+    const postId = new URLSearchParams(window.location.search).get('post');
+    if (!postId || feedSlides.length === 0 || !feedRef.current) return;
+    const targetIndex = feedSlides.findIndex((slide) => slide.type === 'post' && slide.post.id === postId);
+    if (targetIndex >= 0) {
+      setActiveIndex(targetIndex);
+      setTimeout(() => feedRef.current?.scrollTo({ top: targetIndex * window.innerHeight, behavior: 'smooth' }), 250);
+    }
+  }, [feedSlides]);
+
   // Record view when post changes (RPC handles insert + earnings)
   useEffect(() => {
-    if (posts.length === 0) return;
-    const post = posts[activeIndex];
-    if (!post) return;
+    const slide = feedSlides[activeIndex];
+    if (!slide || slide.type !== 'post') return;
+    const post = slide.post;
 
     setPostViewCounts(prev => ({
       ...prev,
@@ -1023,7 +1125,7 @@ const TikTokFeed: React.FC = () => {
     // handle it atomically and emit the uploader's earning notification.
     // Manually inserting first caused the RPC to short-circuit as "already_viewed"
     // and skip the wallet credit + notification for the uploader.
-  }, [activeIndex, posts]);
+  }, [activeIndex, feedSlides]);
 
   // Process earning
   const processEarning = useCallback((post: Post) => {
@@ -1085,10 +1187,10 @@ const TikTokFeed: React.FC = () => {
   const scrollToNext = useCallback(() => {
     if (!feedRef.current || !autoScroll) return;
     const nextIndex = activeIndex + 1;
-    if (nextIndex < posts.length) {
+    if (nextIndex < feedSlides.length) {
       feedRef.current.scrollTo({ top: nextIndex * window.innerHeight, behavior: 'smooth' });
     }
-  }, [activeIndex, posts.length, autoScroll]);
+  }, [activeIndex, feedSlides.length, autoScroll]);
 
   const fetchPosts = async () => {
     try {
@@ -1146,7 +1248,7 @@ const TikTokFeed: React.FC = () => {
           setMusicTracks(mMap);
         }
 
-        setPosts(allPosts);
+        setPosts(allPosts as Post[]);
         setUsers(usersMap);
         setPostLikes(likesMap);
         setPostCommentCounts(commentCountMap);
@@ -1158,8 +1260,19 @@ const TikTokFeed: React.FC = () => {
   };
 
   const fetchProducts = async () => {
-    const { data } = await supabase.from('products').select('*').eq('status', 'active').limit(10);
-    setProducts((data as any[]) || []);
+    const { data } = await supabase
+      .from('products')
+      .select('*')
+      .eq('status', 'active')
+      .order('featured', { ascending: false })
+      .order('created_at', { ascending: false })
+      .limit(18);
+    const sellerIds = [...new Set((data || []).map((p) => p.seller_user_id))];
+    const { data: profiles } = sellerIds.length
+      ? await supabase.from('user_profiles').select('id, username, avatar_url, vip').in('id', sellerIds)
+      : { data: [] as any[] };
+    const profileMap = new Map((profiles || []).map((p: any) => [p.id, p]));
+    setProducts(((data as any[]) || []).map((p) => ({ ...p, user_profiles: profileMap.get(p.seller_user_id) })));
   };
 
   const loadFollowing = async () => {
@@ -1325,11 +1438,7 @@ const TikTokFeed: React.FC = () => {
   ];
 
   if (loading) {
-    return (
-      <div className="h-[100dvh] bg-black flex items-center justify-center">
-        <div className="w-10 h-10 border-3 border-white border-t-transparent rounded-full animate-spin" />
-      </div>
-    );
+    return <LenoryLoader label="Loading feed..." />;
   }
 
   return (
@@ -1353,8 +1462,16 @@ const TikTokFeed: React.FC = () => {
                 </div>
               </div>
             ) : (
-              posts.map((post, index) => (
-                <React.Fragment key={post.id}>
+              feedSlides.map((slide, index) => {
+                if (slide.type === 'suggested' || slide.type === 'trending-stories') {
+                  return <MixedFeedCard key={slide.key} type={slide.type} />;
+                }
+                if (slide.type === 'product') {
+                  return <MixedFeedCard key={slide.key} type="product" product={slide.product} />;
+                }
+                const post = slide.post;
+                return (
+                <React.Fragment key={slide.key}>
                   <TikTokPost
                     post={post}
                     postUser={users[post.user_id]}
@@ -1390,38 +1507,22 @@ const TikTokFeed: React.FC = () => {
                     onProfile={() => user ? navigate(`/profile/${post.user_id}`) : requireLogin('Login to view profiles')}
                     onRequireLogin={requireLogin}
                     onVideoEnd={() => {
-                      const p = posts[activeIndex];
-                      if (p && user) processEarning(p);
+                      const slide = feedSlides[activeIndex];
+                      if (slide?.type === 'post' && user) processEarning(slide.post);
                       scrollToNext();
                     }}
                     onImageTimerEnd={() => {
-                      const p = posts[activeIndex];
-                      if (p && user) processEarning(p);
+                      const slide = feedSlides[activeIndex];
+                      if (slide?.type === 'post' && user) processEarning(slide.post);
                       if (autoScroll) setTimeout(scrollToNext, 1000);
                     }}
                     onSendStar={() => handleSendStar(post)}
                     isLoggedIn={!!user}
                     hasSeenBefore={processedPosts.has(post.id)}
                   />
-                  {/* Show suggested users every 5 posts */}
-                  {index > 0 && index % 5 === 0 && index === activeIndex && showSuggestedUsers && (
-                    <div className="h-[100dvh] snap-start snap-always bg-background flex items-center justify-center p-4">
-                      <div className="w-full max-w-md">
-                        <h3 className="text-lg font-bold mb-4 text-center">People You May Know</h3>
-                        <SuggestedUsers />
-                      </div>
-                    </div>
-                  )}
-                  {/* Show marketplace product every 3 posts */}
-                  {index > 0 && index % 3 === 0 && products[Math.floor(index / 3) % products.length] && (
-                    <div className="h-[100dvh] snap-start snap-always bg-black flex items-center justify-center p-4">
-                      <div className="w-full max-w-md">
-                        <ProductCard product={products[Math.floor(index / 3) % products.length] as any} />
-                      </div>
-                    </div>
-                  )}
                 </React.Fragment>
-              ))
+              );
+              })
             )}
           </div>
 
@@ -1475,7 +1576,7 @@ const TikTokFeed: React.FC = () => {
             <div className="flex items-center justify-around py-1.5 px-1 bg-black/80 backdrop-blur-md border-t border-white/10">
               <NavBtn icon={Home} label="Home" active onClick={() => feedRef.current?.scrollTo({ top: 0, behavior: 'smooth' })} />
               <NavBtn icon={Search} label="Explore" onClick={() => navigate('/explore')} />
-              <NavBtn icon={BookOpen} label="Stories" onClick={() => user ? navigate('/explore') : requireLogin('Login for stories')} />
+              <NavBtn icon={BookOpen} label="Stories" onClick={() => user ? navigate('/storyline') : requireLogin('Login for stories')} />
               <button
                 onClick={() => { if (!user) { requireLogin('Login to post'); return; } setEditPost(null); setShowCreatePost(true); }}
                 className="w-12 h-9 rounded-xl bg-primary flex items-center justify-center -mt-4 shadow-lg shadow-primary/40"
