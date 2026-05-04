@@ -188,6 +188,18 @@ const StarFloatAnimation: React.FC<{ amount: number; visible: boolean }> = ({ am
   );
 };
 
+const MixedFeedCard: React.FC<{ type: 'suggested' | 'product' | 'trending-stories'; product?: Product }> = ({ type, product }) => {
+  return (
+    <div className="h-[100dvh] snap-start snap-always bg-background flex items-center justify-center p-4 overflow-y-auto">
+      <div className="w-full max-w-md py-16">
+        {type === 'suggested' && <SuggestedUsers />}
+        {type === 'product' && product && <ProductCard product={product as any} />}
+        {type === 'trending-stories' && <TrendingStoriesCard />}
+      </div>
+    </div>
+  );
+};
+
 // ── Search Overlay ──
 const SearchOverlay: React.FC<{
   open: boolean;
