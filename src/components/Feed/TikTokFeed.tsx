@@ -1101,6 +1101,16 @@ const TikTokFeed: React.FC = () => {
     setShowSuggestedUsers(activeIndex > 0 && activeIndex % 5 === 0);
   }, [activeIndex]);
 
+  useEffect(() => {
+    const postId = new URLSearchParams(window.location.search).get('post');
+    if (!postId || feedSlides.length === 0 || !feedRef.current) return;
+    const targetIndex = feedSlides.findIndex((slide) => slide.type === 'post' && slide.post.id === postId);
+    if (targetIndex >= 0) {
+      setActiveIndex(targetIndex);
+      setTimeout(() => feedRef.current?.scrollTo({ top: targetIndex * window.innerHeight, behavior: 'smooth' }), 250);
+    }
+  }, [feedSlides]);
+
   // Record view when post changes (RPC handles insert + earnings)
   useEffect(() => {
     const slide = feedSlides[activeIndex];
