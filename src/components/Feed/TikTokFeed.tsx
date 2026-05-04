@@ -787,13 +787,15 @@ const TikTokPost: React.FC<{
   return (
     <div className="relative w-full h-[100dvh] snap-start snap-always bg-black flex items-center justify-center overflow-hidden">
       {hasMedia && !isVideo && (
-        <div className="absolute inset-0 bg-cover bg-center blur-2xl scale-110 opacity-30" style={{ backgroundImage: `url(${post.media_urls[0]})` }} />
+        <div className="absolute inset-0 bg-cover bg-center blur-2xl scale-110 opacity-30" style={{ backgroundImage: `url(${displayMedia})` }} />
       )}
 
       {hasMedia && isVideo ? (
         <video
+          key={activeMedia}
           ref={videoRef}
-          src={post.media_urls[0]}
+          src={activeMedia}
+          poster={post.thumbnail_url || undefined}
           className="absolute inset-0 w-full h-full object-cover"
           loop={!autoScroll}
           playsInline
@@ -804,7 +806,7 @@ const TikTokPost: React.FC<{
           onClick={() => { if (videoRef.current?.paused) videoRef.current.play().catch(() => {}); else videoRef.current?.pause(); }}
         />
       ) : hasMedia ? (
-        <img src={post.media_urls[0]} alt={post.title} className="relative z-10 max-w-full max-h-full object-contain" loading="lazy" />
+        <img src={displayMedia} alt={post.title} className="relative z-10 max-w-full max-h-full object-contain" loading="lazy" />
       ) : (
         <div className="absolute inset-0 bg-gradient-to-br from-primary/80 via-accent/60 to-primary/40 flex items-center justify-center p-8">
           <div className="text-center space-y-4 max-w-lg">
@@ -815,6 +817,26 @@ const TikTokPost: React.FC<{
       )}
 
       <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-transparent to-black/30 pointer-events-none z-20" />
+
+      {mediaItems.length > 1 && (
+        <>
+          <div className="absolute top-16 left-1/2 -translate-x-1/2 z-30 flex gap-1">
+            {mediaItems.map((_, i) => <span key={i} className={`h-1.5 w-6 rounded-full ${i === mediaIndex ? 'bg-white' : 'bg-white/35'}`} />)}
+          </div>
+          <button aria-label="Previous media" onClick={() => setMediaIndex((i) => (i - 1 + mediaItems.length) % mediaItems.length)} className="absolute left-2 top-1/2 z-30 -translate-y-1/2 rounded-full bg-black/35 p-2 backdrop-blur-sm">
+            <ChevronLeft className="w-5 h-5 text-white" />
+          </button>
+          <button aria-label="Next media" onClick={() => setMediaIndex((i) => (i + 1) % mediaItems.length)} className="absolute right-14 top-1/2 z-30 -translate-y-1/2 rounded-full bg-black/35 p-2 backdrop-blur-sm">
+            <ChevronRight className="w-5 h-5 text-white" />
+          </button>
+        </>
+      )}
+
+      {externalVideoUrl && (
+        <button onClick={() => window.open(externalVideoUrl, '_blank', 'noopener,noreferrer')} className="absolute top-20 left-3 z-30 flex items-center gap-1 rounded-full bg-black/45 px-3 py-1.5 text-[11px] font-semibold text-white backdrop-blur-sm">
+          <ExternalLink className="w-3.5 h-3.5" /> Open video
+        </button>
+      )}
 
       {/* Hidden YouTube background audio for Lenory Free tracks */}
       {mTrack?.youtube_id && (
