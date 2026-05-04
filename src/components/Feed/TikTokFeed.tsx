@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useRef, useCallback } from 'react';
+import React, { useEffect, useState, useRef, useCallback, useMemo } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/integrations/supabase/client';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
@@ -21,8 +21,10 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { Input } from '@/components/ui/input';
 import { SuggestedUsers } from './SuggestedUsers';
 import { ProductCard } from './ProductCard';
+import { TrendingStoriesCard } from './TrendingStoriesCard';
 import CreatePostWizard from '@/components/Posts/CreatePostWizard';
 import YouTubeAudio from '@/components/Music/YouTubeAudio';
+import { LenoryLoader } from '@/components/Loading/LenoryLoader';
 
 interface Post {
   id: string;
@@ -41,6 +43,7 @@ interface Post {
   media_type?: string;
   music_track_id?: string;
   tags?: string[] | null;
+  thumbnail_url?: string | null;
 }
 
 interface MusicTrack {
@@ -71,7 +74,24 @@ interface Product {
   price_ngn: number;
   images: string[];
   seller_user_id: string;
+  featured?: boolean | null;
+  user_profiles?: { username: string; avatar_url: string; vip: boolean };
 }
+
+type FeedSlide =
+  | { type: 'post'; key: string; post: Post; postIndex: number }
+  | { type: 'suggested'; key: string }
+  | { type: 'product'; key: string; product: Product }
+  | { type: 'trending-stories'; key: string };
+
+const seedFromString = (s: string) => {
+  let h = 2166136261;
+  for (let i = 0; i < s.length; i += 1) {
+    h ^= s.charCodeAt(i);
+    h = Math.imul(h, 16777619);
+  }
+  return h >>> 0;
+};
 
 // ── Star Notification Card ──
 const StarNotificationCard: React.FC<{
