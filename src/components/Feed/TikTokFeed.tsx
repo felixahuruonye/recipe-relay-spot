@@ -1043,6 +1043,14 @@ const TikTokFeed: React.FC = () => {
   // Fetch posts
   useEffect(() => { fetchPosts(); fetchProducts(); }, []);
 
+  useEffect(() => {
+    const channel = supabase
+      .channel('live-home-feed-posts')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'posts' }, () => fetchPosts())
+      .subscribe();
+    return () => { supabase.removeChannel(channel); };
+  }, []);
+
   // Load user data
   useEffect(() => {
     if (user) {
@@ -1064,6 +1072,16 @@ const TikTokFeed: React.FC = () => {
     }
   }, [user]);
 
+  useEffect(() => {
+    if (!user) return;
+    const channel = supabase
+      .channel(`feed-money-notifications-${user.id}`)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'wallet_history', filter: `user_id=eq.${user.id}` }, () => loadMyProfile())
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'user_notifications', filter: `user_id=eq.${user.id}` }, () => loadCounts())
+      .subscribe();
+    return () => { supabase.removeChannel(channel); };
+  }, [user?.id]);
+
   // Show first-time popup for new users
   useEffect(() => {
     if (user && myProfile) {
@@ -1078,7 +1096,7 @@ const TikTokFeed: React.FC = () => {
   useEffect(() => {
     if (myProfile) {
       const settings = (myProfile as any).story_settings;
-      setAutoSpend(settings?.auto_spend || false);
+      setAutoSpend(settings?.auto_spend !== false);
     }
   }, [myProfile]);
 
