@@ -980,8 +980,8 @@ const TikTokFeed: React.FC = () => {
   const [postCommentCounts, setPostCommentCounts] = useState<Record<string, number>>({});
   const [loading, setLoading] = useState(true);
   const [activeIndex, setActiveIndex] = useState(0);
-  const [isMuted, setIsMuted] = useState(true);
-  const [autoScroll, setAutoScroll] = useState(false);
+  const [isMuted, setIsMuted] = useState(false);
+  const [autoScroll, setAutoScroll] = useState(true);
   const [followingUsers, setFollowingUsers] = useState<Set<string>>(new Set());
   const [showLoginModal, setShowLoginModal] = useState(false);
   const [loginMessage, setLoginMessage] = useState('');
@@ -993,7 +993,7 @@ const TikTokFeed: React.FC = () => {
   const [activeSendPost, setActiveSendPost] = useState<Post | null>(null);
   const [showSearch, setShowSearch] = useState(false);
   const [showSoundDrilldown, setShowSoundDrilldown] = useState(false);
-  const [activeSoundTrack, setActiveSoundTrack] = useState<{ name: string; artist: string; id?: string; sourceLabel: string; coverUrl?: string; artistAvatar?: string }>({ name: '', artist: '', sourceLabel: 'Original sound' });
+  const [activeSoundTrack, setActiveSoundTrack] = useState<{ name: string; artist: string; id?: string; artistId?: string; sourceLabel: string; coverUrl?: string; artistAvatar?: string }>({ name: '', artist: '', sourceLabel: 'Original sound' });
   const [useSoundTrack, setUseSoundTrack] = useState<any>(null);
   const [processedPosts, setProcessedPosts] = useState<Set<string>>(new Set());
   const [musicTracks, setMusicTracks] = useState<Record<string, MusicTrack>>({});
