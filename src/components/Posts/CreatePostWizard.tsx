@@ -132,7 +132,7 @@ const CreatePostWizard: React.FC<CreatePostWizardProps> = ({ onPostCreated, isOp
       if (!postToEdit) {
         setMediaFiles([]); setMediaPreviews([]); setTitle(''); setBody('');
         setCategory(''); setTags([]); setTagInput(''); setStarPrice(0);
-        setSelectedMusic(''); setSelectedMusicTrack(null); setThumbnailFile(null); setThumbnailPreview('');
+        setSelectedMusic(''); setSelectedMusicTrack(null); setThumbnailFile(null); setThumbnailBlob(null); setThumbnailPreview('');
         setMusicStart(0); setMusicDuration(15); setAlsoPostToStoryline(false);
       }
     }
@@ -262,6 +262,10 @@ const CreatePostWizard: React.FC<CreatePostWizardProps> = ({ onPostCreated, isOp
 
   const handleSubmit = async () => {
     if (!user || !title.trim() || !body.trim() || !category) return;
+    if (requiresFollowerUnlock && !hasFollowerUnlock) {
+      toast({ title: 'Locked', description: '15–50 Star posts unlock at 1,000 followers.', variant: 'destructive' });
+      return;
+    }
     if (isPaidTier && !canAffordFee) {
       toast({ title: 'Insufficient Stars', description: `Need ${postingFee} Stars`, variant: 'destructive' });
       return;
@@ -296,11 +300,9 @@ const CreatePostWizard: React.FC<CreatePostWizardProps> = ({ onPostCreated, isOp
           music_duration_seconds: musicDuration,
         } as any).select('id').single();
 
-        // Increment musician usage_count
         if (musicTrackId) {
-          await supabase.rpc('execute_admin_sql' as any, { query: `SELECT 1` }).then(() => {});
           const { data: tr } = await supabase.from('music_tracks').select('usage_count').eq('id', musicTrackId).maybeSingle();
-          await supabase.from('music_tracks').update({ usage_count: (tr?.usage_count || 0) + 1 }).eq('id', musicTrackId);
+          await supabase.from('music_tracks').update({ usage_count: (tr?.usage_count || 0) + 1, last_used_at: new Date().toISOString() }).eq('id', musicTrackId);
         }
 
         // Optionally also post to storyline
@@ -312,6 +314,10 @@ const CreatePostWizard: React.FC<CreatePostWizardProps> = ({ onPostCreated, isOp
             media_type: isVid ? 'video' : 'image',
             caption: title.trim(),
             preview_url: thumbUrl || mediaUrls[0],
+            music_url: selectedMusicTrack?.audio_url || null,
+            music_track_id: musicTrackId,
+            music_start_seconds: musicStart,
+            music_duration_seconds: musicDuration,
             star_price: starPrice,
             status: 'active',
           } as any);
@@ -337,7 +343,7 @@ const CreatePostWizard: React.FC<CreatePostWizardProps> = ({ onPostCreated, isOp
       case 1: return title.trim().length > 0 && !!category;
       case 2: return body.trim().length >= 10;
       case 3: return true;
-      case 4: return true;
+      case 4: return !(requiresFollowerUnlock && !hasFollowerUnlock);
       case 5: return true;
       default: return false;
     }
@@ -489,18 +495,23 @@ const CreatePostWizard: React.FC<CreatePostWizardProps> = ({ onPostCreated, isOp
             <SelectTrigger><SelectValue /></SelectTrigger>
             <SelectContent>
               {starPriceOptions.map(p => (
-                <SelectItem key={p} value={p.toString()}>
-                  {p === 0 ? 'Free' : `${p} Stars`}{p >= 100 ? ' (40⭐ fee)' : p > 0 ? ' (Free to post)' : ''}
+                <SelectItem key={p} value={p.toString()} disabled={p >= 15 && p <= 50 && !hasFollowerUnlock}>
+                  {p === 0 ? 'Free' : `${p} Stars`}{p >= 15 && p <= 50 && !hasFollowerUnlock ? ' (Unlock at 1,000 followers)' : p >= 100 ? ' (40⭐ fee)' : p > 0 ? ' (Free to post)' : ''}
                 </SelectItem>
               ))}
             </SelectContent>
           </Select>
+          {requiresFollowerUnlock && !hasFollowerUnlock && (
+            <div className="p-3 rounded-xl border border-primary/30 bg-primary/10 text-xs text-primary font-semibold">
+              15–50 Star posts unlock at 1,000 followers. You have {followerCount.toLocaleString()} followers.
+            </div>
+          )}
           {starPrice > 0 && (
             <div className="p-3 bg-muted rounded-xl space-y-1.5 text-sm">
-              <p className="font-semibold">💰 Viewers pay: ₦{(starPrice * 500).toLocaleString()}</p>
-              <p className="text-primary">✅ You earn: ₦{(starPrice * 500 * 0.40).toLocaleString()} (40%)</p>
-              <p className="text-muted-foreground">🎁 Viewer cashback: ₦{(starPrice * 500 * 0.35).toLocaleString()} (35%)</p>
-              {selectedMusic && <p className="text-accent">🎵 Musician: ₦{(starPrice * 500 * 0.10).toLocaleString()} (10%)</p>}
+              <p className="font-semibold">💰 Viewers pay: ₦{(starPrice * 300).toLocaleString()}</p>
+              <p className="text-primary">✅ You earn: ₦{(starPrice * 300 * (selectedMusic ? 0.30 : 0.40)).toLocaleString()} ({selectedMusic ? '30' : '40'}%)</p>
+              <p className="text-muted-foreground">🎁 Viewer cashback: ₦{(starPrice * 300 * 0.35).toLocaleString()} (35%)</p>
+              {selectedMusic && <p className="text-accent">🎵 Musician: ₦{(starPrice * 300 * 0.10).toLocaleString()} (10%)</p>}
               <p className="text-muted-foreground">🏢 Platform: 25%</p>
               {isPaidTier && (
                 <p className={canAffordFee ? 'text-yellow-600 font-semibold' : 'text-destructive font-semibold'}>
