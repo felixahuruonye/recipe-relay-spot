@@ -1142,11 +1142,15 @@ const TikTokFeed: React.FC = () => {
       ...prev,
       [post.id]: (prev[post.id] ?? post.view_count ?? 0) + (prev[post.id] !== undefined ? 0 : 1)
     }));
+    if (!user && !processedPosts.has(post.id)) {
+      setProcessedPosts(prev => new Set(prev).add(post.id));
+      supabase.rpc('record_public_post_view' as any, { p_post_id: post.id }).then(() => fetchPosts());
+    }
     // NOTE: do NOT insert into post_views here — process_post_view RPC will
     // handle it atomically and emit the uploader's earning notification.
     // Manually inserting first caused the RPC to short-circuit as "already_viewed"
     // and skip the wallet credit + notification for the uploader.
-  }, [activeIndex, feedSlides]);
+  }, [activeIndex, feedSlides, user, processedPosts]);
 
   // Process earning
   const processEarning = useCallback((post: Post) => {
@@ -1190,6 +1194,8 @@ const TikTokFeed: React.FC = () => {
         const result = data as any;
         if (result?.success) {
           setProcessedPosts(prev => new Set(prev).add(post.id));
+           loadMyProfile();
+           fetchPosts();
           if (result.charged) {
             setLastEarnAmount(result.viewer_earn || 0);
             setShowStarFloat(true);
