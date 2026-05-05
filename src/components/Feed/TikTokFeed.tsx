@@ -322,11 +322,14 @@ const SoundDrilldown: React.FC<{
   trackName: string;
   trackArtist: string;
   trackId?: string;
+  artistId?: string;
   sourceLabel: string; // 'Original sound' | 'Community' | 'Lenory Free'
   coverUrl?: string;
   artistAvatar?: string;
   onUseSound: () => void;
-}> = ({ open, onClose, trackName, trackArtist, trackId, sourceLabel, coverUrl, artistAvatar, onUseSound }) => {
+  onArtistProfile: () => void;
+  onOpenPost: (postId: string) => void;
+}> = ({ open, onClose, trackName, trackArtist, trackId, artistId, sourceLabel, coverUrl, artistAvatar, onUseSound, onArtistProfile, onOpenPost }) => {
   const [posts, setPosts] = useState<any[]>([]);
   const [trackUsageCount, setTrackUsageCount] = useState(0);
 
@@ -335,7 +338,7 @@ const SoundDrilldown: React.FC<{
     const [{ data: postRows }, { data: trackRow }] = await Promise.all([
       supabase
         .from('posts')
-        .select('id, title, media_urls, view_count, likes_count, comments_count, user_id')
+        .select('id, title, media_urls, thumbnail_url, media_type, view_count, likes_count, comments_count, user_id')
         .eq('music_track_id', trackId)
         .eq('status', 'approved')
         .order('view_count', { ascending: false })
@@ -393,7 +396,7 @@ const SoundDrilldown: React.FC<{
                 <p className="font-bold text-sm truncate">{trackName}</p>
                 <div className="flex items-center gap-1.5">
                   {artistAvatar && <Avatar className="w-4 h-4"><AvatarImage src={artistAvatar} /><AvatarFallback className="text-[8px]">{trackArtist[0]}</AvatarFallback></Avatar>}
-                  <p className="text-xs text-muted-foreground truncate">{trackArtist}</p>
+                  <button type="button" onClick={onArtistProfile} className="text-xs text-muted-foreground truncate hover:text-primary disabled:pointer-events-none" disabled={!artistId && sourceLabel !== 'Original sound'}>{trackArtist}</button>
                 </div>
                 <Badge variant="outline" className="text-[9px] h-4 mt-0.5">{sourceLabel}</Badge>
               </div>
@@ -411,12 +414,12 @@ const SoundDrilldown: React.FC<{
             <Music2 className="w-4 h-4" /> Use this sound
           </Button>
         </div>
-        <ScrollArea className="max-h-[calc(80vh-180px)]">
-          <div className="p-4 grid grid-cols-3 gap-1">
+        <div className="max-h-[calc(80vh-180px)] overflow-y-auto overscroll-contain">
+          <div className="p-4 grid grid-cols-3 gap-1 pb-8">
             {posts.map((p, i) => (
-              <div key={p.id} className="aspect-[9/16] rounded-lg overflow-hidden bg-muted relative">
+              <button key={p.id} onClick={() => onOpenPost(p.id)} className="aspect-[9/16] rounded-lg overflow-hidden bg-muted relative text-left">
                 {p.media_urls?.[0] ? (
-                  <img src={p.media_urls[0]} alt="" className="w-full h-full object-cover" />
+                  <img src={p.thumbnail_url || p.media_urls[0]} alt={p.title || 'Post using sound'} className="w-full h-full object-cover" />
                 ) : (
                   <div className="w-full h-full flex items-center justify-center text-xs text-muted-foreground p-2 text-center">{p.title}</div>
                 )}
@@ -428,13 +431,13 @@ const SoundDrilldown: React.FC<{
                     Top
                   </div>
                 )}
-              </div>
+              </button>
             ))}
             {posts.length === 0 && (
               <div className="col-span-3 py-8 text-center text-muted-foreground text-sm">No posts using this sound yet</div>
             )}
           </div>
-        </ScrollArea>
+        </div>
       </motion.div>
     </motion.div>
   );
