@@ -679,7 +679,7 @@ const CreatePostWizard: React.FC<CreatePostWizardProps> = ({ onPostCreated, isOp
               {step === TOTAL_STEPS - 2 ? 'Preview' : 'Next'} <ArrowRight className="w-3.5 h-3.5" />
             </Button>
           ) : (
-            <Button size="sm" onClick={handleSubmit} disabled={loading || (isPaidTier && !canAffordFee)}
+            <Button size="sm" onClick={handleSubmit} disabled={loading || (isPaidTier && !canAffordFee) || (requiresFollowerUnlock && !hasFollowerUnlock)}
               className="gap-1 bg-gradient-to-r from-primary to-accent text-primary-foreground">
               {loading ? 'Publishing...' : '🚀 Launch Post'}
             </Button>
