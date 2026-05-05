@@ -146,7 +146,7 @@ export const CreateStoryline: React.FC<CreateStorylineProps> = ({ onCreated, use
           caption: caption,
           star_price: starPrice,
           media_type: mediaFile.type.startsWith('video/') ? 'video' : 'image'
-        });
+        } as any);
 
       if (insertError) throw insertError;
 
