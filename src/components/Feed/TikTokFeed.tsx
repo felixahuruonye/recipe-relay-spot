@@ -1525,6 +1525,7 @@ const TikTokFeed: React.FC = () => {
                         name: mTrack?.title || 'Original sound',
                         artist: mTrack?.artist_name || users[post.user_id]?.username || 'Unknown',
                         id: post.music_track_id || undefined,
+                        artistId: mTrack?.artist_id || post.user_id,
                         sourceLabel,
                         coverUrl: mTrack?.cover_url,
                         artistAvatar: !mTrack ? users[post.user_id]?.avatar_url : undefined,
@@ -1734,9 +1735,25 @@ const TikTokFeed: React.FC = () => {
             trackName={activeSoundTrack.name}
             trackArtist={activeSoundTrack.artist}
             trackId={activeSoundTrack.id}
+            artistId={activeSoundTrack.artistId}
             sourceLabel={activeSoundTrack.sourceLabel}
             coverUrl={activeSoundTrack.coverUrl}
             artistAvatar={activeSoundTrack.artistAvatar}
+            onArtistProfile={() => {
+              if (activeSoundTrack.artistId) {
+                setShowSoundDrilldown(false);
+                navigate(`/profile/${activeSoundTrack.artistId}`);
+              }
+            }}
+            onOpenPost={(postId) => {
+              setShowSoundDrilldown(false);
+              navigate(`/?post=${postId}`);
+              const targetIndex = feedSlides.findIndex((slide) => slide.type === 'post' && slide.post.id === postId);
+              if (targetIndex >= 0) {
+                setActiveIndex(targetIndex);
+                setTimeout(() => feedRef.current?.scrollTo({ top: targetIndex * window.innerHeight, behavior: 'smooth' }), 80);
+              }
+            }}
             onUseSound={() => {
               if (!user) { requireLogin('Login to use this sound'); return; }
               const track = activeSoundTrack.id ? musicTracks[activeSoundTrack.id] : null;
