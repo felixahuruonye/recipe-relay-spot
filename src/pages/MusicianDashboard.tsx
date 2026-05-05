@@ -8,7 +8,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useToast } from '@/hooks/use-toast';
-import { Upload, Music2, BarChart3, TrendingUp, Play, Pause, Trash2, ArrowLeft } from 'lucide-react';
+import { Upload, Music2, BarChart3, TrendingUp, Play, Pause, Trash2, ArrowLeft, Eye } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 
 
@@ -37,6 +37,7 @@ const MusicianDashboard: React.FC = () => {
   const [uploading, setUploading] = useState(false);
   const [showUpload, setShowUpload] = useState(false);
   const [playingId, setPlayingId] = useState<string | null>(null);
+  const [royaltyTotal, setRoyaltyTotal] = useState(0);
   const audioRef = React.useRef<HTMLAudioElement | null>(null);
 
   // Upload form
@@ -50,6 +51,16 @@ const MusicianDashboard: React.FC = () => {
   }, [user]);
 
   useEffect(() => {
+    if (!user) return;
+    const channel = supabase
+      .channel(`musician-dashboard-${user.id}`)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'music_tracks', filter: `artist_id=eq.${user.id}` }, () => loadTracks())
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'wallet_history', filter: `user_id=eq.${user.id}` }, () => loadTracks())
+      .subscribe();
+    return () => { supabase.removeChannel(channel); };
+  }, [user?.id]);
+
+  useEffect(() => {
     return () => { audioRef.current?.pause(); };
   }, []);
 
@@ -61,6 +72,12 @@ const MusicianDashboard: React.FC = () => {
       .eq('artist_id', user.id)
       .order('created_at', { ascending: false });
     setTracks((data as Track[]) || []);
+    const { data: royalties } = await supabase
+      .from('wallet_history')
+      .select('amount')
+      .eq('user_id', user.id)
+      .eq('type', 'music_royalty');
+    setRoyaltyTotal((royalties || []).reduce((sum: number, r: any) => sum + Number(r.amount || 0), 0));
     setLoading(false);
   };
 
@@ -135,6 +152,20 @@ const MusicianDashboard: React.FC = () => {
     }
   };
 
+  const deleteTrack = async (track: Track) => {
+    if (!user) return;
+    const { error } = await supabase.from('music_tracks').delete().eq('id', track.id).eq('artist_id', user.id);
+    if (error) {
+      await supabase.from('music_tracks').update({ status: 'deleted' }).eq('id', track.id).eq('artist_id', user.id);
+    }
+    if (track.audio_url?.includes('/object/public/music/')) {
+      const path = track.audio_url.split('/object/public/music/')[1]?.split('?')[0];
+      if (path) await supabase.storage.from('music').remove([decodeURIComponent(path)]);
+    }
+    toast({ title: 'Track removed', description: 'Your sound was removed from the app.' });
+    loadTracks();
+  };
+
   const totalUsage = tracks.reduce((sum, t) => sum + (t.usage_count || 0), 0);
 
   return (
@@ -168,8 +199,8 @@ const MusicianDashboard: React.FC = () => {
           <Card>
             <CardContent className="p-3 text-center">
               <TrendingUp className="w-5 h-5 mx-auto mb-1 text-primary" />
-              <p className="text-lg font-bold">10%</p>
-              <p className="text-[10px] text-muted-foreground">Royalty</p>
+              <p className="text-lg font-bold">₦{royaltyTotal.toLocaleString()}</p>
+              <p className="text-[10px] text-muted-foreground">Royalties</p>
             </CardContent>
           </Card>
         </div>
@@ -245,13 +276,16 @@ const MusicianDashboard: React.FC = () => {
                     <p className="text-sm font-semibold truncate">{track.title}</p>
                     <div className="flex items-center gap-2 text-[10px] text-muted-foreground">
                       <Badge variant="outline" className="text-[9px] h-4 px-1">{track.genre}</Badge>
-                      <span>{track.usage_count || 0} uses</span>
+                      <span className="inline-flex items-center gap-1"><Eye className="w-3 h-3" />{track.usage_count || 0}</span>
                       <span>{Math.floor(track.duration_seconds / 60)}:{(track.duration_seconds % 60).toString().padStart(2, '0')}</span>
                     </div>
                   </div>
                   <Badge className={track.status === 'active' ? 'bg-green-500/10 text-green-600 text-[9px]' : 'text-[9px]'}>
                     {track.status}
                   </Badge>
+                  <Button size="icon" variant="ghost" onClick={() => deleteTrack(track)} className="h-8 w-8 text-destructive">
+                    <Trash2 className="w-4 h-4" />
+                  </Button>
                 </CardContent>
               </Card>
             ))
