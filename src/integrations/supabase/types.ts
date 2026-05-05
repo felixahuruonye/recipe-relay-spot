@@ -2966,6 +2966,9 @@ export type Database = {
           id: string
           media_type: string | null
           media_url: string
+          music_duration_seconds: number
+          music_start_seconds: number
+          music_track_id: string | null
           music_url: string | null
           preview_url: string | null
           star_price: number | null
@@ -2982,6 +2985,9 @@ export type Database = {
           id?: string
           media_type?: string | null
           media_url: string
+          music_duration_seconds?: number
+          music_start_seconds?: number
+          music_track_id?: string | null
           music_url?: string | null
           preview_url?: string | null
           star_price?: number | null
@@ -2998,6 +3004,9 @@ export type Database = {
           id?: string
           media_type?: string | null
           media_url?: string
+          music_duration_seconds?: number
+          music_start_seconds?: number
+          music_track_id?: string | null
           music_url?: string | null
           preview_url?: string | null
           star_price?: number | null
