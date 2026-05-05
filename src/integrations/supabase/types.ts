@@ -2966,6 +2966,9 @@ export type Database = {
           id: string
           media_type: string | null
           media_url: string
+          music_duration_seconds: number
+          music_start_seconds: number
+          music_track_id: string | null
           music_url: string | null
           preview_url: string | null
           star_price: number | null
@@ -2982,6 +2985,9 @@ export type Database = {
           id?: string
           media_type?: string | null
           media_url: string
+          music_duration_seconds?: number
+          music_start_seconds?: number
+          music_track_id?: string | null
           music_url?: string | null
           preview_url?: string | null
           star_price?: number | null
@@ -2998,6 +3004,9 @@ export type Database = {
           id?: string
           media_type?: string | null
           media_url?: string
+          music_duration_seconds?: number
+          music_start_seconds?: number
+          music_track_id?: string | null
           music_url?: string | null
           preview_url?: string | null
           star_price?: number | null
@@ -3512,6 +3521,7 @@ export type Database = {
         Args: { p_story_id: string; p_viewer_id: string }
         Returns: Json
       }
+      record_public_post_view: { Args: { p_post_id: string }; Returns: Json }
       spend_stars: {
         Args: { p_amount: number; p_meta?: Json; p_type: string }
         Returns: Json

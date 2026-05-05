@@ -10,6 +10,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { useToast } from '@/hooks/use-toast';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { StorySettings } from './StorySettings';
+import MusicBrowser from '@/components/Music/MusicBrowser';
 
 interface CreateStorylineProps {
   onCreated?: () => void;
@@ -26,10 +27,34 @@ export const CreateStoryline: React.FC<CreateStorylineProps> = ({ onCreated, use
   const [mediaPreview, setMediaPreview] = useState<string>('');
   const [caption, setCaption] = useState('');
   const [previewFile, setPreviewFile] = useState<File | null>(null);
+  const [previewBlob, setPreviewBlob] = useState<Blob | null>(null);
+  const [previewUrl, setPreviewUrl] = useState('');
   const [musicFile, setMusicFile] = useState<File | null>(null);
   const [musicPreview, setMusicPreview] = useState<string>('');
+  const [selectedMusicTrack, setSelectedMusicTrack] = useState<any>(null);
   const [starPrice, setStarPrice] = useState<number>(0);
   const audioRef = useRef<HTMLAudioElement>(null);
+
+  const ensureMusicTrackId = async () => {
+    if (!selectedMusicTrack) return null;
+    if (!selectedMusicTrack.id?.startsWith('spotify-') && !selectedMusicTrack.id?.startsWith('yt-')) return selectedMusicTrack.id;
+    const externalId = selectedMusicTrack.spotify_id || selectedMusicTrack.external_id || selectedMusicTrack.youtube_id;
+    if (!externalId) return null;
+    const { data: existing } = await supabase.from('music_tracks').select('id').eq('external_id', externalId).maybeSingle();
+    if (existing?.id) return existing.id;
+    const { data: created } = await supabase.from('music_tracks').insert({
+      title: selectedMusicTrack.title,
+      artist_name: selectedMusicTrack.artist_name,
+      cover_url: selectedMusicTrack.cover_url,
+      duration_seconds: selectedMusicTrack.duration_seconds || 0,
+      source: 'lenory_free',
+      external_id: externalId,
+      youtube_id: selectedMusicTrack.youtube_id,
+      audio_url: '',
+      status: 'active'
+    }).select('id').single();
+    return created?.id || null;
+  };
 
   const handleCardClick = () => {
     setShowWelcome(true);
@@ -56,7 +81,27 @@ export const CreateStoryline: React.FC<CreateStorylineProps> = ({ onCreated, use
 
     setMediaFile(file);
     setMediaPreview(URL.createObjectURL(file));
+    if (file.type.startsWith('video/')) generateVideoThumbnail(file).then(result => {
+      if (result) { setPreviewBlob(result.blob); setPreviewUrl(result.url); }
+    });
   };
+
+  const generateVideoThumbnail = (file: File): Promise<{ blob: Blob; url: string } | null> => new Promise(resolve => {
+    const video = document.createElement('video');
+    const url = URL.createObjectURL(file);
+    video.muted = true;
+    video.playsInline = true;
+    video.src = url;
+    video.onloadedmetadata = () => { video.currentTime = Math.min(0.35, Math.max(0, (video.duration || 1) - 0.1)); };
+    video.onseeked = () => {
+      const canvas = document.createElement('canvas');
+      canvas.width = video.videoWidth || 720;
+      canvas.height = video.videoHeight || 1280;
+      canvas.getContext('2d')?.drawImage(video, 0, 0, canvas.width, canvas.height);
+      canvas.toBlob(blob => { URL.revokeObjectURL(url); resolve(blob ? { blob, url: URL.createObjectURL(blob) } : null); }, 'image/jpeg', 0.82);
+    };
+    video.onerror = () => { URL.revokeObjectURL(url); resolve(null); };
+  });
 
   const handleSubmit = async () => {
     if (!user || !mediaFile) return;
@@ -77,13 +122,14 @@ export const CreateStoryline: React.FC<CreateStorylineProps> = ({ onCreated, use
         .getPublicUrl(fileName);
 
       let previewUrl = publicUrl;
-      if (previewFile) {
-        const previewExt = previewFile.name.split('.').pop();
+      const previewUpload = previewFile || previewBlob;
+      if (previewUpload) {
+        const previewExt = previewFile ? previewFile.name.split('.').pop() : 'jpg';
         const previewFileName = `${user.id}/stories/preview-${Date.now()}.${previewExt}`;
 
         const { error: previewError } = await supabase.storage
           .from('post-media')
-          .upload(previewFileName, previewFile);
+          .upload(previewFileName, previewUpload);
 
         if (!previewError) {
           const { data: { publicUrl: previewPublicUrl } } = supabase.storage
@@ -110,17 +156,20 @@ export const CreateStoryline: React.FC<CreateStorylineProps> = ({ onCreated, use
         }
       }
 
+      const musicTrackId = await ensureMusicTrackId();
+
       const { error: insertError } = await supabase
         .from('user_storylines')
         .insert({
           user_id: user.id,
           media_url: publicUrl,
           preview_url: previewUrl,
-          music_url: musicUrl,
+          music_url: selectedMusicTrack?.audio_url || musicUrl,
+          music_track_id: musicTrackId,
           caption: caption,
           star_price: starPrice,
           media_type: mediaFile.type.startsWith('video/') ? 'video' : 'image'
-        });
+        } as any);
 
       if (insertError) throw insertError;
 
@@ -130,7 +179,10 @@ export const CreateStoryline: React.FC<CreateStorylineProps> = ({ onCreated, use
       setMediaPreview('');
       setCaption('');
       setPreviewFile(null);
+      setPreviewBlob(null);
+      setPreviewUrl('');
       setMusicFile(null);
+      setSelectedMusicTrack(null);
       setStarPrice(0);
       if (onCreated) onCreated();
     } catch (error) {
@@ -259,6 +311,7 @@ export const CreateStoryline: React.FC<CreateStorylineProps> = ({ onCreated, use
                   )}
                 </div>
               )}
+              {previewUrl && <img src={previewUrl} alt="Generated thumbnail" className="mt-2 h-20 w-20 rounded-lg object-cover" />}
             </div>
 
             {/* Caption */}
@@ -277,7 +330,7 @@ export const CreateStoryline: React.FC<CreateStorylineProps> = ({ onCreated, use
                 accept="image/*"
                 onChange={(e) => {
                   const file = e.target.files?.[0];
-                  if (file) setPreviewFile(file);
+                  if (file) { setPreviewFile(file); setPreviewUrl(URL.createObjectURL(file)); }
                 }}
                 className="mt-1"
               />
@@ -286,6 +339,7 @@ export const CreateStoryline: React.FC<CreateStorylineProps> = ({ onCreated, use
             {/* Music */}
             <div>
               <label className="text-sm font-medium">Add Music (Optional)</label>
+              <MusicBrowser selectedTrackId={selectedMusicTrack?.id} onSelect={setSelectedMusicTrack} />
               <Input
                 type="file"
                 accept="audio/*"

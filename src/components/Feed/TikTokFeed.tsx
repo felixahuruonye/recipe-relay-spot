@@ -322,43 +322,44 @@ const SoundDrilldown: React.FC<{
   trackName: string;
   trackArtist: string;
   trackId?: string;
+  artistId?: string;
   sourceLabel: string; // 'Original sound' | 'Community' | 'Lenory Free'
   coverUrl?: string;
   artistAvatar?: string;
   onUseSound: () => void;
-}> = ({ open, onClose, trackName, trackArtist, trackId, sourceLabel, coverUrl, artistAvatar, onUseSound }) => {
+  onArtistProfile: () => void;
+  onOpenPost: (postId: string) => void;
+}> = ({ open, onClose, trackName, trackArtist, trackId, artistId, sourceLabel, coverUrl, artistAvatar, onUseSound, onArtistProfile, onOpenPost }) => {
   const [posts, setPosts] = useState<any[]>([]);
   const [trackUsageCount, setTrackUsageCount] = useState(0);
 
   const loadData = async () => {
-    if (!trackId) return;
+    if (!trackId && !artistId) return;
+    const postQuery = supabase
+      .from('posts')
+      .select('id, title, media_urls, thumbnail_url, media_type, view_count, likes_count, comments_count, user_id')
+      .eq('status', 'approved')
+      .order('view_count', { ascending: false })
+      .limit(30);
     const [{ data: postRows }, { data: trackRow }] = await Promise.all([
-      supabase
-        .from('posts')
-        .select('id, title, media_urls, view_count, likes_count, comments_count, user_id')
-        .eq('music_track_id', trackId)
-        .eq('status', 'approved')
-        .order('view_count', { ascending: false })
-        .limit(30),
-      supabase
-        .from('music_tracks')
-        .select('usage_count')
-        .eq('id', trackId)
-        .maybeSingle(),
+      trackId ? postQuery.eq('music_track_id', trackId) : postQuery.eq('user_id', artistId!).is('music_track_id', null),
+      trackId
+        ? supabase.from('music_tracks').select('usage_count').eq('id', trackId).maybeSingle()
+        : Promise.resolve({ data: null } as any),
     ]);
     setPosts(postRows || []);
     setTrackUsageCount(trackRow?.usage_count ?? postRows?.length ?? 0);
   };
 
   useEffect(() => {
-    if (!open || !trackId) return;
+    if (!open || (!trackId && !artistId)) return;
     loadData();
 
     // Real-time refresh: posts using this sound + track usage_count
     const channel = supabase
-      .channel(`sound-drilldown-${trackId}`)
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'posts', filter: `music_track_id=eq.${trackId}` }, () => loadData())
-      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'music_tracks', filter: `id=eq.${trackId}` }, () => loadData())
+      .channel(`sound-drilldown-${trackId || artistId}`)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'posts', filter: trackId ? `music_track_id=eq.${trackId}` : `user_id=eq.${artistId}` }, () => loadData())
+      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'music_tracks', filter: trackId ? `id=eq.${trackId}` : `artist_id=eq.${artistId}` }, () => loadData())
       .subscribe();
 
     const interval = setInterval(loadData, 15000); // safety poll for view counts
@@ -367,7 +368,7 @@ const SoundDrilldown: React.FC<{
       supabase.removeChannel(channel);
       clearInterval(interval);
     };
-  }, [open, trackId]);
+  }, [open, trackId, artistId]);
 
   if (!open) return null;
 
@@ -393,7 +394,7 @@ const SoundDrilldown: React.FC<{
                 <p className="font-bold text-sm truncate">{trackName}</p>
                 <div className="flex items-center gap-1.5">
                   {artistAvatar && <Avatar className="w-4 h-4"><AvatarImage src={artistAvatar} /><AvatarFallback className="text-[8px]">{trackArtist[0]}</AvatarFallback></Avatar>}
-                  <p className="text-xs text-muted-foreground truncate">{trackArtist}</p>
+                  <button type="button" onClick={onArtistProfile} className="text-xs text-muted-foreground truncate hover:text-primary disabled:pointer-events-none" disabled={!artistId && sourceLabel !== 'Original sound'}>{trackArtist}</button>
                 </div>
                 <Badge variant="outline" className="text-[9px] h-4 mt-0.5">{sourceLabel}</Badge>
               </div>
@@ -411,12 +412,12 @@ const SoundDrilldown: React.FC<{
             <Music2 className="w-4 h-4" /> Use this sound
           </Button>
         </div>
-        <ScrollArea className="max-h-[calc(80vh-180px)]">
-          <div className="p-4 grid grid-cols-3 gap-1">
+        <div className="max-h-[calc(80vh-180px)] overflow-y-auto overscroll-contain">
+          <div className="p-4 grid grid-cols-3 gap-1 pb-8">
             {posts.map((p, i) => (
-              <div key={p.id} className="aspect-[9/16] rounded-lg overflow-hidden bg-muted relative">
+              <button key={p.id} onClick={() => onOpenPost(p.id)} className="aspect-[9/16] rounded-lg overflow-hidden bg-muted relative text-left">
                 {p.media_urls?.[0] ? (
-                  <img src={p.media_urls[0]} alt="" className="w-full h-full object-cover" />
+                  <img src={p.thumbnail_url || p.media_urls[0]} alt={p.title || 'Post using sound'} className="w-full h-full object-cover" />
                 ) : (
                   <div className="w-full h-full flex items-center justify-center text-xs text-muted-foreground p-2 text-center">{p.title}</div>
                 )}
@@ -428,13 +429,13 @@ const SoundDrilldown: React.FC<{
                     Top
                   </div>
                 )}
-              </div>
+              </button>
             ))}
             {posts.length === 0 && (
               <div className="col-span-3 py-8 text-center text-muted-foreground text-sm">No posts using this sound yet</div>
             )}
           </div>
-        </ScrollArea>
+        </div>
       </motion.div>
     </motion.div>
   );
@@ -977,8 +978,8 @@ const TikTokFeed: React.FC = () => {
   const [postCommentCounts, setPostCommentCounts] = useState<Record<string, number>>({});
   const [loading, setLoading] = useState(true);
   const [activeIndex, setActiveIndex] = useState(0);
-  const [isMuted, setIsMuted] = useState(true);
-  const [autoScroll, setAutoScroll] = useState(false);
+  const [isMuted, setIsMuted] = useState(false);
+  const [autoScroll, setAutoScroll] = useState(true);
   const [followingUsers, setFollowingUsers] = useState<Set<string>>(new Set());
   const [showLoginModal, setShowLoginModal] = useState(false);
   const [loginMessage, setLoginMessage] = useState('');
@@ -990,7 +991,7 @@ const TikTokFeed: React.FC = () => {
   const [activeSendPost, setActiveSendPost] = useState<Post | null>(null);
   const [showSearch, setShowSearch] = useState(false);
   const [showSoundDrilldown, setShowSoundDrilldown] = useState(false);
-  const [activeSoundTrack, setActiveSoundTrack] = useState<{ name: string; artist: string; id?: string; sourceLabel: string; coverUrl?: string; artistAvatar?: string }>({ name: '', artist: '', sourceLabel: 'Original sound' });
+  const [activeSoundTrack, setActiveSoundTrack] = useState<{ name: string; artist: string; id?: string; artistId?: string; sourceLabel: string; coverUrl?: string; artistAvatar?: string }>({ name: '', artist: '', sourceLabel: 'Original sound' });
   const [useSoundTrack, setUseSoundTrack] = useState<any>(null);
   const [processedPosts, setProcessedPosts] = useState<Set<string>>(new Set());
   const [musicTracks, setMusicTracks] = useState<Record<string, MusicTrack>>({});
@@ -1040,6 +1041,14 @@ const TikTokFeed: React.FC = () => {
   // Fetch posts
   useEffect(() => { fetchPosts(); fetchProducts(); }, []);
 
+  useEffect(() => {
+    const channel = supabase
+      .channel('live-home-feed-posts')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'posts' }, () => fetchPosts())
+      .subscribe();
+    return () => { supabase.removeChannel(channel); };
+  }, []);
+
   // Load user data
   useEffect(() => {
     if (user) {
@@ -1061,6 +1070,16 @@ const TikTokFeed: React.FC = () => {
     }
   }, [user]);
 
+  useEffect(() => {
+    if (!user) return;
+    const channel = supabase
+      .channel(`feed-money-notifications-${user.id}`)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'wallet_history', filter: `user_id=eq.${user.id}` }, () => loadMyProfile())
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'user_notifications', filter: `user_id=eq.${user.id}` }, () => loadCounts())
+      .subscribe();
+    return () => { supabase.removeChannel(channel); };
+  }, [user?.id]);
+
   // Show first-time popup for new users
   useEffect(() => {
     if (user && myProfile) {
@@ -1075,7 +1094,7 @@ const TikTokFeed: React.FC = () => {
   useEffect(() => {
     if (myProfile) {
       const settings = (myProfile as any).story_settings;
-      setAutoSpend(settings?.auto_spend || false);
+      setAutoSpend(settings?.auto_spend !== false);
     }
   }, [myProfile]);
 
@@ -1121,11 +1140,15 @@ const TikTokFeed: React.FC = () => {
       ...prev,
       [post.id]: (prev[post.id] ?? post.view_count ?? 0) + (prev[post.id] !== undefined ? 0 : 1)
     }));
+    if (!user && !processedPosts.has(post.id)) {
+      setProcessedPosts(prev => new Set(prev).add(post.id));
+      supabase.rpc('record_public_post_view' as any, { p_post_id: post.id }).then(() => fetchPosts());
+    }
     // NOTE: do NOT insert into post_views here — process_post_view RPC will
     // handle it atomically and emit the uploader's earning notification.
     // Manually inserting first caused the RPC to short-circuit as "already_viewed"
     // and skip the wallet credit + notification for the uploader.
-  }, [activeIndex, feedSlides]);
+  }, [activeIndex, feedSlides, user, processedPosts]);
 
   // Process earning
   const processEarning = useCallback((post: Post) => {
@@ -1169,6 +1192,8 @@ const TikTokFeed: React.FC = () => {
         const result = data as any;
         if (result?.success) {
           setProcessedPosts(prev => new Set(prev).add(post.id));
+           loadMyProfile();
+           fetchPosts();
           if (result.charged) {
             setLastEarnAmount(result.viewer_earn || 0);
             setShowStarFloat(true);
@@ -1198,7 +1223,7 @@ const TikTokFeed: React.FC = () => {
         .from('posts')
         .select('*')
         .eq('status', 'approved')
-        .eq('disabled', false)
+        .or('disabled.is.null,disabled.eq.false')
         .order('boosted', { ascending: false })
         .order('created_at', { ascending: false })
         .limit(50);
@@ -1253,6 +1278,12 @@ const TikTokFeed: React.FC = () => {
         setPostLikes(likesMap);
         setPostCommentCounts(commentCountMap);
         setPostViewCounts(viewCountMap);
+      } else {
+        setPosts([]);
+        setUsers({});
+        setPostLikes({});
+        setPostCommentCounts({});
+        setPostViewCounts({});
       }
     } finally {
       setLoading(false);
@@ -1498,6 +1529,7 @@ const TikTokFeed: React.FC = () => {
                         name: mTrack?.title || 'Original sound',
                         artist: mTrack?.artist_name || users[post.user_id]?.username || 'Unknown',
                         id: post.music_track_id || undefined,
+                        artistId: mTrack?.artist_id || post.user_id,
                         sourceLabel,
                         coverUrl: mTrack?.cover_url,
                         artistAvatar: !mTrack ? users[post.user_id]?.avatar_url : undefined,
@@ -1707,9 +1739,25 @@ const TikTokFeed: React.FC = () => {
             trackName={activeSoundTrack.name}
             trackArtist={activeSoundTrack.artist}
             trackId={activeSoundTrack.id}
+            artistId={activeSoundTrack.artistId}
             sourceLabel={activeSoundTrack.sourceLabel}
             coverUrl={activeSoundTrack.coverUrl}
             artistAvatar={activeSoundTrack.artistAvatar}
+            onArtistProfile={() => {
+              if (activeSoundTrack.artistId) {
+                setShowSoundDrilldown(false);
+                navigate(`/profile/${activeSoundTrack.artistId}`);
+              }
+            }}
+            onOpenPost={(postId) => {
+              setShowSoundDrilldown(false);
+              navigate(`/?post=${postId}`);
+              const targetIndex = feedSlides.findIndex((slide) => slide.type === 'post' && slide.post.id === postId);
+              if (targetIndex >= 0) {
+                setActiveIndex(targetIndex);
+                setTimeout(() => feedRef.current?.scrollTo({ top: targetIndex * window.innerHeight, behavior: 'smooth' }), 80);
+              }
+            }}
             onUseSound={() => {
               if (!user) { requireLogin('Login to use this sound'); return; }
               const track = activeSoundTrack.id ? musicTracks[activeSoundTrack.id] : null;

@@ -59,6 +59,7 @@ const App = () => (
             <Route path="/auth" element={<Auth />} />
             {/* Public TikTok-style feed - no login required */}
             <Route path="/" element={<TikTokFeed />} />
+            <Route path="/index" element={<TikTokFeed />} />
             <Route path="/groups" element={
               <ProtectedRoute>
                 <Groups />

@@ -19,6 +19,17 @@ const Storyline = () => {
   const [selectedUserId, setSelectedUserId] = useState<string | null>(null);
   const [showCreate, setShowCreate] = useState(false);
 
+  const storyUsers = React.useMemo(() => {
+    const map = new Map<string, any>();
+    stories.forEach((story) => {
+      const existing = map.get(story.user_id);
+      if (!existing || new Date(story.created_at).getTime() > new Date(existing.created_at).getTime()) {
+        map.set(story.user_id, story);
+      }
+    });
+    return Array.from(map.values());
+  }, [stories]);
+
   const loadStories = async () => {
     const { data } = await supabase
       .from('user_storylines')
@@ -42,7 +53,7 @@ const Storyline = () => {
   }, [user?.id]);
 
   return (
-    <div className="min-h-[100dvh] bg-background px-4 py-4 pb-20 space-y-4">
+    <div className="min-h-[100dvh] bg-background px-4 py-4 pb-24 space-y-4 overflow-y-auto">
       <div className="flex items-center justify-between gap-3">
         <div className="flex items-center gap-2">
           <Button variant="ghost" size="icon" onClick={() => navigate(-1)}><ArrowLeft className="w-5 h-5" /></Button>
@@ -61,7 +72,7 @@ const Storyline = () => {
       </button>
 
       <div className="flex gap-2 overflow-x-auto pb-2">
-        {stories.slice(0, 18).map((story) => (
+        {storyUsers.slice(0, 18).map((story) => (
           <StorylineCard key={story.id} type="story" previewUrl={story.preview_url || story.media_url} avatarUrl={story.user_profile?.avatar_url} username={story.user_profile?.username} starPrice={story.star_price} onSelect={() => setSelectedUserId(story.user_id)} />
         ))}
       </div>

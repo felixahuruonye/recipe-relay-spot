@@ -53,6 +53,7 @@ const CreatePostWizard: React.FC<CreatePostWizardProps> = ({ onPostCreated, isOp
   const [mediaFiles, setMediaFiles] = useState<File[]>([]);
   const [mediaPreviews, setMediaPreviews] = useState<string[]>([]);
   const [thumbnailFile, setThumbnailFile] = useState<File | null>(null);
+  const [thumbnailBlob, setThumbnailBlob] = useState<Blob | null>(null);
   const [thumbnailPreview, setThumbnailPreview] = useState<string>('');
 
   // Step 2: Context
@@ -73,6 +74,7 @@ const CreatePostWizard: React.FC<CreatePostWizardProps> = ({ onPostCreated, isOp
   // Step 5: Value
   const [starPrice, setStarPrice] = useState(0);
   const [userStarBalance, setUserStarBalance] = useState(0);
+  const [followerCount, setFollowerCount] = useState(0);
 
   // Storyline option
   const [alsoPostToStoryline, setAlsoPostToStoryline] = useState(false);
@@ -80,6 +82,8 @@ const CreatePostWizard: React.FC<CreatePostWizardProps> = ({ onPostCreated, isOp
   const isPaidTier = starPrice >= 100;
   const postingFee = isPaidTier ? 40 : 0;
   const canAffordFee = userStarBalance >= postingFee;
+  const requiresFollowerUnlock = starPrice >= 15 && starPrice <= 50;
+  const hasFollowerUnlock = followerCount >= 1000;
 
   const hasVideo = mediaFiles.some(f => f.type.startsWith('video/')) ||
     mediaPreviews.some(p => /\.(mp4|webm|ogg|mov)/i.test(p));
@@ -128,7 +132,7 @@ const CreatePostWizard: React.FC<CreatePostWizardProps> = ({ onPostCreated, isOp
       if (!postToEdit) {
         setMediaFiles([]); setMediaPreviews([]); setTitle(''); setBody('');
         setCategory(''); setTags([]); setTagInput(''); setStarPrice(0);
-        setSelectedMusic(''); setSelectedMusicTrack(null); setThumbnailFile(null); setThumbnailPreview('');
+        setSelectedMusic(''); setSelectedMusicTrack(null); setThumbnailFile(null); setThumbnailBlob(null); setThumbnailPreview('');
         setMusicStart(0); setMusicDuration(15); setAlsoPostToStoryline(false);
       }
     }
@@ -136,9 +140,31 @@ const CreatePostWizard: React.FC<CreatePostWizardProps> = ({ onPostCreated, isOp
 
   const loadBalance = async () => {
     if (!user) return;
-    const { data } = await supabase.from('user_profiles').select('star_balance').eq('id', user.id).single();
+    const { data } = await supabase.from('user_profiles').select('star_balance, follower_count').eq('id', user.id).single();
     setUserStarBalance(data?.star_balance || 0);
+    setFollowerCount((data as any)?.follower_count || 0);
   };
+
+  const generateVideoThumbnail = (file: File): Promise<{ blob: Blob; url: string } | null> => new Promise(resolve => {
+    const video = document.createElement('video');
+    const url = URL.createObjectURL(file);
+    video.preload = 'metadata';
+    video.muted = true;
+    video.playsInline = true;
+    video.src = url;
+    video.onloadedmetadata = () => { video.currentTime = Math.min(0.35, Math.max(0, (video.duration || 1) - 0.1)); };
+    video.onseeked = () => {
+      const canvas = document.createElement('canvas');
+      canvas.width = video.videoWidth || 720;
+      canvas.height = video.videoHeight || 1280;
+      canvas.getContext('2d')?.drawImage(video, 0, 0, canvas.width, canvas.height);
+      canvas.toBlob(blob => {
+        URL.revokeObjectURL(url);
+        resolve(blob ? { blob, url: URL.createObjectURL(blob) } : null);
+      }, 'image/jpeg', 0.82);
+    };
+    video.onerror = () => { URL.revokeObjectURL(url); resolve(null); };
+  });
 
   const handleMediaChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = Array.from(e.target.files || []);
@@ -156,6 +182,14 @@ const CreatePostWizard: React.FC<CreatePostWizardProps> = ({ onPostCreated, isOp
     }
     setMediaFiles(prev => [...prev, ...validFiles]);
     validFiles.forEach(f => setMediaPreviews(prev => [...prev, URL.createObjectURL(f)]));
+    const firstVideo = validFiles.find(f => f.type.startsWith('video/'));
+    if (firstVideo && !thumbnailPreview) {
+      generateVideoThumbnail(firstVideo).then(result => {
+        if (!result) return;
+        setThumbnailBlob(result.blob);
+        setThumbnailPreview(result.url);
+      });
+    }
   };
 
   const handleThumbnailChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -193,10 +227,12 @@ const CreatePostWizard: React.FC<CreatePostWizardProps> = ({ onPostCreated, isOp
   };
 
   const uploadThumbnail = async (): Promise<string | null> => {
-    if (!thumbnailFile || !user) return thumbnailPreview || null;
-    const ext = thumbnailFile.name.split('.').pop();
+    if (!user) return thumbnailPreview?.startsWith('http') ? thumbnailPreview : null;
+    const fileLike = thumbnailFile || thumbnailBlob;
+    if (!fileLike) return thumbnailPreview?.startsWith('http') ? thumbnailPreview : null;
+    const ext = thumbnailFile ? thumbnailFile.name.split('.').pop() : 'jpg';
     const name = `${user.id}/thumb-${Date.now()}.${ext}`;
-    const { error } = await supabase.storage.from('post-media').upload(name, thumbnailFile);
+    const { error } = await supabase.storage.from('post-media').upload(name, fileLike);
     if (error) return null;
     return supabase.storage.from('post-media').getPublicUrl(name).data.publicUrl;
   };
@@ -226,6 +262,10 @@ const CreatePostWizard: React.FC<CreatePostWizardProps> = ({ onPostCreated, isOp
 
   const handleSubmit = async () => {
     if (!user || !title.trim() || !body.trim() || !category) return;
+    if (requiresFollowerUnlock && !hasFollowerUnlock) {
+      toast({ title: 'Locked', description: '15–50 Star posts unlock at 1,000 followers.', variant: 'destructive' });
+      return;
+    }
     if (isPaidTier && !canAffordFee) {
       toast({ title: 'Insufficient Stars', description: `Need ${postingFee} Stars`, variant: 'destructive' });
       return;
@@ -260,11 +300,9 @@ const CreatePostWizard: React.FC<CreatePostWizardProps> = ({ onPostCreated, isOp
           music_duration_seconds: musicDuration,
         } as any).select('id').single();
 
-        // Increment musician usage_count
         if (musicTrackId) {
-          await supabase.rpc('execute_admin_sql' as any, { query: `SELECT 1` }).then(() => {});
           const { data: tr } = await supabase.from('music_tracks').select('usage_count').eq('id', musicTrackId).maybeSingle();
-          await supabase.from('music_tracks').update({ usage_count: (tr?.usage_count || 0) + 1 }).eq('id', musicTrackId);
+          await supabase.from('music_tracks').update({ usage_count: (tr?.usage_count || 0) + 1, last_used_at: new Date().toISOString() }).eq('id', musicTrackId);
         }
 
         // Optionally also post to storyline
@@ -276,6 +314,10 @@ const CreatePostWizard: React.FC<CreatePostWizardProps> = ({ onPostCreated, isOp
             media_type: isVid ? 'video' : 'image',
             caption: title.trim(),
             preview_url: thumbUrl || mediaUrls[0],
+            music_url: selectedMusicTrack?.audio_url || null,
+            music_track_id: musicTrackId,
+            music_start_seconds: musicStart,
+            music_duration_seconds: musicDuration,
             star_price: starPrice,
             status: 'active',
           } as any);
@@ -301,7 +343,7 @@ const CreatePostWizard: React.FC<CreatePostWizardProps> = ({ onPostCreated, isOp
       case 1: return title.trim().length > 0 && !!category;
       case 2: return body.trim().length >= 10;
       case 3: return true;
-      case 4: return true;
+      case 4: return !(requiresFollowerUnlock && !hasFollowerUnlock);
       case 5: return true;
       default: return false;
     }
@@ -453,18 +495,23 @@ const CreatePostWizard: React.FC<CreatePostWizardProps> = ({ onPostCreated, isOp
             <SelectTrigger><SelectValue /></SelectTrigger>
             <SelectContent>
               {starPriceOptions.map(p => (
-                <SelectItem key={p} value={p.toString()}>
-                  {p === 0 ? 'Free' : `${p} Stars`}{p >= 100 ? ' (40⭐ fee)' : p > 0 ? ' (Free to post)' : ''}
+                <SelectItem key={p} value={p.toString()} disabled={p >= 15 && p <= 50 && !hasFollowerUnlock}>
+                  {p === 0 ? 'Free' : `${p} Stars`}{p >= 15 && p <= 50 && !hasFollowerUnlock ? ' (Unlock at 1,000 followers)' : p >= 100 ? ' (40⭐ fee)' : p > 0 ? ' (Free to post)' : ''}
                 </SelectItem>
               ))}
             </SelectContent>
           </Select>
+          {requiresFollowerUnlock && !hasFollowerUnlock && (
+            <div className="p-3 rounded-xl border border-primary/30 bg-primary/10 text-xs text-primary font-semibold">
+              15–50 Star posts unlock at 1,000 followers. You have {followerCount.toLocaleString()} followers.
+            </div>
+          )}
           {starPrice > 0 && (
             <div className="p-3 bg-muted rounded-xl space-y-1.5 text-sm">
-              <p className="font-semibold">💰 Viewers pay: ₦{(starPrice * 500).toLocaleString()}</p>
-              <p className="text-primary">✅ You earn: ₦{(starPrice * 500 * 0.40).toLocaleString()} (40%)</p>
-              <p className="text-muted-foreground">🎁 Viewer cashback: ₦{(starPrice * 500 * 0.35).toLocaleString()} (35%)</p>
-              {selectedMusic && <p className="text-accent">🎵 Musician: ₦{(starPrice * 500 * 0.10).toLocaleString()} (10%)</p>}
+              <p className="font-semibold">💰 Viewers pay: ₦{(starPrice * 300).toLocaleString()}</p>
+              <p className="text-primary">✅ You earn: ₦{(starPrice * 300 * (selectedMusic ? 0.30 : 0.40)).toLocaleString()} ({selectedMusic ? '30' : '40'}%)</p>
+              <p className="text-muted-foreground">🎁 Viewer cashback: ₦{(starPrice * 300 * 0.35).toLocaleString()} (35%)</p>
+              {selectedMusic && <p className="text-accent">🎵 Musician: ₦{(starPrice * 300 * 0.10).toLocaleString()} (10%)</p>}
               <p className="text-muted-foreground">🏢 Platform: 25%</p>
               {isPaidTier && (
                 <p className={canAffordFee ? 'text-yellow-600 font-semibold' : 'text-destructive font-semibold'}>
@@ -632,7 +679,7 @@ const CreatePostWizard: React.FC<CreatePostWizardProps> = ({ onPostCreated, isOp
               {step === TOTAL_STEPS - 2 ? 'Preview' : 'Next'} <ArrowRight className="w-3.5 h-3.5" />
             </Button>
           ) : (
-            <Button size="sm" onClick={handleSubmit} disabled={loading || (isPaidTier && !canAffordFee)}
+            <Button size="sm" onClick={handleSubmit} disabled={loading || (isPaidTier && !canAffordFee) || (requiresFollowerUnlock && !hasFollowerUnlock)}
               className="gap-1 bg-gradient-to-r from-primary to-accent text-primary-foreground">
               {loading ? 'Publishing...' : '🚀 Launch Post'}
             </Button>
