@@ -3521,6 +3521,7 @@ export type Database = {
         Args: { p_story_id: string; p_viewer_id: string }
         Returns: Json
       }
+      record_public_post_view: { Args: { p_post_id: string }; Returns: Json }
       spend_stars: {
         Args: { p_amount: number; p_meta?: Json; p_type: string }
         Returns: Json
