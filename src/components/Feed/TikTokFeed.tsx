@@ -334,34 +334,32 @@ const SoundDrilldown: React.FC<{
   const [trackUsageCount, setTrackUsageCount] = useState(0);
 
   const loadData = async () => {
-    if (!trackId) return;
+    if (!trackId && !artistId) return;
+    const postQuery = supabase
+      .from('posts')
+      .select('id, title, media_urls, thumbnail_url, media_type, view_count, likes_count, comments_count, user_id')
+      .eq('status', 'approved')
+      .order('view_count', { ascending: false })
+      .limit(30);
     const [{ data: postRows }, { data: trackRow }] = await Promise.all([
-      supabase
-        .from('posts')
-        .select('id, title, media_urls, thumbnail_url, media_type, view_count, likes_count, comments_count, user_id')
-        .eq('music_track_id', trackId)
-        .eq('status', 'approved')
-        .order('view_count', { ascending: false })
-        .limit(30),
-      supabase
-        .from('music_tracks')
-        .select('usage_count')
-        .eq('id', trackId)
-        .maybeSingle(),
+      trackId ? postQuery.eq('music_track_id', trackId) : postQuery.eq('user_id', artistId!).is('music_track_id', null),
+      trackId
+        ? supabase.from('music_tracks').select('usage_count').eq('id', trackId).maybeSingle()
+        : Promise.resolve({ data: null } as any),
     ]);
     setPosts(postRows || []);
     setTrackUsageCount(trackRow?.usage_count ?? postRows?.length ?? 0);
   };
 
   useEffect(() => {
-    if (!open || !trackId) return;
+    if (!open || (!trackId && !artistId)) return;
     loadData();
 
     // Real-time refresh: posts using this sound + track usage_count
     const channel = supabase
-      .channel(`sound-drilldown-${trackId}`)
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'posts', filter: `music_track_id=eq.${trackId}` }, () => loadData())
-      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'music_tracks', filter: `id=eq.${trackId}` }, () => loadData())
+      .channel(`sound-drilldown-${trackId || artistId}`)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'posts', filter: trackId ? `music_track_id=eq.${trackId}` : `user_id=eq.${artistId}` }, () => loadData())
+      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'music_tracks', filter: trackId ? `id=eq.${trackId}` : `artist_id=eq.${artistId}` }, () => loadData())
       .subscribe();
 
     const interval = setInterval(loadData, 15000); // safety poll for view counts
@@ -370,7 +368,7 @@ const SoundDrilldown: React.FC<{
       supabase.removeChannel(channel);
       clearInterval(interval);
     };
-  }, [open, trackId]);
+  }, [open, trackId, artistId]);
 
   if (!open) return null;
 
