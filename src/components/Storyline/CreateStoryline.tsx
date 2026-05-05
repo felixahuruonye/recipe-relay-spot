@@ -35,6 +35,27 @@ export const CreateStoryline: React.FC<CreateStorylineProps> = ({ onCreated, use
   const [starPrice, setStarPrice] = useState<number>(0);
   const audioRef = useRef<HTMLAudioElement>(null);
 
+  const ensureMusicTrackId = async () => {
+    if (!selectedMusicTrack) return null;
+    if (!selectedMusicTrack.id?.startsWith('spotify-') && !selectedMusicTrack.id?.startsWith('yt-')) return selectedMusicTrack.id;
+    const externalId = selectedMusicTrack.spotify_id || selectedMusicTrack.external_id || selectedMusicTrack.youtube_id;
+    if (!externalId) return null;
+    const { data: existing } = await supabase.from('music_tracks').select('id').eq('external_id', externalId).maybeSingle();
+    if (existing?.id) return existing.id;
+    const { data: created } = await supabase.from('music_tracks').insert({
+      title: selectedMusicTrack.title,
+      artist_name: selectedMusicTrack.artist_name,
+      cover_url: selectedMusicTrack.cover_url,
+      duration_seconds: selectedMusicTrack.duration_seconds || 0,
+      source: 'lenory_free',
+      external_id: externalId,
+      youtube_id: selectedMusicTrack.youtube_id,
+      audio_url: '',
+      status: 'active'
+    }).select('id').single();
+    return created?.id || null;
+  };
+
   const handleCardClick = () => {
     setShowWelcome(true);
   };
@@ -135,6 +156,8 @@ export const CreateStoryline: React.FC<CreateStorylineProps> = ({ onCreated, use
         }
       }
 
+      const musicTrackId = await ensureMusicTrackId();
+
       const { error: insertError } = await supabase
         .from('user_storylines')
         .insert({
@@ -142,7 +165,7 @@ export const CreateStoryline: React.FC<CreateStorylineProps> = ({ onCreated, use
           media_url: publicUrl,
           preview_url: previewUrl,
           music_url: selectedMusicTrack?.audio_url || musicUrl,
-          music_track_id: selectedMusicTrack?.id?.startsWith('spotify-') ? null : selectedMusicTrack?.id,
+          music_track_id: musicTrackId,
           caption: caption,
           star_price: starPrice,
           media_type: mediaFile.type.startsWith('video/') ? 'video' : 'image'
