@@ -1223,7 +1223,7 @@ const TikTokFeed: React.FC = () => {
         .from('posts')
         .select('*')
         .eq('status', 'approved')
-        .eq('disabled', false)
+        .or('disabled.is.null,disabled.eq.false')
         .order('boosted', { ascending: false })
         .order('created_at', { ascending: false })
         .limit(50);
@@ -1278,6 +1278,12 @@ const TikTokFeed: React.FC = () => {
         setPostLikes(likesMap);
         setPostCommentCounts(commentCountMap);
         setPostViewCounts(viewCountMap);
+      } else {
+        setPosts([]);
+        setUsers({});
+        setPostLikes({});
+        setPostCommentCounts({});
+        setPostViewCounts({});
       }
     } finally {
       setLoading(false);
