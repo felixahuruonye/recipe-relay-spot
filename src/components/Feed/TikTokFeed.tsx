@@ -696,6 +696,7 @@ const TikTokPost: React.FC<{
   onProfile: () => void;
   onRequireLogin: (msg?: string) => void;
   onVideoEnd: () => void;
+  onViewQualified: () => void;
   onImageTimerEnd: () => void;
   onSendStar: () => void;
   isLoggedIn: boolean;
@@ -703,7 +704,7 @@ const TikTokPost: React.FC<{
 }> = ({
   post, postUser, musicTrack: mTrack, isActive, isLiked, likesCount, commentsCount, viewCount,
   isFollowing, isOwnPost, isMuted, autoScroll, onToggleMute, onLike, onFollow,
-  onComment, onShare, onSendToFriend, onSoundDrilldown, onProfile, onRequireLogin, onVideoEnd, onImageTimerEnd, onSendStar, isLoggedIn, hasSeenBefore
+  onComment, onShare, onSendToFriend, onSoundDrilldown, onProfile, onRequireLogin, onVideoEnd, onViewQualified, onImageTimerEnd, onSendStar, isLoggedIn, hasSeenBefore
 }) => {
   const navigate = useNavigate();
   const videoRef = useRef<HTMLVideoElement>(null);
@@ -712,6 +713,7 @@ const TikTokPost: React.FC<{
   const [isPaused, setIsPaused] = useState(false);
   const [mediaIndex, setMediaIndex] = useState(0);
   const imageTimerRef = useRef<NodeJS.Timeout | null>(null);
+  const viewQualifiedRef = useRef(false);
   const mediaItems = post.media_urls || [];
   const hasMedia = mediaItems.length > 0;
   const activeMedia = mediaItems[Math.min(mediaIndex, Math.max(mediaItems.length - 1, 0))];
@@ -721,6 +723,7 @@ const TikTokPost: React.FC<{
 
   useEffect(() => {
     setMediaIndex(0);
+    viewQualifiedRef.current = false;
   }, [post.id]);
 
   // Background music — supports both audio_url (community) and youtube_id (Lenory Free)
@@ -802,6 +805,15 @@ const TikTokPost: React.FC<{
           playsInline
           muted={isMuted}
           onEnded={onVideoEnd}
+          onTimeUpdate={(e) => {
+            const video = e.currentTarget;
+            const duration = Number.isFinite(video.duration) ? video.duration : 0;
+            const qualifiedAt = duration > 0 ? Math.min(duration * 0.7, 30) : 8;
+            if (!viewQualifiedRef.current && video.currentTime >= qualifiedAt) {
+              viewQualifiedRef.current = true;
+              onViewQualified();
+            }
+          }}
           onPlay={() => setIsPaused(false)}
           onPause={() => setIsPaused(true)}
           onClick={() => { if (videoRef.current?.paused) videoRef.current.play().catch(() => {}); else videoRef.current?.pause(); }}
