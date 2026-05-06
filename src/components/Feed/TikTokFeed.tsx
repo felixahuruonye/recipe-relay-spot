@@ -1008,13 +1008,14 @@ const TikTokFeed: React.FC = () => {
   const feedRef = useRef<HTMLDivElement>(null);
   const viewCooldownRef = useRef<number>(0);
   const dailyViewsRef = useRef<number>(0);
+  const autoSpendNoticeRef = useRef(false);
 
   const feedSlides = useMemo<FeedSlide[]>(() => {
     const seed = seedFromString(`${user?.id || 'guest'}-${new Date().toDateString()}`);
     const orderedPosts = [...posts]
       .map((p) => {
         const ageHrs = Math.max(1, (Date.now() - new Date(p.created_at).getTime()) / 3600000);
-        const engagement = (postViewCounts[p.id] ?? p.view_count ?? 0) + (postLikes[p.id]?.length || p.likes_count || 0) * 4 + (postCommentCounts[p.id] || p.comments_count || 0) * 6;
+        const engagement = (p.view_count ?? 0) + (p.likes_count || 0) * 4 + (p.comments_count || 0) * 6;
         const personal = ((seedFromString(p.id) ^ seed) % 1000) / 1000;
         return { post: p, score: engagement / Math.pow(ageHrs, 0.7) + personal * 8 + (p.boosted ? 20 : 0) };
       })
@@ -1036,7 +1037,7 @@ const TikTokFeed: React.FC = () => {
       if ((index + 1) % 6 === 0) slides.push({ type: 'trending-stories', key: `trending-stories-${index}` });
     });
     return slides;
-  }, [posts, products, user?.id, postLikes, postViewCounts, postCommentCounts]);
+  }, [posts, products, user?.id]);
 
   // Fetch posts
   useEffect(() => { fetchPosts(); fetchProducts(); }, []);
