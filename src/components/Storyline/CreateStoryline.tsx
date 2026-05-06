@@ -276,10 +276,10 @@ export const CreateStoryline: React.FC<CreateStorylineProps> = ({ onCreated, use
         </DialogContent>
       </Dialog>
 
-      <Dialog open={open} onOpenChange={setOpen}>
+      <Dialog open={open} onOpenChange={(nextOpen) => { setOpen(nextOpen); if (!nextOpen) onCancel?.(); }}>
         <DialogContent className="left-0 top-0 h-[100dvh] max-h-[100dvh] w-screen max-w-none translate-x-0 translate-y-0 rounded-none border-0 p-0 sm:left-[50%] sm:top-[50%] sm:h-[94dvh] sm:max-w-lg sm:translate-x-[-50%] sm:translate-y-[-50%] sm:rounded-2xl sm:border sm:p-0 glass-card overflow-hidden">
           <div className="flex h-full flex-col overflow-hidden">
-          <DialogHeader className="flex flex-row items-center justify-between">
+          <DialogHeader className="flex flex-row items-center justify-between border-b border-border/60 px-3 py-2">
             <Button variant="ghost" size="sm" onClick={() => { setOpen(false); onCancel?.(); }}>Cancel</Button>
             <DialogTitle className="gradient-text">Create Story</DialogTitle>
             <StorySettings />
