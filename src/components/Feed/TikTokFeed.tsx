@@ -1166,7 +1166,10 @@ const TikTokFeed: React.FC = () => {
   // Process earning
   const processEarning = useCallback((post: Post) => {
     if (!user || processedPosts.has(post.id) || processingRef.current.has(post.id)) return;
-    if (post.user_id === user.id) return; // Can't earn from own content
+    if (post.user_id === user.id) {
+      setProcessedPosts(prev => new Set(prev).add(post.id));
+      return;
+    }
 
     // Anti-abuse: cooldown
     const now = Date.now();
@@ -1181,7 +1184,17 @@ const TikTokFeed: React.FC = () => {
 
     // Check auto-spend
     if (!autoSpend) {
-      setStarNotification('auto_spend_off');
+      processingRef.current.add(post.id);
+      supabase.rpc('record_authenticated_post_view' as any, { p_post_id: post.id, p_viewer_id: user.id }).then(({ data }: any) => {
+        if (data?.success) {
+          setProcessedPosts(prev => new Set(prev).add(post.id));
+          fetchPosts();
+        }
+        if (!autoSpendNoticeRef.current) {
+          autoSpendNoticeRef.current = true;
+          setStarNotification('auto_spend_off');
+        }
+      }).finally(() => processingRef.current.delete(post.id));
       return;
     }
 
