@@ -94,7 +94,7 @@ const Storyline = () => {
       </div>
 
       {selectedUserId && <EnhancedStorylineViewer userId={selectedUserId} open={!!selectedUserId} onClose={() => setSelectedUserId(null)} />}
-      <Dialog open={showCreate} onOpenChange={setShowCreate}><DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto"><CreateStoryline userProfile={profile} onCreated={() => { setShowCreate(false); loadStories(); }} /></DialogContent></Dialog>
+      {showCreate && <CreateStoryline autoOpen userProfile={profile} onCancel={() => setShowCreate(false)} onCreated={() => { setShowCreate(false); loadStories(); }} />}
     </div>
   );
 };
