@@ -4,7 +4,6 @@ import { supabase } from '@/integrations/supabase/client';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
-import { Dialog, DialogContent } from '@/components/ui/dialog';
 import { StorylineCard } from '@/components/Storyline/StorylineCard';
 import { CreateStoryline } from '@/components/Storyline/CreateStoryline';
 import { EnhancedStorylineViewer } from '@/components/Storyline/EnhancedStorylineViewer';
