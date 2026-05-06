@@ -1005,11 +1005,7 @@ const Feed = () => {
 
       {/* Create Story */}
       {showCreateStory && (
-        <Dialog open={showCreateStory} onOpenChange={setShowCreateStory}>
-          <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
-            <CreateStoryline onCreated={() => { setShowCreateStory(false); loadUserStories(); }} />
-          </DialogContent>
-        </Dialog>
+        <CreateStoryline autoOpen onCancel={() => setShowCreateStory(false)} onCreated={() => { setShowCreateStory(false); loadUserStories(); }} />
       )}
     </div>
   );
