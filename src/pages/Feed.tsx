@@ -22,7 +22,6 @@ import { PostMenu } from '@/components/Feed/PostMenu';
 import { PostViewers } from '@/components/Profile/PostViewers';
 import { ProductCard } from '@/components/Feed/ProductCard';
 import { SuggestedUsers } from '@/components/Feed/SuggestedUsers';
-import { Dialog, DialogContent } from '@/components/ui/dialog';
 import { ensureUserProfile } from '@/lib/ensureUserProfile';
 import { motion, AnimatePresence } from 'framer-motion';
 
