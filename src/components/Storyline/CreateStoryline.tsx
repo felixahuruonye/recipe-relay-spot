@@ -15,9 +15,11 @@ import MusicBrowser from '@/components/Music/MusicBrowser';
 interface CreateStorylineProps {
   onCreated?: () => void;
   userProfile?: { username: string; avatar_url: string };
+  autoOpen?: boolean;
+  onCancel?: () => void;
 }
 
-export const CreateStoryline: React.FC<CreateStorylineProps> = ({ onCreated, userProfile }) => {
+export const CreateStoryline: React.FC<CreateStorylineProps> = ({ onCreated, userProfile, autoOpen = false, onCancel }) => {
   const { user } = useAuth();
   const { toast } = useToast();
   const [open, setOpen] = useState(false);
@@ -56,9 +58,7 @@ export const CreateStoryline: React.FC<CreateStorylineProps> = ({ onCreated, use
     return created?.id || null;
   };
 
-  const handleCardClick = () => {
-    setShowWelcome(true);
-  };
+  const handleCardClick = () => setOpen(true);
 
   const handleUploadClick = () => {
     setShowWelcome(false);
@@ -193,10 +193,10 @@ export const CreateStoryline: React.FC<CreateStorylineProps> = ({ onCreated, use
     }
   };
 
-  // Auto-open welcome dialog when component mounts
+  // Auto-open the creation form when launched from the Storyline page.
   React.useEffect(() => {
-    setShowWelcome(true);
-  }, []);
+    if (autoOpen) setOpen(true);
+  }, [autoOpen]);
 
   return (
     <>
