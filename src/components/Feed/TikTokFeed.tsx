@@ -1185,16 +1185,21 @@ const TikTokFeed: React.FC = () => {
     // Check auto-spend
     if (!autoSpend) {
       processingRef.current.add(post.id);
-      supabase.rpc('record_authenticated_post_view' as any, { p_post_id: post.id, p_viewer_id: user.id }).then(({ data }: any) => {
-        if (data?.success) {
-          setProcessedPosts(prev => new Set(prev).add(post.id));
-          fetchPosts();
+      void (async () => {
+        try {
+          const { data } = await supabase.rpc('record_authenticated_post_view' as any, { p_post_id: post.id, p_viewer_id: user.id });
+          if ((data as any)?.success) {
+            setProcessedPosts(prev => new Set(prev).add(post.id));
+            fetchPosts();
+          }
+          if (!autoSpendNoticeRef.current) {
+            autoSpendNoticeRef.current = true;
+            setStarNotification('auto_spend_off');
+          }
+        } finally {
+          processingRef.current.delete(post.id);
         }
-        if (!autoSpendNoticeRef.current) {
-          autoSpendNoticeRef.current = true;
-          setStarNotification('auto_spend_off');
-        }
-      }).finally(() => processingRef.current.delete(post.id));
+      })();
       return;
     }
 
