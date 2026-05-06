@@ -200,22 +200,23 @@ export const CreateStoryline: React.FC<CreateStorylineProps> = ({ onCreated, use
 
   return (
     <>
-      {/* Story Card - Clickable to open welcome */}
-      <div 
-        onClick={handleCardClick}
-        className="glass-card card-3d cursor-pointer p-4 rounded-xl flex flex-col items-center gap-3 hover:neon-glow transition-all"
-      >
-        <Avatar className="h-16 w-16 border-4 border-primary/50">
-          <AvatarImage src={userProfile?.avatar_url} />
-          <AvatarFallback className="bg-primary text-primary-foreground text-2xl">
-            {userProfile?.username?.charAt(0).toUpperCase() || 'U'}
-          </AvatarFallback>
-        </Avatar>
-        <div className="flex items-center gap-2 text-primary">
-          <Plus className="h-6 w-6" />
-          <span className="text-sm font-semibold">Create Story</span>
+      {!autoOpen && (
+        <div 
+          onClick={handleCardClick}
+          className="glass-card card-3d cursor-pointer p-4 rounded-xl flex flex-col items-center gap-3 hover:neon-glow transition-all"
+        >
+          <Avatar className="h-16 w-16 border-4 border-primary/50">
+            <AvatarImage src={userProfile?.avatar_url} />
+            <AvatarFallback className="bg-primary text-primary-foreground text-2xl">
+              {userProfile?.username?.charAt(0).toUpperCase() || 'U'}
+            </AvatarFallback>
+          </Avatar>
+          <div className="flex items-center gap-2 text-primary">
+            <Plus className="h-6 w-6" />
+            <span className="text-sm font-semibold">Create Story</span>
+          </div>
         </div>
-      </div>
+      )}
 
       {/* Welcome Message Dialog */}
       <Dialog open={showWelcome} onOpenChange={setShowWelcome}>
