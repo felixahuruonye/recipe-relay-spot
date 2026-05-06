@@ -1574,6 +1574,10 @@ const TikTokFeed: React.FC = () => {
                       if (slide?.type === 'post' && user) processEarning(slide.post);
                       scrollToNext();
                     }}
+                    onViewQualified={() => {
+                      const slide = feedSlides[activeIndex];
+                      if (slide?.type === 'post' && user) processEarning(slide.post);
+                    }}
                     onImageTimerEnd={() => {
                       const slide = feedSlides[activeIndex];
                       if (slide?.type === 'post' && user) processEarning(slide.post);
