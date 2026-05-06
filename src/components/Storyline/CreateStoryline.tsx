@@ -203,17 +203,17 @@ export const CreateStoryline: React.FC<CreateStorylineProps> = ({ onCreated, use
       {/* Story Card - Clickable to open welcome */}
       <div 
         onClick={handleCardClick}
-        className="glass-card card-3d cursor-pointer p-6 rounded-2xl flex flex-col items-center gap-4 hover:neon-glow transition-all"
+        className="glass-card card-3d cursor-pointer p-4 rounded-xl flex flex-col items-center gap-3 hover:neon-glow transition-all"
       >
-        <Avatar className="h-20 w-20 border-4 border-primary/50">
+        <Avatar className="h-16 w-16 border-4 border-primary/50">
           <AvatarImage src={userProfile?.avatar_url} />
           <AvatarFallback className="bg-primary text-primary-foreground text-2xl">
             {userProfile?.username?.charAt(0).toUpperCase() || 'U'}
           </AvatarFallback>
         </Avatar>
         <div className="flex items-center gap-2 text-primary">
-          <Plus className="h-10 w-10" />
-          <span className="text-lg font-semibold">Create Story</span>
+          <Plus className="h-6 w-6" />
+          <span className="text-sm font-semibold">Create Story</span>
         </div>
       </div>
 
@@ -277,13 +277,15 @@ export const CreateStoryline: React.FC<CreateStorylineProps> = ({ onCreated, use
       </Dialog>
 
       <Dialog open={open} onOpenChange={setOpen}>
-        <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto glass-card">
+        <DialogContent className="left-0 top-0 h-[100dvh] max-h-[100dvh] w-screen max-w-none translate-x-0 translate-y-0 rounded-none border-0 p-0 sm:left-[50%] sm:top-[50%] sm:h-[94dvh] sm:max-w-lg sm:translate-x-[-50%] sm:translate-y-[-50%] sm:rounded-2xl sm:border sm:p-0 glass-card overflow-hidden">
+          <div className="flex h-full flex-col overflow-hidden">
           <DialogHeader className="flex flex-row items-center justify-between">
+            <Button variant="ghost" size="sm" onClick={() => { setOpen(false); onCancel?.(); }}>Cancel</Button>
             <DialogTitle className="gradient-text">Create Story</DialogTitle>
             <StorySettings />
           </DialogHeader>
 
-          <div className="space-y-4">
+          <div className="flex-1 space-y-4 overflow-y-auto px-4 pb-6 pt-2 overscroll-contain">
             {/* Media Upload */}
             <div>
               <Input
@@ -403,10 +405,11 @@ export const CreateStoryline: React.FC<CreateStorylineProps> = ({ onCreated, use
             <Button
               onClick={handleSubmit}
               disabled={!mediaFile || loading}
-              className="w-full"
+              className="sticky bottom-0 w-full shadow-lg"
             >
               {loading ? 'Creating...' : 'Share Story'}
             </Button>
+          </div>
           </div>
         </DialogContent>
       </Dialog>
