@@ -696,6 +696,7 @@ const TikTokPost: React.FC<{
   onProfile: () => void;
   onRequireLogin: (msg?: string) => void;
   onVideoEnd: () => void;
+  onViewQualified: () => void;
   onImageTimerEnd: () => void;
   onSendStar: () => void;
   isLoggedIn: boolean;
@@ -703,7 +704,7 @@ const TikTokPost: React.FC<{
 }> = ({
   post, postUser, musicTrack: mTrack, isActive, isLiked, likesCount, commentsCount, viewCount,
   isFollowing, isOwnPost, isMuted, autoScroll, onToggleMute, onLike, onFollow,
-  onComment, onShare, onSendToFriend, onSoundDrilldown, onProfile, onRequireLogin, onVideoEnd, onImageTimerEnd, onSendStar, isLoggedIn, hasSeenBefore
+  onComment, onShare, onSendToFriend, onSoundDrilldown, onProfile, onRequireLogin, onVideoEnd, onViewQualified, onImageTimerEnd, onSendStar, isLoggedIn, hasSeenBefore
 }) => {
   const navigate = useNavigate();
   const videoRef = useRef<HTMLVideoElement>(null);
@@ -712,6 +713,7 @@ const TikTokPost: React.FC<{
   const [isPaused, setIsPaused] = useState(false);
   const [mediaIndex, setMediaIndex] = useState(0);
   const imageTimerRef = useRef<NodeJS.Timeout | null>(null);
+  const viewQualifiedRef = useRef(false);
   const mediaItems = post.media_urls || [];
   const hasMedia = mediaItems.length > 0;
   const activeMedia = mediaItems[Math.min(mediaIndex, Math.max(mediaItems.length - 1, 0))];
@@ -721,6 +723,7 @@ const TikTokPost: React.FC<{
 
   useEffect(() => {
     setMediaIndex(0);
+    viewQualifiedRef.current = false;
   }, [post.id]);
 
   // Background music — supports both audio_url (community) and youtube_id (Lenory Free)
@@ -802,6 +805,15 @@ const TikTokPost: React.FC<{
           playsInline
           muted={isMuted}
           onEnded={onVideoEnd}
+          onTimeUpdate={(e) => {
+            const video = e.currentTarget;
+            const duration = Number.isFinite(video.duration) ? video.duration : 0;
+            const qualifiedAt = duration > 0 ? Math.min(duration * 0.7, 30) : 8;
+            if (!viewQualifiedRef.current && video.currentTime >= qualifiedAt) {
+              viewQualifiedRef.current = true;
+              onViewQualified();
+            }
+          }}
           onPlay={() => setIsPaused(false)}
           onPause={() => setIsPaused(true)}
           onClick={() => { if (videoRef.current?.paused) videoRef.current.play().catch(() => {}); else videoRef.current?.pause(); }}
@@ -1008,13 +1020,14 @@ const TikTokFeed: React.FC = () => {
   const feedRef = useRef<HTMLDivElement>(null);
   const viewCooldownRef = useRef<number>(0);
   const dailyViewsRef = useRef<number>(0);
+  const autoSpendNoticeRef = useRef(false);
 
   const feedSlides = useMemo<FeedSlide[]>(() => {
     const seed = seedFromString(`${user?.id || 'guest'}-${new Date().toDateString()}`);
     const orderedPosts = [...posts]
       .map((p) => {
         const ageHrs = Math.max(1, (Date.now() - new Date(p.created_at).getTime()) / 3600000);
-        const engagement = (postViewCounts[p.id] ?? p.view_count ?? 0) + (postLikes[p.id]?.length || p.likes_count || 0) * 4 + (postCommentCounts[p.id] || p.comments_count || 0) * 6;
+        const engagement = (p.view_count ?? 0) + (p.likes_count || 0) * 4 + (p.comments_count || 0) * 6;
         const personal = ((seedFromString(p.id) ^ seed) % 1000) / 1000;
         return { post: p, score: engagement / Math.pow(ageHrs, 0.7) + personal * 8 + (p.boosted ? 20 : 0) };
       })
@@ -1036,7 +1049,7 @@ const TikTokFeed: React.FC = () => {
       if ((index + 1) % 6 === 0) slides.push({ type: 'trending-stories', key: `trending-stories-${index}` });
     });
     return slides;
-  }, [posts, products, user?.id, postLikes, postViewCounts, postCommentCounts]);
+  }, [posts, products, user?.id]);
 
   // Fetch posts
   useEffect(() => { fetchPosts(); fetchProducts(); }, []);
@@ -1153,7 +1166,10 @@ const TikTokFeed: React.FC = () => {
   // Process earning
   const processEarning = useCallback((post: Post) => {
     if (!user || processedPosts.has(post.id) || processingRef.current.has(post.id)) return;
-    if (post.user_id === user.id) return; // Can't earn from own content
+    if (post.user_id === user.id) {
+      setProcessedPosts(prev => new Set(prev).add(post.id));
+      return;
+    }
 
     // Anti-abuse: cooldown
     const now = Date.now();
@@ -1168,7 +1184,22 @@ const TikTokFeed: React.FC = () => {
 
     // Check auto-spend
     if (!autoSpend) {
-      setStarNotification('auto_spend_off');
+      processingRef.current.add(post.id);
+      void (async () => {
+        try {
+          const { data } = await supabase.rpc('record_authenticated_post_view' as any, { p_post_id: post.id, p_viewer_id: user.id });
+          if ((data as any)?.success) {
+            setProcessedPosts(prev => new Set(prev).add(post.id));
+            fetchPosts();
+          }
+          if (!autoSpendNoticeRef.current) {
+            autoSpendNoticeRef.current = true;
+            setStarNotification('auto_spend_off');
+          }
+        } finally {
+          processingRef.current.delete(post.id);
+        }
+      })();
       return;
     }
 
@@ -1542,6 +1573,10 @@ const TikTokFeed: React.FC = () => {
                       const slide = feedSlides[activeIndex];
                       if (slide?.type === 'post' && user) processEarning(slide.post);
                       scrollToNext();
+                    }}
+                    onViewQualified={() => {
+                      const slide = feedSlides[activeIndex];
+                      if (slide?.type === 'post' && user) processEarning(slide.post);
                     }}
                     onImageTimerEnd={() => {
                       const slide = feedSlides[activeIndex];
