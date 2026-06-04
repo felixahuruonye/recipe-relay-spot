@@ -26,6 +26,8 @@ import SavedSearches from "./pages/SavedSearches";
 import TikTokFeed from "./components/Feed/TikTokFeed";
 import MusicianDashboard from "./pages/MusicianDashboard";
 import Storyline from "./pages/Storyline";
+import WalletPage from "./pages/WalletPage";
+import ChatHub from "./pages/ChatHub";
 
 const queryClient = new QueryClient();
 
@@ -67,7 +69,7 @@ const App = () => (
             } />
             <Route path="/chat" element={
               <ProtectedRoute>
-                <Chat />
+                <ChatHub />
               </ProtectedRoute>
             } />
             <Route path="/marketplace" element={
@@ -130,7 +132,7 @@ const App = () => (
             } />
             <Route path="/wallet" element={
               <ProtectedRoute>
-                <div className="p-4"><WalletBalance /></div>
+                <WalletPage />
               </ProtectedRoute>
             } />
             {/* Redirect old /feed to home */}
