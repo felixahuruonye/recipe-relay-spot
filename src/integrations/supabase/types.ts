@@ -1726,6 +1726,7 @@ export type Database = {
           avatar_url: string | null
           created_at: string
           credits: number | null
+          custom_instructions: string | null
           email: string | null
           id: string
           name: string | null
@@ -1739,6 +1740,7 @@ export type Database = {
           avatar_url?: string | null
           created_at?: string
           credits?: number | null
+          custom_instructions?: string | null
           email?: string | null
           id: string
           name?: string | null
@@ -1752,6 +1754,7 @@ export type Database = {
           avatar_url?: string | null
           created_at?: string
           credits?: number | null
+          custom_instructions?: string | null
           email?: string | null
           id?: string
           name?: string | null
