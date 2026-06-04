@@ -1,104 +1,78 @@
 import React, { useState, useEffect } from 'react';
-import { Link, useLocation } from 'react-router-dom';
-import { Home, MessageCircle, ShoppingBag, User, Users, Bell, Settings, TrendingUp, Menu, Star, Crown, Mail, Share2 } from 'lucide-react';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
+import { Home, MessageCircle, ShoppingBag, User, Bell, Settings, Mail, Share2, Wallet, Music2, Crown } from 'lucide-react';
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from '@/components/ui/sheet';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { ScrollArea } from '@/components/ui/scroll-area';
+import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 
 const Navigation = () => {
   const location = useLocation();
+  const navigate = useNavigate();
   const { user } = useAuth();
-  const [menuOpen, setMenuOpen] = useState(false);
+  const [profileOpen, setProfileOpen] = useState(false);
   const [notifCount, setNotifCount] = useState(0);
   const [chatCount, setChatCount] = useState(0);
-  const [groupMsgCount, setGroupMsgCount] = useState(0);
+  const [avatar, setAvatar] = useState<string | undefined>();
+  const [username, setUsername] = useState<string>('');
 
   useEffect(() => {
     if (!user) return;
     loadCounts();
+    supabase.from('user_profiles').select('username, avatar_url').eq('id', user.id).maybeSingle()
+      .then(({ data }) => { if (data) { setAvatar(data.avatar_url || undefined); setUsername(data.username || ''); } });
 
     const channel = supabase
       .channel('nav-counts')
-      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'user_notifications', filter: `user_id=eq.${user.id}` }, () => {
-        setNotifCount(prev => prev + 1);
-      })
-      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'private_messages', filter: `to_user_id=eq.${user.id}` }, () => {
-        setChatCount(prev => prev + 1);
-      })
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'user_notifications', filter: `user_id=eq.${user.id}` }, () => setNotifCount(p => p + 1))
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'private_messages', filter: `to_user_id=eq.${user.id}` }, () => setChatCount(p => p + 1))
       .subscribe();
-
     return () => { supabase.removeChannel(channel); };
   }, [user?.id]);
 
-  // Reset counts when visiting those pages
   useEffect(() => {
     if (location.pathname === '/notifications') setNotifCount(0);
     if (location.pathname === '/chat') setChatCount(0);
-    if (location.pathname === '/groups') setGroupMsgCount(0);
   }, [location.pathname]);
 
   const loadCounts = async () => {
     if (!user) return;
-    const { count: notifs } = await supabase
-      .from('user_notifications')
-      .select('*', { count: 'exact', head: true })
-      .eq('user_id', user.id)
-      .eq('is_read_receipt', false);
+    const { count: notifs } = await supabase.from('user_notifications').select('*', { count: 'exact', head: true }).eq('user_id', user.id).eq('is_read_receipt', false);
     setNotifCount(notifs || 0);
-
-    const { count: chats } = await supabase
-      .from('private_messages')
-      .select('*', { count: 'exact', head: true })
-      .eq('to_user_id', user.id)
-      .is('read_at', null)
-      .eq('is_deleted', false);
+    const { count: chats } = await supabase.from('private_messages').select('*', { count: 'exact', head: true }).eq('to_user_id', user.id).is('read_at', null).eq('is_deleted', false);
     setChatCount(chats || 0);
   };
-  
-  const navItems = [
-    { icon: Home, label: 'Home', path: '/', badge: 0 },
-    { icon: Users, label: 'Groups', path: '/groups', badge: groupMsgCount },
-    { icon: TrendingUp, label: 'Explore', path: '/explore', badge: 0 },
+
+  const tabs = [
+    { icon: Home, label: 'Watch', path: '/', badge: 0 },
     { icon: MessageCircle, label: 'Chat', path: '/chat', badge: chatCount },
+    { icon: Wallet, label: 'Wallet', path: '/wallet', badge: 0 },
+    { icon: ShoppingBag, label: 'Market', path: '/marketplace', badge: 0 },
   ];
 
-  const menuItems = [
-    { icon: Bell, label: 'Notifications', path: '/notifications', badge: notifCount },
-    { icon: ShoppingBag, label: 'Marketplace', path: '/marketplace' },
-    { icon: Star, label: 'Buy Star To Earn', path: '/star-marketplace' },
-    { icon: Crown, label: 'VIP Subscription', path: '/vip-subscription' },
-    { icon: Star, label: 'Wallet', path: '/wallet' },
-    { icon: User, label: 'Profile', path: '/profile' },
-    { icon: Mail, label: 'Contact Admin', path: '/contact-admin' },
-    { icon: Share2, label: 'Share Lenory', path: '/share' },
-    { icon: Settings, label: 'Settings', path: '/settings' },
+  const profileMenu = [
+    { icon: User, label: 'Profile', path: '/profile', desc: 'Your page & posts' },
+    { icon: Music2, label: 'Musician Dashboard', path: '/musician', desc: 'Upload music & royalties' },
+    { icon: Bell, label: 'Activities', path: '/notifications', desc: 'Notifications', badge: notifCount },
+    { icon: Mail, label: 'Contact Support', path: '/contact-admin', desc: 'Reach the Lenory team' },
+    { icon: Share2, label: 'Share Lenory', path: '/share', desc: 'Invite your friends' },
+    { icon: Crown, label: 'Upgrade to VIP', path: '/vip-subscription', desc: 'Unlock VIP perks' },
+    { icon: Settings, label: 'Settings', path: '/settings', desc: 'Privacy & preferences' },
   ];
 
   return (
-    <nav className="fixed bottom-0 left-0 right-0 bg-card border-t border-border z-50">
-      <div className="flex justify-around items-center h-16 px-2">
-        {navItems.map(({ icon: Icon, label, path, badge }) => {
-          const isActive = location.pathname === path;
-          const isHome = path === '/';
+    <nav className="fixed bottom-0 left-0 right-0 bg-card/95 backdrop-blur border-t border-border z-50">
+      <div className="flex justify-around items-center h-16 px-1">
+        {tabs.map(({ icon: Icon, label, path, badge }) => {
+          const isActive = location.pathname === path || (path === '/' && location.pathname === '/index');
+          const isWatch = path === '/';
           return (
             <button
               key={path}
-              onClick={() => {
-                if (isHome && isActive) {
-                  // Refresh the page when tapping Home while already on Home
-                  window.location.reload();
-                } else {
-                  window.location.href = path;
-                }
-              }}
-              className={`flex flex-col items-center justify-center flex-1 py-2 transition-colors relative ${
-                isActive 
-                  ? 'text-primary' 
-                  : 'text-muted-foreground hover:text-foreground'
-              }`}
+              onClick={() => { if (isWatch && isActive) window.location.reload(); else navigate(path); }}
+              className={`flex flex-col items-center justify-center flex-1 py-2 transition-colors relative ${isActive ? 'text-primary' : 'text-muted-foreground hover:text-foreground'}`}
             >
               <div className="relative">
                 <Icon size={20} />
@@ -108,59 +82,62 @@ const Navigation = () => {
                   </span>
                 )}
               </div>
-              <span className="text-xs mt-1">{isHome && isActive ? '⟳ Refresh' : label}</span>
+              <span className="text-[11px] mt-0.5">{label}</span>
             </button>
           );
         })}
-        
-        <Sheet open={menuOpen} onOpenChange={setMenuOpen}>
+
+        <Sheet open={profileOpen} onOpenChange={setProfileOpen}>
           <SheetTrigger asChild>
-            <Button
-              variant="ghost"
-              className="flex flex-col items-center justify-center flex-1 py-2 h-auto relative"
-            >
+            <button className={`flex flex-col items-center justify-center flex-1 py-2 transition-colors relative ${profileOpen ? 'text-primary' : 'text-muted-foreground hover:text-foreground'}`}>
               <div className="relative">
-                <Menu size={20} />
+                <Avatar className="w-6 h-6 ring-1 ring-primary/40">
+                  <AvatarImage src={avatar} />
+                  <AvatarFallback className="text-[10px]">{username?.[0]?.toUpperCase() || 'U'}</AvatarFallback>
+                </Avatar>
                 {notifCount > 0 && (
                   <span className="absolute -top-1.5 -right-2 bg-destructive text-destructive-foreground text-[10px] font-bold rounded-full min-w-[16px] h-4 flex items-center justify-center px-1">
                     {notifCount > 99 ? '99+' : notifCount}
                   </span>
                 )}
               </div>
-              <span className="text-xs mt-1">Menu</span>
-            </Button>
+              <span className="text-[11px] mt-0.5">Profile</span>
+            </button>
           </SheetTrigger>
-          <SheetContent side="bottom" className="h-[75vh]">
+          <SheetContent side="bottom" className="h-auto max-h-[80vh] rounded-t-2xl">
             <SheetHeader>
-              <SheetTitle>Menu</SheetTitle>
+              <SheetTitle className="flex items-center gap-3">
+                <Avatar className="w-10 h-10"><AvatarImage src={avatar} /><AvatarFallback>{username?.[0]?.toUpperCase() || 'U'}</AvatarFallback></Avatar>
+                <div className="text-left">
+                  <p className="text-sm font-bold">@{username || 'me'}</p>
+                  <p className="text-[11px] text-muted-foreground">Quick menu</p>
+                </div>
+              </SheetTitle>
             </SheetHeader>
-            <ScrollArea className="h-[calc(75vh-5rem)] mt-4">
-              <div className="space-y-2 pr-4">
-                {menuItems.map(({ icon: Icon, label, path, badge }) => {
-                  const isActive = location.pathname === path;
-                  return (
-                    <Link
-                      key={path}
-                      to={path}
-                      onClick={() => setMenuOpen(false)}
-                      className={`flex items-center gap-3 p-4 rounded-lg transition-colors ${
-                        isActive 
-                          ? 'bg-primary text-primary-foreground' 
-                          : 'hover:bg-muted'
-                      }`}
-                    >
-                      <Icon size={20} />
-                      <span className="flex-1">{label}</span>
-                      {badge && badge > 0 && (
-                        <Badge variant="destructive" className="text-xs">
-                          {badge > 99 ? '99+' : badge}
-                        </Badge>
-                      )}
-                    </Link>
-                  );
-                })}
-              </div>
-            </ScrollArea>
+            <div className="mt-4 grid grid-cols-1 gap-2 pb-4">
+              {profileMenu.map(({ icon: Icon, label, path, desc, badge }) => {
+                const isActive = location.pathname === path;
+                return (
+                  <Link
+                    key={path}
+                    to={path}
+                    onClick={() => setProfileOpen(false)}
+                    className={`flex items-center gap-3 p-3 rounded-xl border border-border transition-colors ${isActive ? 'bg-primary/10 border-primary/40' : 'hover:bg-muted'}`}
+                  >
+                    <div className="w-9 h-9 rounded-full bg-primary/10 flex items-center justify-center text-primary shrink-0">
+                      <Icon size={18} />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-semibold leading-tight">{label}</p>
+                      <p className="text-[11px] text-muted-foreground truncate">{desc}</p>
+                    </div>
+                    {!!badge && badge > 0 && (
+                      <Badge variant="destructive" className="text-[10px]">{badge > 99 ? '99+' : badge}</Badge>
+                    )}
+                  </Link>
+                );
+              })}
+            </div>
           </SheetContent>
         </Sheet>
       </div>

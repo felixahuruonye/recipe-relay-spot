@@ -294,6 +294,14 @@ const Profile = () => {
             <div className="flex flex-col space-y-2">
               {isOwnProfile ? (
                 <>
+                  {!profile.vip && (
+                    <Button size="sm" className="bg-gradient-to-r from-yellow-500 to-orange-500 text-black font-bold hover:from-yellow-400 hover:to-orange-400" onClick={() => navigate('/vip-subscription')}>
+                      <Crown className="w-4 h-4 mr-2" />Upgrade to VIP
+                    </Button>
+                  )}
+                  <Button variant="outline" size="sm" onClick={() => navigate('/musician')}>
+                    🎵 Musician Dashboard
+                  </Button>
                   <Button variant="outline" size="sm" onClick={() => setEditProfileOpen(true)}>
                     <Edit className="w-4 h-4 mr-2" />Edit Profile
                   </Button>
