@@ -135,14 +135,15 @@ const StarNotificationCard: React.FC<{
 
   const cfg = configs[type];
 
-  return (
+  return createPortal(
     <motion.div
-      initial={{ opacity: 0, y: 50, scale: 0.9 }}
-      animate={{ opacity: 1, y: 0, scale: 1 }}
-      exit={{ opacity: 0, y: 50, scale: 0.9 }}
-      className="fixed left-1/2 top-1/2 z-50 w-[90%] max-w-[400px] -translate-x-1/2 -translate-y-1/2"
+      initial={{ opacity: 0, scale: 0.9 }}
+      animate={{ opacity: 1, scale: 1 }}
+      exit={{ opacity: 0, scale: 0.9 }}
+      className="fixed inset-0 z-[100] flex items-center justify-center p-4 pointer-events-none"
     >
-      <div className="bg-card/95 backdrop-blur-xl rounded-2xl p-5 shadow-2xl border border-border">
+      <div className="absolute inset-0 bg-black/40 pointer-events-auto" onClick={onDismiss} />
+      <div className="relative bg-card/95 backdrop-blur-xl rounded-2xl p-5 shadow-2xl border border-border w-full max-w-[400px] pointer-events-auto">
         <h3 className="font-bold text-base mb-1">{cfg.title}</h3>
         <p className="text-sm text-muted-foreground mb-4">{cfg.body}</p>
         <div className="flex gap-2">
@@ -154,7 +155,8 @@ const StarNotificationCard: React.FC<{
           </Button>
         </div>
       </div>
-    </motion.div>
+    </motion.div>,
+    document.body
   );
 };
 
