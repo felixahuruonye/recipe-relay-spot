@@ -790,7 +790,7 @@ const TikTokPost: React.FC<{
   };
 
   const pulseLike = () => {
-    handleAction(onLike, 'Login to like');
+    if (!isLiked) handleAction(onLike, 'Login to like');
     setShowDoubleHeart(true);
     setTimeout(() => setShowDoubleHeart(false), 650);
   };
