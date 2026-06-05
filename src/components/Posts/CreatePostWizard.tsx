@@ -240,9 +240,9 @@ const CreatePostWizard: React.FC<CreatePostWizardProps> = ({ onPostCreated, isOp
   const ensureMusicTrackId = async (): Promise<string | null> => {
     if (!selectedMusicTrack) return null;
     // If id is a real DB uuid (no 'spotify-' prefix), return as-is
-    if (!selectedMusicTrack.id?.startsWith('spotify-')) return selectedMusicTrack.id;
+    if (!selectedMusicTrack.id?.startsWith('spotify-') && !selectedMusicTrack.id?.startsWith('yt-')) return selectedMusicTrack.id;
     // Lenory Free: upsert into music_tracks
-    const ext = selectedMusicTrack.spotify_id || selectedMusicTrack.external_id;
+    const ext = selectedMusicTrack.spotify_id || selectedMusicTrack.external_id || selectedMusicTrack.youtube_id;
     if (!ext) return null;
     const { data: existing } = await supabase.from('music_tracks').select('id').eq('external_id', ext).maybeSingle();
     if (existing?.id) return existing.id;

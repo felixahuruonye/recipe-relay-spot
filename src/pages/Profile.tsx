@@ -70,6 +70,7 @@ const Profile = () => {
       .channel(`profile-${profileId}`)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'post_likes' }, () => fetchUserPosts())
       .on('postgres_changes', { event: '*', schema: 'public', table: 'posts' }, () => { fetchUserPosts(); fetchProfile(); })
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'post_views' }, () => fetchUserPosts())
       .on('postgres_changes', { event: '*', schema: 'public', table: 'post_comments' }, () => fetchUserPosts())
       .on('postgres_changes', { event: '*', schema: 'public', table: 'followers' }, () => fetchProfile())
       .subscribe();
@@ -136,7 +137,11 @@ const Profile = () => {
             .from('post_comments')
             .select('*', { count: 'exact', head: true })
             .eq('post_id', p.id);
-          return { ...p, comments_count: count || 0 };
+          const { count: viewsCount } = await (supabase as any)
+            .from('post_views')
+            .select('*', { count: 'exact', head: true })
+            .eq('post_id', p.id);
+          return { ...p, comments_count: count || 0, view_count: viewsCount ?? p.view_count ?? 0 };
         })
       );
 

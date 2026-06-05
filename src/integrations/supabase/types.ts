@@ -3533,6 +3533,7 @@ export type Database = {
         Args: { p_amount: number; p_meta?: Json; p_type: string }
         Returns: Json
       }
+      sync_post_view_count: { Args: { p_post_id: string }; Returns: undefined }
       track_search: { Args: { search_keyword: string }; Returns: undefined }
       update_post_status: { Args: never; Returns: undefined }
       use_ai_credit: { Args: { p_user_id: string }; Returns: Json }

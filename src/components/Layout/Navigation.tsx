@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
-import { Home, MessageCircle, ShoppingBag, User, Bell, Settings, Mail, Share2, Wallet, Music2, Crown } from 'lucide-react';
+import { Home, MessageCircle, ShoppingBag, User, Bell, Settings, Mail, Share2, Wallet, Plus } from 'lucide-react';
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from '@/components/ui/sheet';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -54,25 +54,54 @@ const Navigation = () => {
 
   const profileMenu = [
     { icon: User, label: 'Profile', path: '/profile', desc: 'Your page & posts' },
-    { icon: Music2, label: 'Musician Dashboard', path: '/musician', desc: 'Upload music & royalties' },
     { icon: Bell, label: 'Activities', path: '/notifications', desc: 'Notifications', badge: notifCount },
     { icon: Mail, label: 'Contact Support', path: '/contact-admin', desc: 'Reach the Lenory team' },
     { icon: Share2, label: 'Share Lenory', path: '/share', desc: 'Invite your friends' },
-    { icon: Crown, label: 'Upgrade to VIP', path: '/vip-subscription', desc: 'Unlock VIP perks' },
     { icon: Settings, label: 'Settings', path: '/settings', desc: 'Privacy & preferences' },
   ];
 
   return (
-    <nav className="fixed bottom-0 left-0 right-0 bg-card/95 backdrop-blur border-t border-border z-50">
-      <div className="flex justify-around items-center h-16 px-1">
-        {tabs.map(({ icon: Icon, label, path, badge }) => {
+    <nav className="fixed bottom-0 left-0 right-0 bg-black/90 backdrop-blur border-t border-white/10 z-50">
+      <div className="flex justify-around items-center h-16 px-1 max-w-[480px] mx-auto">
+        {tabs.slice(0, 2).map(({ icon: Icon, label, path, badge }) => {
           const isActive = location.pathname === path || (path === '/' && location.pathname === '/index');
           const isWatch = path === '/';
           return (
             <button
               key={path}
               onClick={() => { if (isWatch && isActive) window.location.reload(); else navigate(path); }}
-              className={`flex flex-col items-center justify-center flex-1 py-2 transition-colors relative ${isActive ? 'text-primary' : 'text-muted-foreground hover:text-foreground'}`}
+              className={`flex flex-col items-center justify-center flex-1 py-2 transition-colors relative ${isActive ? 'text-white' : 'text-white/50 hover:text-white'}`}
+            >
+              <div className="relative">
+                <Icon size={20} />
+                {(badge ?? 0) > 0 && (
+                  <span className="absolute -top-1.5 -right-2 bg-destructive text-destructive-foreground text-[10px] font-bold rounded-full min-w-[16px] h-4 flex items-center justify-center px-1">
+                    {(badge ?? 0) > 99 ? '99+' : badge}
+                  </span>
+                )}
+              </div>
+              <span className="text-[11px] mt-0.5">{label}</span>
+            </button>
+          );
+        })}
+
+        <button
+          onClick={() => navigate('/?create=post')}
+          className="flex flex-col items-center justify-center flex-1 py-2 -mt-5 relative text-white/70"
+        >
+          <span className="w-14 h-11 rounded-2xl bg-primary flex items-center justify-center shadow-lg shadow-primary/40">
+            <Plus className="w-7 h-7 text-primary-foreground" />
+          </span>
+          <span className="text-[11px] mt-0.5">Create</span>
+        </button>
+
+        {tabs.slice(2).map(({ icon: Icon, label, path, badge }) => {
+          const isActive = location.pathname === path;
+          return (
+            <button
+              key={path}
+              onClick={() => navigate(path)}
+              className={`flex flex-col items-center justify-center flex-1 py-2 transition-colors relative ${isActive ? 'text-white' : 'text-white/50 hover:text-white'}`}
             >
               <div className="relative">
                 <Icon size={20} />
@@ -89,7 +118,7 @@ const Navigation = () => {
 
         <Sheet open={profileOpen} onOpenChange={setProfileOpen}>
           <SheetTrigger asChild>
-            <button className={`flex flex-col items-center justify-center flex-1 py-2 transition-colors relative ${profileOpen ? 'text-primary' : 'text-muted-foreground hover:text-foreground'}`}>
+            <button className={`flex flex-col items-center justify-center flex-1 py-2 transition-colors relative ${profileOpen ? 'text-white' : 'text-white/50 hover:text-white'}`}>
               <div className="relative">
                 <Avatar className="w-6 h-6 ring-1 ring-primary/40">
                   <AvatarImage src={avatar} />

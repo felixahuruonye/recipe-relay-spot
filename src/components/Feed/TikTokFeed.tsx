@@ -8,8 +8,9 @@ import { Button } from '@/components/ui/button';
 import { Switch } from '@/components/ui/switch';
 import {
   Heart, MessageCircle, Share2, Star, Volume2, VolumeX,
-  Plus, Music2, Eye, UserPlus, Send, Copy, Disc,
-  Home, Search, BookOpen, MessageSquare, Menu, X, Clock, Trash2, Edit, Flag, EyeOff, ChevronLeft, ChevronRight, ExternalLink
+  Plus, Music2, Eye, Send, Copy, Disc,
+  Home, Search, MessageSquare, X, Clock, Trash2, Edit, Flag, EyeOff, ChevronLeft, ChevronRight, ExternalLink,
+  Wallet, ShoppingBag, User
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { useToast } from '@/hooks/use-toast';
@@ -141,10 +142,10 @@ const StarNotificationCard: React.FC<{
       initial={{ opacity: 0, scale: 0.9 }}
       animate={{ opacity: 1, scale: 1 }}
       exit={{ opacity: 0, scale: 0.9 }}
-      className="fixed inset-0 z-[100] flex items-center justify-center p-4 pointer-events-none"
+      className="fixed inset-0 z-[100] grid place-items-center p-4 pointer-events-none"
     >
       <div className="absolute inset-0 bg-black/40 pointer-events-auto" onClick={onDismiss} />
-      <div className="relative bg-card/95 backdrop-blur-xl rounded-2xl p-5 shadow-2xl border border-border w-full max-w-[400px] pointer-events-auto">
+      <div className="relative mx-auto w-[calc(100vw-2rem)] max-w-sm bg-card/95 backdrop-blur-xl rounded-2xl p-5 shadow-2xl border border-border pointer-events-auto">
         <h3 className="font-bold text-base mb-1">{cfg.title}</h3>
         <p className="text-sm text-muted-foreground mb-4">{cfg.body}</p>
         <div className="flex gap-2">
@@ -714,9 +715,11 @@ const TikTokPost: React.FC<{
   const musicAudioRef = useRef<HTMLAudioElement>(null);
   const [imageTimer, setImageTimer] = useState(5);
   const [isPaused, setIsPaused] = useState(false);
+  const [showDoubleHeart, setShowDoubleHeart] = useState(false);
   const [mediaIndex, setMediaIndex] = useState(0);
   const imageTimerRef = useRef<NodeJS.Timeout | null>(null);
   const viewQualifiedRef = useRef(false);
+  const lastTapRef = useRef(0);
   const mediaItems = post.media_urls || [];
   const hasMedia = mediaItems.length > 0;
   const activeMedia = mediaItems[Math.min(mediaIndex, Math.max(mediaItems.length - 1, 0))];
@@ -726,6 +729,7 @@ const TikTokPost: React.FC<{
 
   useEffect(() => {
     setMediaIndex(0);
+    setIsPaused(false);
     viewQualifiedRef.current = false;
   }, [post.id]);
 
@@ -742,10 +746,10 @@ const TikTokPost: React.FC<{
 
   useEffect(() => {
     if (musicAudioRef.current) {
-      if (isActive && !isMuted) musicAudioRef.current.play().catch(() => {});
+      if (isActive && !isMuted && !isPaused) musicAudioRef.current.play().catch(() => {});
       else musicAudioRef.current.pause();
     }
-  }, [isActive, isMuted, activeMedia]);
+  }, [isActive, isMuted, isPaused, activeMedia]);
 
   // Video play/pause
   useEffect(() => {
@@ -785,6 +789,28 @@ const TikTokPost: React.FC<{
     action();
   };
 
+  const pulseLike = () => {
+    if (!isLiked) handleAction(onLike, 'Login to like');
+    setShowDoubleHeart(true);
+    setTimeout(() => setShowDoubleHeart(false), 650);
+  };
+
+  const handleMediaTap = () => {
+    const now = Date.now();
+    if (now - lastTapRef.current < 280) {
+      lastTapRef.current = 0;
+      pulseLike();
+      return;
+    }
+    lastTapRef.current = now;
+    if (isVideo && videoRef.current) {
+      if (videoRef.current.paused) videoRef.current.play().catch(() => {});
+      else videoRef.current.pause();
+    } else if (!isVideo) {
+      setIsPaused(prev => !prev);
+    }
+  };
+
   const formatCount = (n: number) => {
     if (n >= 1000000) return (n / 1000000).toFixed(1) + 'M';
     if (n >= 1000) return (n / 1000).toFixed(1) + 'K';
@@ -819,12 +845,12 @@ const TikTokPost: React.FC<{
           }}
           onPlay={() => setIsPaused(false)}
           onPause={() => setIsPaused(true)}
-          onClick={() => { if (videoRef.current?.paused) videoRef.current.play().catch(() => {}); else videoRef.current?.pause(); }}
+          onClick={handleMediaTap}
         />
       ) : hasMedia ? (
-        <img src={displayMedia} alt={post.title} className="relative z-10 max-w-full max-h-full object-contain" loading="lazy" />
+        <img src={displayMedia} alt={post.title} onClick={handleMediaTap} className="relative z-10 max-w-full max-h-full object-contain cursor-pointer" loading="lazy" />
       ) : (
-        <div className="absolute inset-0 bg-gradient-to-br from-primary/80 via-accent/60 to-primary/40 flex items-center justify-center p-8">
+        <div onClick={handleMediaTap} className="absolute inset-0 bg-gradient-to-br from-primary/80 via-accent/60 to-primary/40 flex items-center justify-center p-8 cursor-pointer">
           <div className="text-center space-y-4 max-w-lg">
             <h2 className="text-2xl md:text-3xl font-black text-white leading-tight">{post.title}</h2>
             <p className="text-white/80 text-base leading-relaxed">{post.body}</p>
@@ -875,6 +901,14 @@ const TikTokPost: React.FC<{
           {isMuted ? <VolumeX className="w-4 h-4 text-white" /> : <Volume2 className="w-4 h-4 text-white" />}
         </button>
       )}
+
+      <AnimatePresence>
+        {showDoubleHeart && (
+          <motion.div initial={{ scale: 0.45, opacity: 0 }} animate={{ scale: 1.25, opacity: 1 }} exit={{ scale: 1.65, opacity: 0 }} className="absolute inset-0 z-40 grid place-items-center pointer-events-none">
+            <Heart className="w-24 h-24 fill-red-500 text-red-500 drop-shadow-2xl" />
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       {/* Right action rail */}
       <div className="absolute right-2 bottom-36 z-30 flex flex-col items-center gap-4">
@@ -1014,6 +1048,7 @@ const TikTokFeed: React.FC = () => {
   const [menuOpen, setMenuOpen] = useState(false);
   const [chatCount, setChatCount] = useState(0);
   const [notifCount, setNotifCount] = useState(0);
+  const [storyCount, setStoryCount] = useState(0);
   const [autoSpend, setAutoSpend] = useState(false);
   const [starNotification, setStarNotification] = useState<'low' | 'empty' | 'no_earn' | 'first_time' | 'auto_spend_off' | null>(null);
   const [showStarFloat, setShowStarFloat] = useState(false);
@@ -1021,6 +1056,7 @@ const TikTokFeed: React.FC = () => {
   const [showSuggestedUsers, setShowSuggestedUsers] = useState(false);
   const processingRef = useRef<Set<string>>(new Set());
   const feedRef = useRef<HTMLDivElement>(null);
+  const swipeStartRef = useRef<{ x: number; y: number } | null>(null);
   const viewCooldownRef = useRef<number>(0);
   const dailyViewsRef = useRef<number>(0);
   const autoSpendNoticeRef = useRef(false);
@@ -1056,6 +1092,23 @@ const TikTokFeed: React.FC = () => {
 
   // Fetch posts
   useEffect(() => { fetchPosts(); fetchProducts(); }, []);
+
+  useEffect(() => {
+    const loadStoryCount = async () => {
+      const { count } = await supabase
+        .from('user_storylines')
+        .select('*', { count: 'exact', head: true })
+        .eq('status', 'active')
+        .gt('expires_at', new Date().toISOString());
+      setStoryCount(count || 0);
+    };
+    loadStoryCount();
+    const channel = supabase
+      .channel('home-story-count')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'user_storylines' }, loadStoryCount)
+      .subscribe();
+    return () => { supabase.removeChannel(channel); };
+  }, []);
 
   useEffect(() => {
     const channel = supabase
@@ -1124,7 +1177,6 @@ const TikTokFeed: React.FC = () => {
       const newIndex = Math.round(scrollTop / vh);
       if (newIndex !== activeIndex && newIndex >= 0 && newIndex < feedSlides.length) {
         setActiveIndex(newIndex);
-        if (navigator.vibrate) navigator.vibrate(10);
       }
     };
     el.addEventListener('scroll', handleScroll, { passive: true });
@@ -1138,6 +1190,8 @@ const TikTokFeed: React.FC = () => {
 
   useEffect(() => {
     const postId = new URLSearchParams(window.location.search).get('post');
+    const openCreate = new URLSearchParams(window.location.search).get('create');
+    if (openCreate === 'post' && user) setShowCreatePost(true);
     if (!postId || feedSlides.length === 0 || !feedRef.current) return;
     const targetIndex = feedSlides.findIndex((slide) => slide.type === 'post' && slide.post.id === postId);
     if (targetIndex >= 0) {
@@ -1151,11 +1205,6 @@ const TikTokFeed: React.FC = () => {
     const slide = feedSlides[activeIndex];
     if (!slide || slide.type !== 'post') return;
     const post = slide.post;
-
-    setPostViewCounts(prev => ({
-      ...prev,
-      [post.id]: (prev[post.id] ?? post.view_count ?? 0) + (prev[post.id] !== undefined ? 0 : 1)
-    }));
     if (!user && !processedPosts.has(post.id)) {
       setProcessedPosts(prev => new Set(prev).add(post.id));
       supabase.rpc('record_public_post_view' as any, { p_post_id: post.id }).then(() => fetchPosts());
@@ -1193,6 +1242,7 @@ const TikTokFeed: React.FC = () => {
           const { data } = await supabase.rpc('record_authenticated_post_view' as any, { p_post_id: post.id, p_viewer_id: user.id });
           if ((data as any)?.success) {
             setProcessedPosts(prev => new Set(prev).add(post.id));
+            setPostViewCounts(prev => ({ ...prev, [post.id]: (prev[post.id] ?? post.view_count ?? 0) + ((data as any)?.already_viewed ? 0 : 1) }));
             fetchPosts();
           }
           if (!autoSpendNoticeRef.current) {
@@ -1226,8 +1276,9 @@ const TikTokFeed: React.FC = () => {
         const result = data as any;
         if (result?.success) {
           setProcessedPosts(prev => new Set(prev).add(post.id));
-           loadMyProfile();
-           fetchPosts();
+          setPostViewCounts(prev => ({ ...prev, [post.id]: (prev[post.id] ?? post.view_count ?? 0) + (result.already_viewed ? 0 : 1) }));
+          loadMyProfile();
+          fetchPosts();
           if (result.charged) {
             setLastEarnAmount(result.viewer_earn || 0);
             setShowStarFloat(true);
@@ -1489,17 +1540,28 @@ const TikTokFeed: React.FC = () => {
     setStarNotification(null);
   };
 
+  const handleHomeSwipeEnd = (x: number, y: number) => {
+    const start = swipeStartRef.current;
+    swipeStartRef.current = null;
+    if (!start) return;
+    const dx = x - start.x;
+    const dy = y - start.y;
+    if (Math.abs(dx) < 70 || Math.abs(dx) < Math.abs(dy) * 1.2) return;
+    if (dx < 0) navigate('/explore');
+    else navigate('/storyline');
+  };
+
   const menuItems = [
-    { icon: '🔔', label: 'Notifications', path: '/notifications', badge: notifCount },
+    { icon: '👤', label: 'Profile', path: '/profile' },
+    { icon: '🔔', label: 'Activities', path: '/notifications', badge: notifCount },
+    { icon: '📧', label: 'Contact Support', path: '/contact-admin' },
+    { icon: '🔗', label: 'Share Lenory', path: '/share' },
+    { icon: '⚙️', label: 'Settings', path: '/settings' },
     { icon: '🛒', label: 'Marketplace', path: '/marketplace' },
     { icon: '⭐', label: 'Buy Star To Earn', path: '/star-marketplace' },
     { icon: '👑', label: 'VIP Subscription', path: '/vip-subscription' },
     { icon: '💰', label: 'Wallet', path: '/wallet' },
     { icon: '🎤', label: 'Musician Dashboard', path: '/musician' },
-    { icon: '👤', label: 'Profile', path: '/profile' },
-    { icon: '📧', label: 'Contact Admin', path: '/contact-admin' },
-    { icon: '🔗', label: 'Share Lenory', path: '/share' },
-    { icon: '⚙️', label: 'Settings', path: '/settings' },
   ];
 
   if (loading) {
@@ -1508,7 +1570,7 @@ const TikTokFeed: React.FC = () => {
 
   return (
     <>
-      <div className="h-[100dvh] bg-black flex justify-center">
+      <div className="h-[100dvh] bg-black flex justify-center" onTouchStart={(e) => { const t = e.touches[0]; swipeStartRef.current = { x: t.clientX, y: t.clientY }; }} onTouchEnd={(e) => { const t = e.changedTouches[0]; handleHomeSwipeEnd(t.clientX, t.clientY); }}>
         <div className="relative w-full max-w-[480px] h-full">
           <div
             ref={feedRef}
@@ -1596,15 +1658,15 @@ const TikTokFeed: React.FC = () => {
             )}
           </div>
 
-          {/* TOP HEADER */}
+          {/* TOP HOME UI */}
           <div className="absolute top-0 left-0 right-0 z-40 pointer-events-none">
-            <div className="flex items-center justify-between px-3 pt-2 pointer-events-auto">
+            <div className="flex items-center justify-between px-3 pt-3 pointer-events-auto">
               <h1 className="text-lg font-black text-white drop-shadow-lg tracking-tight" style={{ fontFamily: 'system-ui' }}>
                 Lenory
               </h1>
               <div className="flex items-center gap-2">
                 {user && myProfile && (
-                  <Badge className="bg-yellow-500 text-black text-[10px] gap-1 font-bold shadow-lg px-2">
+                  <Badge className="bg-yellow-500 text-black text-[11px] gap-1 font-bold shadow-lg px-3 py-1 rounded-full">
                     <Star className="w-3 h-3 fill-current" /> {myProfile.star_balance || 0} Stars
                   </Badge>
                 )}
@@ -1619,8 +1681,8 @@ const TikTokFeed: React.FC = () => {
               </div>
             </div>
 
-            <div className="flex items-center justify-between px-3 pt-1.5 pb-1 pointer-events-auto">
-              <div className="flex items-center gap-2">
+            <div className="flex items-center gap-3 px-3 pt-3 pb-1 pointer-events-auto overflow-hidden">
+              <div className="flex items-center gap-2 shrink-0 max-w-[34%]">
                 {user && myProfile && (
                   <div className="flex items-center gap-1.5 bg-black/40 backdrop-blur-sm rounded-full px-2.5 py-1">
                     <span className="text-white font-bold text-xs">₦{(myProfile.wallet_balance || 0).toLocaleString()}</span>
@@ -1630,11 +1692,17 @@ const TikTokFeed: React.FC = () => {
                   </div>
                 )}
               </div>
-              <div className="flex items-center gap-3">
-                <div className="flex items-center gap-1.5">
-                  <Switch checked={autoScroll} onCheckedChange={setAutoScroll} className="scale-75" />
-                </div>
-                <button onClick={() => setShowSearch(true)} className="w-8 h-8 rounded-full bg-black/30 backdrop-blur-sm flex items-center justify-center">
+              <div className="flex items-end justify-center gap-4 flex-1 min-w-0 text-white font-black">
+                <button className="text-base border-b-2 border-white pb-1 whitespace-nowrap" onClick={() => feedRef.current?.scrollTo({ top: 0, behavior: 'smooth' })}>For You</button>
+                <button className="relative text-base text-white/55 pb-1 whitespace-nowrap" onClick={() => user ? navigate('/storyline') : requireLogin('Login for stories')}>
+                  Stories
+                  {storyCount > 0 && <span className="absolute -top-3 -right-4 rounded-full bg-destructive px-1.5 py-0.5 text-[9px] leading-none text-destructive-foreground">{storyCount > 999 ? '1M' : storyCount}</span>}
+                </button>
+                <button className="text-base text-white/55 pb-1 whitespace-nowrap" onClick={() => navigate('/explore')}>Explore</button>
+              </div>
+              <div className="flex items-center gap-2 shrink-0">
+                <Switch checked={autoScroll} onCheckedChange={setAutoScroll} className="scale-75" />
+                <button onClick={() => setShowSearch(true)} className="w-9 h-9 rounded-full bg-black/45 backdrop-blur-sm flex items-center justify-center">
                   <Search className="w-4 h-4 text-white" />
                 </button>
               </div>
@@ -1643,22 +1711,25 @@ const TikTokFeed: React.FC = () => {
 
           {/* BOTTOM NAVIGATION */}
           <div className="absolute bottom-0 left-0 right-0 z-40">
-            <div className="flex items-center justify-around py-1.5 px-1 bg-black/80 backdrop-blur-md border-t border-white/10">
-              <NavBtn icon={Home} label="Home" active onClick={() => feedRef.current?.scrollTo({ top: 0, behavior: 'smooth' })} />
-              <NavBtn icon={Search} label="Explore" onClick={() => navigate('/explore')} />
-              <NavBtn icon={BookOpen} label="Stories" onClick={() => user ? navigate('/storyline') : requireLogin('Login for stories')} />
+            <div className="flex items-center justify-around py-1.5 px-1 bg-black/88 backdrop-blur-md border-t border-white/10">
+              <NavBtn icon={Home} label="Watch" active onClick={() => feedRef.current?.scrollTo({ top: 0, behavior: 'smooth' })} />
+              <NavBtn icon={MessageCircle} label="Chat" badge={chatCount} onClick={() => user ? navigate('/chat') : requireLogin('Login to chat')} />
               <button
                 onClick={() => { if (!user) { requireLogin('Login to post'); return; } setEditPost(null); setShowCreatePost(true); }}
-                className="w-12 h-9 rounded-xl bg-primary flex items-center justify-center -mt-4 shadow-lg shadow-primary/40"
+                className="flex flex-col items-center gap-0.5 relative -mt-5"
               >
-                <Plus className="w-6 h-6 text-primary-foreground" />
+                <span className="w-14 h-11 rounded-2xl bg-primary flex items-center justify-center shadow-lg shadow-primary/40"><Plus className="w-7 h-7 text-primary-foreground" /></span>
+                <span className="text-[10px] text-white/70">Create</span>
               </button>
-              <NavBtn icon={MessageCircle} label="Chat" badge={chatCount} onClick={() => user ? navigate('/chat') : requireLogin('Login to chat')} />
+              <NavBtn icon={Wallet} label="Wallet" onClick={() => user ? navigate('/wallet') : requireLogin('Login for wallet')} />
+              <NavBtn icon={ShoppingBag} label="Market" onClick={() => user ? navigate('/marketplace') : requireLogin('Login for market')} />
               <Sheet open={menuOpen} onOpenChange={setMenuOpen}>
                 <SheetTrigger asChild>
                   <button className="flex flex-col items-center gap-0.5 relative">
-                    <Menu className="w-5 h-5 text-white/50" />
-                    <span className="text-[10px] text-white/50">Menu</span>
+                    {user ? (
+                      <Avatar className="w-6 h-6 ring-1 ring-white/50"><AvatarImage src={myProfile?.avatar_url} /><AvatarFallback className="text-[10px]">{myProfile?.username?.[0]?.toUpperCase() || 'U'}</AvatarFallback></Avatar>
+                    ) : <User className="w-5 h-5 text-white/50" />}
+                    <span className="text-[10px] text-white/50">Profile</span>
                     {notifCount > 0 && (
                       <span className="absolute -top-1 -right-1 min-w-[16px] h-4 rounded-full bg-red-500 text-white text-[8px] flex items-center justify-center font-bold px-1">
                         {notifCount > 99 ? '99+' : notifCount}
@@ -1666,11 +1737,11 @@ const TikTokFeed: React.FC = () => {
                     )}
                   </button>
                 </SheetTrigger>
-                <SheetContent side="bottom" className="h-[75vh]">
-                  <SheetHeader><SheetTitle>Menu</SheetTitle></SheetHeader>
+                <SheetContent side="bottom" className="h-auto max-h-[78vh] rounded-t-2xl">
+                  <SheetHeader><SheetTitle>Profile</SheetTitle></SheetHeader>
                   <ScrollArea className="h-[calc(75vh-5rem)] mt-4">
                     <div className="space-y-1 pr-4">
-                      {menuItems.map(item => (
+                      {menuItems.filter(item => ['Profile', 'Activities', 'Contact Support', 'Share Lenory', 'Settings'].includes(item.label)).map(item => (
                         <button
                           key={item.path}
                           onClick={() => {
