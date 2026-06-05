@@ -1048,6 +1048,7 @@ const TikTokFeed: React.FC = () => {
   const [menuOpen, setMenuOpen] = useState(false);
   const [chatCount, setChatCount] = useState(0);
   const [notifCount, setNotifCount] = useState(0);
+  const [storyCount, setStoryCount] = useState(0);
   const [autoSpend, setAutoSpend] = useState(false);
   const [starNotification, setStarNotification] = useState<'low' | 'empty' | 'no_earn' | 'first_time' | 'auto_spend_off' | null>(null);
   const [showStarFloat, setShowStarFloat] = useState(false);
@@ -1090,6 +1091,23 @@ const TikTokFeed: React.FC = () => {
 
   // Fetch posts
   useEffect(() => { fetchPosts(); fetchProducts(); }, []);
+
+  useEffect(() => {
+    const loadStoryCount = async () => {
+      const { count } = await supabase
+        .from('user_storylines')
+        .select('*', { count: 'exact', head: true })
+        .eq('status', 'active')
+        .gt('expires_at', new Date().toISOString());
+      setStoryCount(count || 0);
+    };
+    loadStoryCount();
+    const channel = supabase
+      .channel('home-story-count')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'user_storylines' }, loadStoryCount)
+      .subscribe();
+    return () => { supabase.removeChannel(channel); };
+  }, []);
 
   useEffect(() => {
     const channel = supabase
@@ -1172,6 +1190,8 @@ const TikTokFeed: React.FC = () => {
 
   useEffect(() => {
     const postId = new URLSearchParams(window.location.search).get('post');
+    const openCreate = new URLSearchParams(window.location.search).get('create');
+    if (openCreate === 'post' && user) setShowCreatePost(true);
     if (!postId || feedSlides.length === 0 || !feedRef.current) return;
     const targetIndex = feedSlides.findIndex((slide) => slide.type === 'post' && slide.post.id === postId);
     if (targetIndex >= 0) {
