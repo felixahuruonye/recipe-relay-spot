@@ -1659,15 +1659,15 @@ const TikTokFeed: React.FC = () => {
             )}
           </div>
 
-          {/* TOP HEADER */}
+          {/* TOP HOME UI */}
           <div className="absolute top-0 left-0 right-0 z-40 pointer-events-none">
-            <div className="flex items-center justify-between px-3 pt-2 pointer-events-auto">
+            <div className="flex items-center justify-between px-3 pt-3 pointer-events-auto">
               <h1 className="text-lg font-black text-white drop-shadow-lg tracking-tight" style={{ fontFamily: 'system-ui' }}>
                 Lenory
               </h1>
               <div className="flex items-center gap-2">
                 {user && myProfile && (
-                  <Badge className="bg-yellow-500 text-black text-[10px] gap-1 font-bold shadow-lg px-2">
+                  <Badge className="bg-yellow-500 text-black text-[11px] gap-1 font-bold shadow-lg px-3 py-1 rounded-full">
                     <Star className="w-3 h-3 fill-current" /> {myProfile.star_balance || 0} Stars
                   </Badge>
                 )}
@@ -1682,8 +1682,8 @@ const TikTokFeed: React.FC = () => {
               </div>
             </div>
 
-            <div className="flex items-center justify-between px-3 pt-1.5 pb-1 pointer-events-auto">
-              <div className="flex items-center gap-2">
+            <div className="flex items-center gap-3 px-3 pt-3 pb-1 pointer-events-auto overflow-hidden">
+              <div className="flex items-center gap-2 shrink-0 max-w-[34%]">
                 {user && myProfile && (
                   <div className="flex items-center gap-1.5 bg-black/40 backdrop-blur-sm rounded-full px-2.5 py-1">
                     <span className="text-white font-bold text-xs">₦{(myProfile.wallet_balance || 0).toLocaleString()}</span>
@@ -1693,11 +1693,17 @@ const TikTokFeed: React.FC = () => {
                   </div>
                 )}
               </div>
-              <div className="flex items-center gap-3">
-                <div className="flex items-center gap-1.5">
-                  <Switch checked={autoScroll} onCheckedChange={setAutoScroll} className="scale-75" />
-                </div>
-                <button onClick={() => setShowSearch(true)} className="w-8 h-8 rounded-full bg-black/30 backdrop-blur-sm flex items-center justify-center">
+              <div className="flex items-end justify-center gap-4 flex-1 min-w-0 text-white font-black">
+                <button className="text-base border-b-2 border-white pb-1 whitespace-nowrap" onClick={() => feedRef.current?.scrollTo({ top: 0, behavior: 'smooth' })}>For You</button>
+                <button className="relative text-base text-white/55 pb-1 whitespace-nowrap" onClick={() => user ? navigate('/storyline') : requireLogin('Login for stories')}>
+                  Stories
+                  {storyCount > 0 && <span className="absolute -top-3 -right-4 rounded-full bg-destructive px-1.5 py-0.5 text-[9px] leading-none text-destructive-foreground">{storyCount > 999 ? '1M' : storyCount}</span>}
+                </button>
+                <button className="text-base text-white/55 pb-1 whitespace-nowrap" onClick={() => navigate('/explore')}>Explore</button>
+              </div>
+              <div className="flex items-center gap-2 shrink-0">
+                <Switch checked={autoScroll} onCheckedChange={setAutoScroll} className="scale-75" />
+                <button onClick={() => setShowSearch(true)} className="w-9 h-9 rounded-full bg-black/45 backdrop-blur-sm flex items-center justify-center">
                   <Search className="w-4 h-4 text-white" />
                 </button>
               </div>
@@ -1706,22 +1712,25 @@ const TikTokFeed: React.FC = () => {
 
           {/* BOTTOM NAVIGATION */}
           <div className="absolute bottom-0 left-0 right-0 z-40">
-            <div className="flex items-center justify-around py-1.5 px-1 bg-black/80 backdrop-blur-md border-t border-white/10">
-              <NavBtn icon={Home} label="Home" active onClick={() => feedRef.current?.scrollTo({ top: 0, behavior: 'smooth' })} />
-              <NavBtn icon={Search} label="Explore" onClick={() => navigate('/explore')} />
-              <NavBtn icon={BookOpen} label="Stories" onClick={() => user ? navigate('/storyline') : requireLogin('Login for stories')} />
+            <div className="flex items-center justify-around py-1.5 px-1 bg-black/88 backdrop-blur-md border-t border-white/10">
+              <NavBtn icon={Home} label="Watch" active onClick={() => feedRef.current?.scrollTo({ top: 0, behavior: 'smooth' })} />
+              <NavBtn icon={MessageCircle} label="Chat" badge={chatCount} onClick={() => user ? navigate('/chat') : requireLogin('Login to chat')} />
               <button
                 onClick={() => { if (!user) { requireLogin('Login to post'); return; } setEditPost(null); setShowCreatePost(true); }}
-                className="w-12 h-9 rounded-xl bg-primary flex items-center justify-center -mt-4 shadow-lg shadow-primary/40"
+                className="flex flex-col items-center gap-0.5 relative -mt-5"
               >
-                <Plus className="w-6 h-6 text-primary-foreground" />
+                <span className="w-14 h-11 rounded-2xl bg-primary flex items-center justify-center shadow-lg shadow-primary/40"><Plus className="w-7 h-7 text-primary-foreground" /></span>
+                <span className="text-[10px] text-white/70">Create</span>
               </button>
-              <NavBtn icon={MessageCircle} label="Chat" badge={chatCount} onClick={() => user ? navigate('/chat') : requireLogin('Login to chat')} />
+              <NavBtn icon={Wallet} label="Wallet" onClick={() => user ? navigate('/wallet') : requireLogin('Login for wallet')} />
+              <NavBtn icon={ShoppingBag} label="Market" onClick={() => user ? navigate('/marketplace') : requireLogin('Login for market')} />
               <Sheet open={menuOpen} onOpenChange={setMenuOpen}>
                 <SheetTrigger asChild>
                   <button className="flex flex-col items-center gap-0.5 relative">
-                    <Menu className="w-5 h-5 text-white/50" />
-                    <span className="text-[10px] text-white/50">Menu</span>
+                    {user ? (
+                      <Avatar className="w-6 h-6 ring-1 ring-white/50"><AvatarImage src={myProfile?.avatar_url} /><AvatarFallback className="text-[10px]">{myProfile?.username?.[0]?.toUpperCase() || 'U'}</AvatarFallback></Avatar>
+                    ) : <User className="w-5 h-5 text-white/50" />}
+                    <span className="text-[10px] text-white/50">Profile</span>
                     {notifCount > 0 && (
                       <span className="absolute -top-1 -right-1 min-w-[16px] h-4 rounded-full bg-red-500 text-white text-[8px] flex items-center justify-center font-bold px-1">
                         {notifCount > 99 ? '99+' : notifCount}
@@ -1729,11 +1738,11 @@ const TikTokFeed: React.FC = () => {
                     )}
                   </button>
                 </SheetTrigger>
-                <SheetContent side="bottom" className="h-[75vh]">
-                  <SheetHeader><SheetTitle>Menu</SheetTitle></SheetHeader>
+                <SheetContent side="bottom" className="h-auto max-h-[78vh] rounded-t-2xl">
+                  <SheetHeader><SheetTitle>Profile</SheetTitle></SheetHeader>
                   <ScrollArea className="h-[calc(75vh-5rem)] mt-4">
                     <div className="space-y-1 pr-4">
-                      {menuItems.map(item => (
+                      {menuItems.filter(item => ['Profile', 'Notifications', 'Contact Admin', 'Share Lenory', 'Settings'].includes(item.label)).map(item => (
                         <button
                           key={item.path}
                           onClick={() => {
