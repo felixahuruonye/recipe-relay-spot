@@ -1553,16 +1553,16 @@ const TikTokFeed: React.FC = () => {
   };
 
   const menuItems = [
-    { icon: '🔔', label: 'Notifications', path: '/notifications', badge: notifCount },
+    { icon: '👤', label: 'Profile', path: '/profile' },
+    { icon: '🔔', label: 'Activities', path: '/notifications', badge: notifCount },
+    { icon: '📧', label: 'Contact Support', path: '/contact-admin' },
+    { icon: '🔗', label: 'Share Lenory', path: '/share' },
+    { icon: '⚙️', label: 'Settings', path: '/settings' },
     { icon: '🛒', label: 'Marketplace', path: '/marketplace' },
     { icon: '⭐', label: 'Buy Star To Earn', path: '/star-marketplace' },
     { icon: '👑', label: 'VIP Subscription', path: '/vip-subscription' },
     { icon: '💰', label: 'Wallet', path: '/wallet' },
     { icon: '🎤', label: 'Musician Dashboard', path: '/musician' },
-    { icon: '👤', label: 'Profile', path: '/profile' },
-    { icon: '📧', label: 'Contact Admin', path: '/contact-admin' },
-    { icon: '🔗', label: 'Share Lenory', path: '/share' },
-    { icon: '⚙️', label: 'Settings', path: '/settings' },
   ];
 
   if (loading) {
@@ -1742,7 +1742,7 @@ const TikTokFeed: React.FC = () => {
                   <SheetHeader><SheetTitle>Profile</SheetTitle></SheetHeader>
                   <ScrollArea className="h-[calc(75vh-5rem)] mt-4">
                     <div className="space-y-1 pr-4">
-                      {menuItems.filter(item => ['Profile', 'Notifications', 'Contact Admin', 'Share Lenory', 'Settings'].includes(item.label)).map(item => (
+                      {menuItems.filter(item => ['Profile', 'Activities', 'Contact Support', 'Share Lenory', 'Settings'].includes(item.label)).map(item => (
                         <button
                           key={item.path}
                           onClick={() => {
