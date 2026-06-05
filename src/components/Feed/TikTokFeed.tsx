@@ -9,8 +9,8 @@ import { Switch } from '@/components/ui/switch';
 import {
   Heart, MessageCircle, Share2, Star, Volume2, VolumeX,
   Plus, Music2, Eye, UserPlus, Send, Copy, Disc,
-  Home, Search, BookOpen, MessageSquare, Menu, X, Clock, Trash2, Edit, Flag, EyeOff, ChevronLeft, ChevronRight, ExternalLink,
-  Wallet, ShoppingBag, User, Compass
+  Home, Search, MessageSquare, Menu, X, Clock, Trash2, Edit, Flag, EyeOff, ChevronLeft, ChevronRight, ExternalLink,
+  Wallet, ShoppingBag, User
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { useToast } from '@/hooks/use-toast';
