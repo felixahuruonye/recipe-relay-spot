@@ -63,7 +63,7 @@ const Navigation = () => {
   return (
     <nav className="fixed bottom-0 left-0 right-0 bg-black/90 backdrop-blur border-t border-white/10 z-50">
       <div className="flex justify-around items-center h-16 px-1 max-w-[480px] mx-auto">
-        {tabs.map(({ icon: Icon, label, path, badge }) => {
+        {tabs.slice(0, 2).map(({ icon: Icon, label, path, badge }) => {
           const isActive = location.pathname === path || (path === '/' && location.pathname === '/index');
           const isWatch = path === '/';
           return (
@@ -94,6 +94,27 @@ const Navigation = () => {
           </span>
           <span className="text-[11px] mt-0.5">Create</span>
         </button>
+
+        {tabs.slice(2).map(({ icon: Icon, label, path, badge }) => {
+          const isActive = location.pathname === path;
+          return (
+            <button
+              key={path}
+              onClick={() => navigate(path)}
+              className={`flex flex-col items-center justify-center flex-1 py-2 transition-colors relative ${isActive ? 'text-white' : 'text-white/50 hover:text-white'}`}
+            >
+              <div className="relative">
+                <Icon size={20} />
+                {(badge ?? 0) > 0 && (
+                  <span className="absolute -top-1.5 -right-2 bg-destructive text-destructive-foreground text-[10px] font-bold rounded-full min-w-[16px] h-4 flex items-center justify-center px-1">
+                    {(badge ?? 0) > 99 ? '99+' : badge}
+                  </span>
+                )}
+              </div>
+              <span className="text-[11px] mt-0.5">{label}</span>
+            </button>
+          );
+        })}
 
         <Sheet open={profileOpen} onOpenChange={setProfileOpen}>
           <SheetTrigger asChild>
