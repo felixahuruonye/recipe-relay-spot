@@ -82,8 +82,16 @@ export const EnhancedStorylineViewer: React.FC<StorylineViewerProps> = ({ userId
       checkCommentsEnabled();
       setPaymentProcessed(false);
       setImageTimer(null);
+      setMediaPaused(false);
     }
   }, [currentIndex, stories]);
+
+  useEffect(() => {
+    const audio = audioRef.current;
+    if (!audio) return;
+    if (mediaPaused) audio.pause();
+    else audio.play().catch(() => {});
+  }, [mediaPaused, currentIndex]);
 
   // Real-time updates for view count
   useEffect(() => {
@@ -587,6 +595,9 @@ export const EnhancedStorylineViewer: React.FC<StorylineViewerProps> = ({ userId
 
   const currentStory = stories[currentIndex];
   const isPaidStory = currentStory.star_price > 0 && currentStory.user_id !== user?.id;
+  const currentTrack = currentStory.music_track_id ? storyTracks[currentStory.music_track_id] : null;
+  const youtubeId = currentTrack?.youtube_id;
+  const audioUrl = currentTrack?.audio_url || currentStory.music_url;
 
   return (
     <>
