@@ -676,6 +676,8 @@ export const EnhancedStorylineViewer: React.FC<StorylineViewerProps> = ({ userId
                       className="max-h-full max-w-full"
                       autoPlay
                       onEnded={handleVideoEnd}
+                      onPlay={() => setMediaPaused(false)}
+                      onPause={() => setMediaPaused(true)}
                     />
                   </div>
                 ) : (
@@ -684,11 +686,14 @@ export const EnhancedStorylineViewer: React.FC<StorylineViewerProps> = ({ userId
                     alt="Story"
                     className="max-h-full max-w-full object-contain"
                     loading="lazy"
+                    onClick={() => setMediaPaused(prev => !prev)}
                   />
                 )}
 
-                {currentStory.music_url && (
-                  <audio src={currentStory.music_url} autoPlay loop className="hidden" />
+                {youtubeId ? (
+                  <YouTubeAudio videoId={youtubeId} playing={!mediaPaused} muted={false} volume={45} loop />
+                ) : audioUrl && (
+                  <audio ref={audioRef} src={audioUrl} autoPlay loop className="hidden" />
                 )}
               </>
 
