@@ -8,8 +8,8 @@ import { Button } from '@/components/ui/button';
 import { Switch } from '@/components/ui/switch';
 import {
   Heart, MessageCircle, Share2, Star, Volume2, VolumeX,
-  Plus, Music2, Eye, UserPlus, Send, Copy, Disc,
-  Home, Search, MessageSquare, Menu, X, Clock, Trash2, Edit, Flag, EyeOff, ChevronLeft, ChevronRight, ExternalLink,
+  Plus, Music2, Eye, Send, Copy, Disc,
+  Home, Search, MessageSquare, X, Clock, Trash2, Edit, Flag, EyeOff, ChevronLeft, ChevronRight, ExternalLink,
   Wallet, ShoppingBag, User
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
