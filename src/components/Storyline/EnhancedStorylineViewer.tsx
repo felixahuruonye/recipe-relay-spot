@@ -11,6 +11,7 @@ import { useToast } from '@/hooks/use-toast';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { useNavigate } from 'react-router-dom';
 import { ensureUserProfile } from '@/lib/ensureUserProfile';
+import YouTubeAudio from '@/components/Music/YouTubeAudio';
 
 interface Story {
   id: string;
@@ -22,6 +23,7 @@ interface Story {
   star_price: number;
   view_count: number;
   music_url: string | null;
+  music_track_id?: string | null;
   user?: {
     username: string;
     avatar_url: string;
@@ -53,7 +55,10 @@ export const EnhancedStorylineViewer: React.FC<StorylineViewerProps> = ({ userId
   const [imageTimer, setImageTimer] = useState<number | null>(null);
   const [isProcessingPayment, setIsProcessingPayment] = useState(false);
   const [paymentProcessed, setPaymentProcessed] = useState(false);
+  const [storyTracks, setStoryTracks] = useState<Record<string, any>>({});
+  const [mediaPaused, setMediaPaused] = useState(false);
   const videoRef = useRef<HTMLVideoElement>(null);
+  const audioRef = useRef<HTMLAudioElement>(null);
   const timerRef = useRef<NodeJS.Timeout | null>(null);
 
   useEffect(() => {
@@ -364,6 +369,17 @@ export const EnhancedStorylineViewer: React.FC<StorylineViewerProps> = ({ userId
       ...story,
       user: profileMap.get(story.user_id)
     }));
+
+    const musicIds = [...new Set(storiesWithUsers.map((s: any) => s.music_track_id).filter(Boolean))];
+    if (musicIds.length > 0) {
+      const { data: tracks } = await supabase
+        .from('music_tracks')
+        .select('id, title, artist_name, audio_url, youtube_id, source')
+        .in('id', musicIds as string[]);
+      setStoryTracks(Object.fromEntries((tracks || []).map((t: any) => [t.id, t])));
+    } else {
+      setStoryTracks({});
+    }
 
     setStories(storiesWithUsers as any);
   };
