@@ -1205,11 +1205,6 @@ const TikTokFeed: React.FC = () => {
     const slide = feedSlides[activeIndex];
     if (!slide || slide.type !== 'post') return;
     const post = slide.post;
-
-    setPostViewCounts(prev => ({
-      ...prev,
-      [post.id]: (prev[post.id] ?? post.view_count ?? 0) + (prev[post.id] !== undefined ? 0 : 1)
-    }));
     if (!user && !processedPosts.has(post.id)) {
       setProcessedPosts(prev => new Set(prev).add(post.id));
       supabase.rpc('record_public_post_view' as any, { p_post_id: post.id }).then(() => fetchPosts());
@@ -1247,6 +1242,7 @@ const TikTokFeed: React.FC = () => {
           const { data } = await supabase.rpc('record_authenticated_post_view' as any, { p_post_id: post.id, p_viewer_id: user.id });
           if ((data as any)?.success) {
             setProcessedPosts(prev => new Set(prev).add(post.id));
+            setPostViewCounts(prev => ({ ...prev, [post.id]: (prev[post.id] ?? post.view_count ?? 0) + ((data as any)?.already_viewed ? 0 : 1) }));
             fetchPosts();
           }
           if (!autoSpendNoticeRef.current) {
@@ -1280,8 +1276,9 @@ const TikTokFeed: React.FC = () => {
         const result = data as any;
         if (result?.success) {
           setProcessedPosts(prev => new Set(prev).add(post.id));
-           loadMyProfile();
-           fetchPosts();
+          setPostViewCounts(prev => ({ ...prev, [post.id]: (prev[post.id] ?? post.view_count ?? 0) + (result.already_viewed ? 0 : 1) }));
+          loadMyProfile();
+          fetchPosts();
           if (result.charged) {
             setLastEarnAmount(result.viewer_earn || 0);
             setShowStarFloat(true);
