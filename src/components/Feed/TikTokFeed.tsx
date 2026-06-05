@@ -1056,6 +1056,7 @@ const TikTokFeed: React.FC = () => {
   const [showSuggestedUsers, setShowSuggestedUsers] = useState(false);
   const processingRef = useRef<Set<string>>(new Set());
   const feedRef = useRef<HTMLDivElement>(null);
+  const swipeStartRef = useRef<{ x: number; y: number } | null>(null);
   const viewCooldownRef = useRef<number>(0);
   const dailyViewsRef = useRef<number>(0);
   const autoSpendNoticeRef = useRef(false);
@@ -1540,6 +1541,17 @@ const TikTokFeed: React.FC = () => {
     setStarNotification(null);
   };
 
+  const handleHomeSwipeEnd = (x: number, y: number) => {
+    const start = swipeStartRef.current;
+    swipeStartRef.current = null;
+    if (!start) return;
+    const dx = x - start.x;
+    const dy = y - start.y;
+    if (Math.abs(dx) < 70 || Math.abs(dx) < Math.abs(dy) * 1.2) return;
+    if (dx < 0) navigate('/explore');
+    else navigate('/storyline');
+  };
+
   const menuItems = [
     { icon: '🔔', label: 'Notifications', path: '/notifications', badge: notifCount },
     { icon: '🛒', label: 'Marketplace', path: '/marketplace' },
@@ -1559,7 +1571,7 @@ const TikTokFeed: React.FC = () => {
 
   return (
     <>
-      <div className="h-[100dvh] bg-black flex justify-center">
+      <div className="h-[100dvh] bg-black flex justify-center" onTouchStart={(e) => { const t = e.touches[0]; swipeStartRef.current = { x: t.clientX, y: t.clientY }; }} onTouchEnd={(e) => { const t = e.changedTouches[0]; handleHomeSwipeEnd(t.clientX, t.clientY); }}>
         <div className="relative w-full max-w-[480px] h-full">
           <div
             ref={feedRef}
