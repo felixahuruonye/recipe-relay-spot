@@ -9,7 +9,8 @@ import { Switch } from '@/components/ui/switch';
 import {
   Heart, MessageCircle, Share2, Star, Volume2, VolumeX,
   Plus, Music2, Eye, UserPlus, Send, Copy, Disc,
-  Home, Search, BookOpen, MessageSquare, Menu, X, Clock, Trash2, Edit, Flag, EyeOff, ChevronLeft, ChevronRight, ExternalLink
+  Home, Search, BookOpen, MessageSquare, Menu, X, Clock, Trash2, Edit, Flag, EyeOff, ChevronLeft, ChevronRight, ExternalLink,
+  Wallet, ShoppingBag, User, Compass
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { useToast } from '@/hooks/use-toast';
@@ -141,10 +142,10 @@ const StarNotificationCard: React.FC<{
       initial={{ opacity: 0, scale: 0.9 }}
       animate={{ opacity: 1, scale: 1 }}
       exit={{ opacity: 0, scale: 0.9 }}
-      className="fixed inset-0 z-[100] flex items-center justify-center p-4 pointer-events-none"
+      className="fixed inset-0 z-[100] grid place-items-center p-4 pointer-events-none"
     >
       <div className="absolute inset-0 bg-black/40 pointer-events-auto" onClick={onDismiss} />
-      <div className="relative bg-card/95 backdrop-blur-xl rounded-2xl p-5 shadow-2xl border border-border w-full max-w-[400px] pointer-events-auto">
+      <div className="relative mx-auto w-[calc(100vw-2rem)] max-w-sm bg-card/95 backdrop-blur-xl rounded-2xl p-5 shadow-2xl border border-border pointer-events-auto">
         <h3 className="font-bold text-base mb-1">{cfg.title}</h3>
         <p className="text-sm text-muted-foreground mb-4">{cfg.body}</p>
         <div className="flex gap-2">
