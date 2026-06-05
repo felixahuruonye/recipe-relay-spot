@@ -715,9 +715,11 @@ const TikTokPost: React.FC<{
   const musicAudioRef = useRef<HTMLAudioElement>(null);
   const [imageTimer, setImageTimer] = useState(5);
   const [isPaused, setIsPaused] = useState(false);
+  const [showDoubleHeart, setShowDoubleHeart] = useState(false);
   const [mediaIndex, setMediaIndex] = useState(0);
   const imageTimerRef = useRef<NodeJS.Timeout | null>(null);
   const viewQualifiedRef = useRef(false);
+  const lastTapRef = useRef(0);
   const mediaItems = post.media_urls || [];
   const hasMedia = mediaItems.length > 0;
   const activeMedia = mediaItems[Math.min(mediaIndex, Math.max(mediaItems.length - 1, 0))];
@@ -727,6 +729,7 @@ const TikTokPost: React.FC<{
 
   useEffect(() => {
     setMediaIndex(0);
+    setIsPaused(false);
     viewQualifiedRef.current = false;
   }, [post.id]);
 
@@ -743,10 +746,10 @@ const TikTokPost: React.FC<{
 
   useEffect(() => {
     if (musicAudioRef.current) {
-      if (isActive && !isMuted) musicAudioRef.current.play().catch(() => {});
+      if (isActive && !isMuted && !isPaused) musicAudioRef.current.play().catch(() => {});
       else musicAudioRef.current.pause();
     }
-  }, [isActive, isMuted, activeMedia]);
+  }, [isActive, isMuted, isPaused, activeMedia]);
 
   // Video play/pause
   useEffect(() => {
@@ -786,6 +789,28 @@ const TikTokPost: React.FC<{
     action();
   };
 
+  const pulseLike = () => {
+    handleAction(onLike, 'Login to like');
+    setShowDoubleHeart(true);
+    setTimeout(() => setShowDoubleHeart(false), 650);
+  };
+
+  const handleMediaTap = () => {
+    const now = Date.now();
+    if (now - lastTapRef.current < 280) {
+      lastTapRef.current = 0;
+      pulseLike();
+      return;
+    }
+    lastTapRef.current = now;
+    if (isVideo && videoRef.current) {
+      if (videoRef.current.paused) videoRef.current.play().catch(() => {});
+      else videoRef.current.pause();
+    } else if (!isVideo) {
+      setIsPaused(prev => !prev);
+    }
+  };
+
   const formatCount = (n: number) => {
     if (n >= 1000000) return (n / 1000000).toFixed(1) + 'M';
     if (n >= 1000) return (n / 1000).toFixed(1) + 'K';
@@ -820,12 +845,12 @@ const TikTokPost: React.FC<{
           }}
           onPlay={() => setIsPaused(false)}
           onPause={() => setIsPaused(true)}
-          onClick={() => { if (videoRef.current?.paused) videoRef.current.play().catch(() => {}); else videoRef.current?.pause(); }}
+          onClick={handleMediaTap}
         />
       ) : hasMedia ? (
-        <img src={displayMedia} alt={post.title} className="relative z-10 max-w-full max-h-full object-contain" loading="lazy" />
+        <img src={displayMedia} alt={post.title} onClick={handleMediaTap} className="relative z-10 max-w-full max-h-full object-contain cursor-pointer" loading="lazy" />
       ) : (
-        <div className="absolute inset-0 bg-gradient-to-br from-primary/80 via-accent/60 to-primary/40 flex items-center justify-center p-8">
+        <div onClick={handleMediaTap} className="absolute inset-0 bg-gradient-to-br from-primary/80 via-accent/60 to-primary/40 flex items-center justify-center p-8 cursor-pointer">
           <div className="text-center space-y-4 max-w-lg">
             <h2 className="text-2xl md:text-3xl font-black text-white leading-tight">{post.title}</h2>
             <p className="text-white/80 text-base leading-relaxed">{post.body}</p>
@@ -876,6 +901,14 @@ const TikTokPost: React.FC<{
           {isMuted ? <VolumeX className="w-4 h-4 text-white" /> : <Volume2 className="w-4 h-4 text-white" />}
         </button>
       )}
+
+      <AnimatePresence>
+        {showDoubleHeart && (
+          <motion.div initial={{ scale: 0.45, opacity: 0 }} animate={{ scale: 1.25, opacity: 1 }} exit={{ scale: 1.65, opacity: 0 }} className="absolute inset-0 z-40 grid place-items-center pointer-events-none">
+            <Heart className="w-24 h-24 fill-red-500 text-red-500 drop-shadow-2xl" />
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       {/* Right action rail */}
       <div className="absolute right-2 bottom-36 z-30 flex flex-col items-center gap-4">
