@@ -1177,7 +1177,6 @@ const TikTokFeed: React.FC = () => {
       const newIndex = Math.round(scrollTop / vh);
       if (newIndex !== activeIndex && newIndex >= 0 && newIndex < feedSlides.length) {
         setActiveIndex(newIndex);
-        if (navigator.vibrate) navigator.vibrate(10);
       }
     };
     el.addEventListener('scroll', handleScroll, { passive: true });
