@@ -1,0 +1,2 @@
+ALTER TABLE public.comment_replies ADD COLUMN IF NOT EXISTS parent_reply_id TEXT REFERENCES public.comment_replies(id) ON DELETE CASCADE;
+CREATE INDEX IF NOT EXISTS idx_comment_replies_parent ON public.comment_replies(parent_reply_id);

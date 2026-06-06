@@ -414,6 +414,7 @@ export type Database = {
           content: string
           created_at: string
           id: string
+          parent_reply_id: string | null
           updated_at: string
           user_id: string
         }
@@ -422,6 +423,7 @@ export type Database = {
           content: string
           created_at?: string
           id?: string
+          parent_reply_id?: string | null
           updated_at?: string
           user_id: string
         }
@@ -430,6 +432,7 @@ export type Database = {
           content?: string
           created_at?: string
           id?: string
+          parent_reply_id?: string | null
           updated_at?: string
           user_id?: string
         }
@@ -439,6 +442,13 @@ export type Database = {
             columns: ["comment_id"]
             isOneToOne: false
             referencedRelation: "post_comments"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "comment_replies_parent_reply_id_fkey"
+            columns: ["parent_reply_id"]
+            isOneToOne: false
+            referencedRelation: "comment_replies"
             referencedColumns: ["id"]
           },
         ]
