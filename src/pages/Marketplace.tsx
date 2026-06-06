@@ -190,8 +190,12 @@ const Marketplace = () => {
     const results = await Promise.all(productImages.map(async (file, i) => {
       const ext = file.name.split('.').pop();
       const fileName = `${user.id}/products/${Date.now()}-${i}.${ext}`;
-      const { error } = await supabase.storage.from('post-media').upload(fileName, file);
-      if (error) return null;
+      const { error } = await supabase.storage.from('post-media').upload(fileName, file, { upsert: false, contentType: file.type });
+      if (error) {
+        console.error('Product image upload failed:', error);
+        toast({ title: 'Image upload failed', description: error.message, variant: 'destructive' });
+        return null;
+      }
       return supabase.storage.from('post-media').getPublicUrl(fileName).data.publicUrl;
     }));
     return results.filter((u): u is string => u !== null);
