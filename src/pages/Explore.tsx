@@ -325,7 +325,7 @@ const Explore = () => {
                       <p className="text-xs text-muted-foreground">{post.user_profiles?.username} · {new Date(post.created_at).toLocaleDateString()}</p>
                     </div>
                     {post.media_urls?.[0] && (
-                      <img src={post.media_urls[0]} alt="" className="w-12 h-12 rounded object-cover" />
+                      <MediaThumb post={post} className="w-12 h-12 rounded" />
                     )}
                   </CardContent>
                 </Card>
