@@ -229,14 +229,17 @@ const Explore = () => {
       </div>
 
       <Tabs defaultValue="posts" className="space-y-4">
-        <TabsList className="grid w-full grid-cols-6">
-          <TabsTrigger value="posts">🔥 Hot</TabsTrigger>
-          <TabsTrigger value="creators">👑 Creators</TabsTrigger>
-          <TabsTrigger value="keywords">🔍 Trending</TabsTrigger>
-          <TabsTrigger value="musicians">🎵 Music</TabsTrigger>
-          <TabsTrigger value="earning">💰 Earn</TabsTrigger>
-          <TabsTrigger value="ideas">✨ AI</TabsTrigger>
-        </TabsList>
+        <div className="overflow-x-auto scrollbar-hide -mx-4 px-4">
+          <TabsList className="inline-flex w-max gap-1 bg-muted/50 p-1">
+            <TabsTrigger value="posts" className="whitespace-nowrap">🔥 Hot</TabsTrigger>
+            <TabsTrigger value="creators" className="whitespace-nowrap">👑 Creators</TabsTrigger>
+            <TabsTrigger value="keywords" className="whitespace-nowrap">🔍 Trending</TabsTrigger>
+            <TabsTrigger value="musicians" className="whitespace-nowrap">🎵 Music</TabsTrigger>
+            <TabsTrigger value="earning" className="whitespace-nowrap">💰 Earn</TabsTrigger>
+            <TabsTrigger value="ideas" className="whitespace-nowrap">✨ AI</TabsTrigger>
+          </TabsList>
+        </div>
+
 
         {/* Hot Posts */}
         <TabsContent value="posts" className="space-y-4">
