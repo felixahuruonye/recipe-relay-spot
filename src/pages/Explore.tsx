@@ -211,11 +211,8 @@ const Explore = () => {
               <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
                 {searchResults.map((p) => (
                   <button key={p.id} onClick={() => navigate(`/?post=${p.id}`)} className="text-left group">
-                    {p.media_urls?.[0] ? (
-                      <img src={p.media_urls[0]} className="w-full aspect-square object-cover rounded-md group-hover:opacity-80" alt={p.title} />
-                    ) : (
-                      <div className="w-full aspect-square rounded-md bg-gradient-to-br from-primary/30 to-accent/30" />
-                    )}
+                    <MediaThumb post={p} className="w-full aspect-square rounded-md group-hover:opacity-80" />
+
                     <p className="text-xs mt-1 line-clamp-2">{p.title}</p>
                     <p className="text-[10px] text-muted-foreground flex items-center gap-2">
                       <Eye className="w-3 h-3" /> {p.view_count || 0}
