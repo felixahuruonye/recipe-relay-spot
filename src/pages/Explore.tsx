@@ -16,12 +16,27 @@ interface TrendingPost {
   body: string;
   category: string;
   media_urls: string[];
+  thumbnail_url?: string | null;
+  media_type?: string | null;
   view_count: number;
   likes_count: number;
   comments_count: number;
   created_at: string;
   user_id: string;
 }
+
+const isVideoUrl = (u?: string) => !!u && /\.(mp4|webm|ogg|mov|m4v)(\?|$)/i.test(u);
+
+const MediaThumb: React.FC<{ post: { media_urls?: string[]; thumbnail_url?: string | null; media_type?: string | null; title?: string }; className?: string }> = ({ post, className = '' }) => {
+  const first = post.media_urls?.[0];
+  if (!first) return <div className={`bg-gradient-to-br from-primary/30 to-accent/30 ${className}`} />;
+  const useVideo = post.media_type === 'video' || isVideoUrl(first);
+  if (useVideo && !post.thumbnail_url) {
+    return <video src={first} className={`object-cover ${className}`} muted playsInline preload="metadata" />;
+  }
+  return <img src={post.thumbnail_url || first} alt={post.title || ''} className={`object-cover ${className}`} loading="lazy" />;
+};
+
 
 interface TrendingKeyword {
   id: string;
