@@ -277,7 +277,7 @@ const Explore = () => {
                     <CardContent className="p-4">
                       <div className="flex gap-3">
                         {hasMedia && (
-                          <img src={post.media_urls[0]} alt="" className="w-20 h-20 rounded-lg object-cover shrink-0" />
+                          <MediaThumb post={post} className="w-20 h-20 rounded-lg shrink-0" />
                         )}
                         <div className="flex-1 min-w-0">
                           <div className="flex items-center gap-2 mb-1">
