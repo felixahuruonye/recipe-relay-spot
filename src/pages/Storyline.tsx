@@ -51,8 +51,21 @@ const Storyline = () => {
     if (user) supabase.from('user_profiles').select('username, avatar_url').eq('id', user.id).maybeSingle().then(({ data }) => setProfile(data));
   }, [user?.id]);
 
+  const swipeStartRef = React.useRef<{ x: number; y: number } | null>(null);
+  const onSwipeStart = (e: React.TouchEvent) => { const t = e.touches[0]; swipeStartRef.current = { x: t.clientX, y: t.clientY }; };
+  const onSwipeEnd = (e: React.TouchEvent) => {
+    const s = swipeStartRef.current; swipeStartRef.current = null;
+    if (!s) return;
+    const t = e.changedTouches[0];
+    const dx = t.clientX - s.x; const dy = t.clientY - s.y;
+    if (Math.abs(dx) < 45 || Math.abs(dx) < Math.abs(dy)) return;
+    if (dx < 0) navigate('/explore'); // swipe left -> explore
+    else navigate('/'); // swipe right -> for you
+  };
+
   return (
-    <div className="min-h-[100dvh] bg-background px-4 py-4 pb-24 space-y-4 overflow-y-auto">
+    <div onTouchStart={onSwipeStart} onTouchEnd={onSwipeEnd} className="min-h-[100dvh] bg-background px-4 py-4 pb-24 space-y-4 overflow-y-auto">
+
       <div className="flex items-center justify-between gap-3">
         <div className="flex items-center gap-2">
           <Button variant="ghost" size="icon" onClick={() => navigate(-1)}><ArrowLeft className="w-5 h-5" /></Button>

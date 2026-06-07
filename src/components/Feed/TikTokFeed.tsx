@@ -1546,9 +1546,10 @@ const TikTokFeed: React.FC = () => {
     if (!start) return;
     const dx = x - start.x;
     const dy = y - start.y;
-    if (Math.abs(dx) < 70 || Math.abs(dx) < Math.abs(dy) * 1.2) return;
+    // More responsive: lower distance, require horizontal dominance only ~1x vertical
+    if (Math.abs(dx) < 45 || Math.abs(dx) < Math.abs(dy)) return;
     if (dx < 0) navigate('/explore');
-    else navigate('/storyline');
+    else user ? navigate('/storyline') : requireLogin('Login for stories');
   };
 
   const menuItems = [

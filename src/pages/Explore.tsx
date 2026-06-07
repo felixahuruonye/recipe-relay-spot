@@ -16,12 +16,27 @@ interface TrendingPost {
   body: string;
   category: string;
   media_urls: string[];
+  thumbnail_url?: string | null;
+  media_type?: string | null;
   view_count: number;
   likes_count: number;
   comments_count: number;
   created_at: string;
   user_id: string;
 }
+
+const isVideoUrl = (u?: string) => !!u && /\.(mp4|webm|ogg|mov|m4v)(\?|$)/i.test(u);
+
+const MediaThumb: React.FC<{ post: { media_urls?: string[]; thumbnail_url?: string | null; media_type?: string | null; title?: string }; className?: string }> = ({ post, className = '' }) => {
+  const first = post.media_urls?.[0];
+  if (!first) return <div className={`bg-gradient-to-br from-primary/30 to-accent/30 ${className}`} />;
+  const useVideo = post.media_type === 'video' || isVideoUrl(first);
+  if (useVideo && !post.thumbnail_url) {
+    return <video src={first} className={`object-cover ${className}`} muted playsInline preload="metadata" />;
+  }
+  return <img src={post.thumbnail_url || first} alt={post.title || ''} className={`object-cover ${className}`} loading="lazy" />;
+};
+
 
 interface TrendingKeyword {
   id: string;
@@ -155,12 +170,25 @@ const Explore = () => {
     navigate(`/?search=${encodeURIComponent(keyword)}`);
   };
 
+  const swipeStartRef = React.useRef<{ x: number; y: number } | null>(null);
+  const onSwipeStart = (e: React.TouchEvent) => { const t = e.touches[0]; swipeStartRef.current = { x: t.clientX, y: t.clientY }; };
+  const onSwipeEnd = (e: React.TouchEvent) => {
+    const s = swipeStartRef.current; swipeStartRef.current = null;
+    if (!s) return;
+    const t = e.changedTouches[0];
+    const dx = t.clientX - s.x; const dy = t.clientY - s.y;
+    if (Math.abs(dx) < 45 || Math.abs(dx) < Math.abs(dy)) return;
+    // swipe right from Explore -> Storyline; swipe left no-op (already last tab)
+    if (dx > 0) navigate('/storyline');
+  };
+
   return (
-    <div className="p-4 max-w-6xl mx-auto space-y-6">
+    <div onTouchStart={onSwipeStart} onTouchEnd={onSwipeEnd} className="p-4 max-w-6xl mx-auto space-y-6">
       <div className="text-center space-y-2">
         <h1 className="text-3xl font-bold text-primary">🔥 Explore</h1>
         <p className="text-muted-foreground">Discover what's trending in the community</p>
       </div>
+
 
       {searchQuery && (
         <Card className="border-primary/40">
@@ -183,11 +211,8 @@ const Explore = () => {
               <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
                 {searchResults.map((p) => (
                   <button key={p.id} onClick={() => navigate(`/?post=${p.id}`)} className="text-left group">
-                    {p.media_urls?.[0] ? (
-                      <img src={p.media_urls[0]} className="w-full aspect-square object-cover rounded-md group-hover:opacity-80" alt={p.title} />
-                    ) : (
-                      <div className="w-full aspect-square rounded-md bg-gradient-to-br from-primary/30 to-accent/30" />
-                    )}
+                    <MediaThumb post={p} className="w-full aspect-square rounded-md group-hover:opacity-80" />
+
                     <p className="text-xs mt-1 line-clamp-2">{p.title}</p>
                     <p className="text-[10px] text-muted-foreground flex items-center gap-2">
                       <Eye className="w-3 h-3" /> {p.view_count || 0}
@@ -216,14 +241,17 @@ const Explore = () => {
       </div>
 
       <Tabs defaultValue="posts" className="space-y-4">
-        <TabsList className="grid w-full grid-cols-6">
-          <TabsTrigger value="posts">🔥 Hot</TabsTrigger>
-          <TabsTrigger value="creators">👑 Creators</TabsTrigger>
-          <TabsTrigger value="keywords">🔍 Trending</TabsTrigger>
-          <TabsTrigger value="musicians">🎵 Music</TabsTrigger>
-          <TabsTrigger value="earning">💰 Earn</TabsTrigger>
-          <TabsTrigger value="ideas">✨ AI</TabsTrigger>
-        </TabsList>
+        <div className="overflow-x-auto scrollbar-hide -mx-4 px-4">
+          <TabsList className="inline-flex w-max gap-1 bg-muted/50 p-1">
+            <TabsTrigger value="posts" className="whitespace-nowrap">🔥 Hot</TabsTrigger>
+            <TabsTrigger value="creators" className="whitespace-nowrap">👑 Creators</TabsTrigger>
+            <TabsTrigger value="keywords" className="whitespace-nowrap">🔍 Trending</TabsTrigger>
+            <TabsTrigger value="musicians" className="whitespace-nowrap">🎵 Music</TabsTrigger>
+            <TabsTrigger value="earning" className="whitespace-nowrap">💰 Earn</TabsTrigger>
+            <TabsTrigger value="ideas" className="whitespace-nowrap">✨ AI</TabsTrigger>
+          </TabsList>
+        </div>
+
 
         {/* Hot Posts */}
         <TabsContent value="posts" className="space-y-4">
@@ -249,7 +277,7 @@ const Explore = () => {
                     <CardContent className="p-4">
                       <div className="flex gap-3">
                         {hasMedia && (
-                          <img src={post.media_urls[0]} alt="" className="w-20 h-20 rounded-lg object-cover shrink-0" />
+                          <MediaThumb post={post} className="w-20 h-20 rounded-lg shrink-0" />
                         )}
                         <div className="flex-1 min-w-0">
                           <div className="flex items-center gap-2 mb-1">
@@ -297,7 +325,7 @@ const Explore = () => {
                       <p className="text-xs text-muted-foreground">{post.user_profiles?.username} · {new Date(post.created_at).toLocaleDateString()}</p>
                     </div>
                     {post.media_urls?.[0] && (
-                      <img src={post.media_urls[0]} alt="" className="w-12 h-12 rounded object-cover" />
+                      <MediaThumb post={post} className="w-12 h-12 rounded" />
                     )}
                   </CardContent>
                 </Card>
