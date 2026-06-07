@@ -155,12 +155,25 @@ const Explore = () => {
     navigate(`/?search=${encodeURIComponent(keyword)}`);
   };
 
+  const swipeStartRef = React.useRef<{ x: number; y: number } | null>(null);
+  const onSwipeStart = (e: React.TouchEvent) => { const t = e.touches[0]; swipeStartRef.current = { x: t.clientX, y: t.clientY }; };
+  const onSwipeEnd = (e: React.TouchEvent) => {
+    const s = swipeStartRef.current; swipeStartRef.current = null;
+    if (!s) return;
+    const t = e.changedTouches[0];
+    const dx = t.clientX - s.x; const dy = t.clientY - s.y;
+    if (Math.abs(dx) < 45 || Math.abs(dx) < Math.abs(dy)) return;
+    // swipe right from Explore -> Storyline; swipe left no-op (already last tab)
+    if (dx > 0) navigate('/storyline');
+  };
+
   return (
-    <div className="p-4 max-w-6xl mx-auto space-y-6">
+    <div onTouchStart={onSwipeStart} onTouchEnd={onSwipeEnd} className="p-4 max-w-6xl mx-auto space-y-6">
       <div className="text-center space-y-2">
         <h1 className="text-3xl font-bold text-primary">🔥 Explore</h1>
         <p className="text-muted-foreground">Discover what's trending in the community</p>
       </div>
+
 
       {searchQuery && (
         <Card className="border-primary/40">
