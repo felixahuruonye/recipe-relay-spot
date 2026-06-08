@@ -1573,7 +1573,7 @@ const TikTokFeed: React.FC = () => {
 
   return (
     <>
-      <div className="h-[100dvh] bg-black flex justify-center" onTouchStart={(e) => { const t = e.touches[0]; swipeStartRef.current = { x: t.clientX, y: t.clientY }; }} onTouchEnd={(e) => { const t = e.changedTouches[0]; handleHomeSwipeEnd(t.clientX, t.clientY); }}>
+      <div ref={shellRef} className="h-[100dvh] bg-black flex justify-center">
         <div className="relative w-full max-w-[480px] h-full">
           <div
             ref={feedRef}
