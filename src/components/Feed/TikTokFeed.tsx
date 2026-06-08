@@ -423,7 +423,7 @@ const SoundDrilldown: React.FC<{
             {posts.map((p, i) => (
               <button key={p.id} onClick={() => onOpenPost(p.id)} className="aspect-[9/16] rounded-lg overflow-hidden bg-muted relative text-left">
                 {p.media_urls?.[0] ? (
-                  <img src={p.thumbnail_url || p.media_urls[0]} alt={p.title || 'Post using sound'} className="w-full h-full object-cover" />
+                  <MediaThumb url={p.media_urls[0]} thumbnailUrl={p.thumbnail_url} mediaType={p.media_type} alt={p.title || 'Post using sound'} className="w-full h-full" />
                 ) : (
                   <div className="w-full h-full flex items-center justify-center text-xs text-muted-foreground p-2 text-center">{p.title}</div>
                 )}
