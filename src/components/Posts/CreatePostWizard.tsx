@@ -615,7 +615,11 @@ const CreatePostWizard: React.FC<CreatePostWizardProps> = ({ onPostCreated, isOp
           {mediaPreviews.length > 0 && (
             <div className="flex gap-2 overflow-x-auto">
               {mediaPreviews.map((p, i) => (
-                <img key={i} src={p} alt="" className="w-20 h-14 object-cover rounded-lg shrink-0" />
+                /\.(mp4|webm|ogg|mov|m4v)(\?|$)/i.test(p) ? (
+                  <video key={i} src={p} className="w-20 h-14 object-cover rounded-lg shrink-0" muted playsInline preload="metadata" />
+                ) : (
+                  <img key={i} src={p} alt="" className="w-20 h-14 object-cover rounded-lg shrink-0" />
+                )
               ))}
             </div>
           )}
