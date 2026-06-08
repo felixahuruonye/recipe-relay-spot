@@ -1,0 +1,1 @@
+ALTER TABLE public.saved_searches ADD COLUMN IF NOT EXISTS bookmarked boolean NOT NULL DEFAULT false;

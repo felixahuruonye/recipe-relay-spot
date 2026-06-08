@@ -1897,18 +1897,21 @@ export type Database = {
       }
       saved_searches: {
         Row: {
+          bookmarked: boolean
           created_at: string | null
           id: string
           query: string
           user_id: string | null
         }
         Insert: {
+          bookmarked?: boolean
           created_at?: string | null
           id?: string
           query: string
           user_id?: string | null
         }
         Update: {
+          bookmarked?: boolean
           created_at?: string | null
           id?: string
           query?: string
