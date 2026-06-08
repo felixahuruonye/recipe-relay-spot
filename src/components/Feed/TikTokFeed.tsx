@@ -1903,7 +1903,7 @@ const TikTokFeed: React.FC = () => {
 
       {/* Search overlay */}
       <AnimatePresence>
-        {showSearch && <SearchOverlay open={showSearch} onClose={() => setShowSearch(false)} />}
+        {showSearch && <SearchOverlayV2 open={showSearch} onClose={() => setShowSearch(false)} />}
       </AnimatePresence>
 
       {/* Login modal */}
