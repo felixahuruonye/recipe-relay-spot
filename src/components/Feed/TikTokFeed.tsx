@@ -1543,17 +1543,35 @@ const TikTokFeed: React.FC = () => {
     setStarNotification(null);
   };
 
-  const handleHomeSwipeEnd = (x: number, y: number) => {
-    const start = swipeStartRef.current;
-    swipeStartRef.current = null;
-    if (!start) return;
-    const dx = x - start.x;
-    const dy = y - start.y;
-    // More responsive: lower distance, require horizontal dominance only ~1x vertical
-    if (Math.abs(dx) < 45 || Math.abs(dx) < Math.abs(dy)) return;
-    if (dx < 0) navigate('/explore');
-    else user ? navigate('/storyline') : requireLogin('Login for stories');
-  };
+  // Capture-phase swipe so children (videos, snap-scroll) can't swallow gesture
+  useEffect(() => {
+    const el = shellRef.current;
+    if (!el) return;
+    const onStart = (e: TouchEvent) => {
+      const t = e.touches[0];
+      swipeStartRef.current = { x: t.clientX, y: t.clientY, t: Date.now() };
+    };
+    const onEnd = (e: TouchEvent) => {
+      const start = swipeStartRef.current;
+      swipeStartRef.current = null;
+      if (!start) return;
+      const t = e.changedTouches[0];
+      const dx = t.clientX - start.x;
+      const dy = t.clientY - start.y;
+      const dt = Date.now() - start.t;
+      if (dt > 800) return;
+      if (Math.abs(dx) < 50 || Math.abs(dx) < Math.abs(dy) * 1.1) return;
+      if (dx < 0) navigate('/explore');
+      else user ? navigate('/storyline') : requireLogin('Login for stories');
+    };
+    el.addEventListener('touchstart', onStart, { passive: true, capture: true });
+    el.addEventListener('touchend', onEnd, { passive: true, capture: true });
+    return () => {
+      el.removeEventListener('touchstart', onStart, { capture: true } as any);
+      el.removeEventListener('touchend', onEnd, { capture: true } as any);
+    };
+  }, [user, navigate]);
+
 
   const menuItems = [
     { icon: '👤', label: 'Profile', path: '/profile' },
