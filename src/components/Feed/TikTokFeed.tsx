@@ -1058,7 +1058,8 @@ const TikTokFeed: React.FC = () => {
   const [showSuggestedUsers, setShowSuggestedUsers] = useState(false);
   const processingRef = useRef<Set<string>>(new Set());
   const feedRef = useRef<HTMLDivElement>(null);
-  const swipeStartRef = useRef<{ x: number; y: number } | null>(null);
+  const swipeStartRef = useRef<{ x: number; y: number; t: number } | null>(null);
+  const shellRef = useRef<HTMLDivElement>(null);
   const viewCooldownRef = useRef<number>(0);
   const dailyViewsRef = useRef<number>(0);
   const autoSpendNoticeRef = useRef(false);
