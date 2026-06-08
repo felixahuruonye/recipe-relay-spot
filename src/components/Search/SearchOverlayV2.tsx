@@ -48,26 +48,22 @@ export const SearchOverlayV2: React.FC<Props> = ({ open, onClose }) => {
     setLoading(true);
     try {
       const promises: Promise<any>[] = [
-        // trending videos (posts with media, ordered by views)
-        supabase.from('posts').select('id, title, media_urls, thumbnail_url, media_type, view_count, likes_count, user_id')
-          .eq('status', 'approved').not('media_urls', 'eq', '{}').order('view_count', { ascending: false }).limit(18),
-        // trending people
-        supabase.from('user_profiles').select('id, username, avatar_url, vip, follower_count')
-          .order('follower_count', { ascending: false }).limit(12),
-        // trending products
-        supabase.from('marketplace_products').select('id, title, price_ngn, images, seller_user_id').limit(12),
-        // music tracks
-        supabase.from('music_tracks').select('id, title, artist_name, cover_url, usage_count').order('usage_count', { ascending: false }).limit(12),
+        (supabase.from('posts').select('id, title, media_urls, thumbnail_url, media_type, view_count, likes_count, user_id')
+          .eq('status', 'approved').order('view_count', { ascending: false }).limit(18) as any),
+        (supabase.from('user_profiles').select('id, username, avatar_url, vip, follower_count')
+          .order('follower_count', { ascending: false }).limit(12) as any),
+        (supabase.from('products').select('id, title, price_ngn, images, seller_user_id').eq('status', 'active').limit(12) as any),
+        (supabase.from('music_tracks').select('id, title, artist_name, cover_url, usage_count').order('usage_count', { ascending: false }).limit(12) as any),
       ];
       if (user) {
         promises.unshift(
-          supabase.from('saved_searches').select('id, query, bookmarked').eq('user_id', user.id).order('created_at', { ascending: false }).limit(30)
+          (supabase.from('saved_searches').select('id, query').eq('user_id', user.id).order('created_at', { ascending: false }).limit(30) as any)
         );
       }
       const results = await Promise.all(promises);
       let i = 0;
-      if (user) { setHistory((results[i++].data as any) || []); }
-      setVideos((results[i++].data as any) || []);
+      if (user) { setHistory(((results[i++].data as any) || []).map((h: any) => ({ ...h, bookmarked: !!h.bookmarked }))); }
+      setVideos(((results[i++].data as any) || []).filter((p: any) => p.media_urls?.length));
       setPeople((results[i++].data as any) || []);
       setProducts((results[i++].data as any) || []);
       setMusic((results[i++].data as any) || []);
@@ -75,6 +71,7 @@ export const SearchOverlayV2: React.FC<Props> = ({ open, onClose }) => {
       setLoading(false);
     }
   };
+
 
   const submit = (q: string) => {
     const term = q.trim();
