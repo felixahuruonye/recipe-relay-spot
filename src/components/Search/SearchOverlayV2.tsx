@@ -90,7 +90,7 @@ export const SearchOverlayV2: React.FC<Props> = ({ open, onClose }) => {
   };
 
   const toggleBookmark = async (id: string, current: boolean) => {
-    await supabase.from('saved_searches').update({ bookmarked: !current }).eq('id', id);
+    await (supabase.from('saved_searches').update({ bookmarked: !current } as any).eq('id', id) as any);
     setHistory(prev => prev.map(h => h.id === id ? { ...h, bookmarked: !current } : h));
   };
 
