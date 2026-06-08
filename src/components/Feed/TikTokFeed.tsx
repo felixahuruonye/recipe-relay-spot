@@ -27,6 +27,8 @@ import { TrendingStoriesCard } from './TrendingStoriesCard';
 import CreatePostWizard from '@/components/Posts/CreatePostWizard';
 import YouTubeAudio from '@/components/Music/YouTubeAudio';
 import { LenoryLoader } from '@/components/Loading/LenoryLoader';
+import { MediaThumb, isVideoUrl } from './MediaThumb';
+import { SearchOverlayV2 } from '@/components/Search/SearchOverlayV2';
 
 interface Post {
   id: string;
