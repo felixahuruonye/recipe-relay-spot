@@ -27,6 +27,8 @@ import { TrendingStoriesCard } from './TrendingStoriesCard';
 import CreatePostWizard from '@/components/Posts/CreatePostWizard';
 import YouTubeAudio from '@/components/Music/YouTubeAudio';
 import { LenoryLoader } from '@/components/Loading/LenoryLoader';
+import { MediaThumb, isVideoUrl } from './MediaThumb';
+import { SearchOverlayV2 } from '@/components/Search/SearchOverlayV2';
 
 interface Post {
   id: string;
@@ -421,7 +423,7 @@ const SoundDrilldown: React.FC<{
             {posts.map((p, i) => (
               <button key={p.id} onClick={() => onOpenPost(p.id)} className="aspect-[9/16] rounded-lg overflow-hidden bg-muted relative text-left">
                 {p.media_urls?.[0] ? (
-                  <img src={p.thumbnail_url || p.media_urls[0]} alt={p.title || 'Post using sound'} className="w-full h-full object-cover" />
+                  <MediaThumb url={p.media_urls[0]} thumbnailUrl={p.thumbnail_url} mediaType={p.media_type} alt={p.title || 'Post using sound'} className="w-full h-full" />
                 ) : (
                   <div className="w-full h-full flex items-center justify-center text-xs text-muted-foreground p-2 text-center">{p.title}</div>
                 )}
@@ -1056,7 +1058,8 @@ const TikTokFeed: React.FC = () => {
   const [showSuggestedUsers, setShowSuggestedUsers] = useState(false);
   const processingRef = useRef<Set<string>>(new Set());
   const feedRef = useRef<HTMLDivElement>(null);
-  const swipeStartRef = useRef<{ x: number; y: number } | null>(null);
+  const swipeStartRef = useRef<{ x: number; y: number; t: number } | null>(null);
+  const shellRef = useRef<HTMLDivElement>(null);
   const viewCooldownRef = useRef<number>(0);
   const dailyViewsRef = useRef<number>(0);
   const autoSpendNoticeRef = useRef(false);
@@ -1540,17 +1543,35 @@ const TikTokFeed: React.FC = () => {
     setStarNotification(null);
   };
 
-  const handleHomeSwipeEnd = (x: number, y: number) => {
-    const start = swipeStartRef.current;
-    swipeStartRef.current = null;
-    if (!start) return;
-    const dx = x - start.x;
-    const dy = y - start.y;
-    // More responsive: lower distance, require horizontal dominance only ~1x vertical
-    if (Math.abs(dx) < 45 || Math.abs(dx) < Math.abs(dy)) return;
-    if (dx < 0) navigate('/explore');
-    else user ? navigate('/storyline') : requireLogin('Login for stories');
-  };
+  // Capture-phase swipe so children (videos, snap-scroll) can't swallow gesture
+  useEffect(() => {
+    const el = shellRef.current;
+    if (!el) return;
+    const onStart = (e: TouchEvent) => {
+      const t = e.touches[0];
+      swipeStartRef.current = { x: t.clientX, y: t.clientY, t: Date.now() };
+    };
+    const onEnd = (e: TouchEvent) => {
+      const start = swipeStartRef.current;
+      swipeStartRef.current = null;
+      if (!start) return;
+      const t = e.changedTouches[0];
+      const dx = t.clientX - start.x;
+      const dy = t.clientY - start.y;
+      const dt = Date.now() - start.t;
+      if (dt > 800) return;
+      if (Math.abs(dx) < 50 || Math.abs(dx) < Math.abs(dy) * 1.1) return;
+      if (dx < 0) navigate('/explore');
+      else user ? navigate('/storyline') : requireLogin('Login for stories');
+    };
+    el.addEventListener('touchstart', onStart, { passive: true, capture: true });
+    el.addEventListener('touchend', onEnd, { passive: true, capture: true });
+    return () => {
+      el.removeEventListener('touchstart', onStart, { capture: true } as any);
+      el.removeEventListener('touchend', onEnd, { capture: true } as any);
+    };
+  }, [user, navigate]);
+
 
   const menuItems = [
     { icon: '👤', label: 'Profile', path: '/profile' },
@@ -1571,7 +1592,7 @@ const TikTokFeed: React.FC = () => {
 
   return (
     <>
-      <div className="h-[100dvh] bg-black flex justify-center" onTouchStart={(e) => { const t = e.touches[0]; swipeStartRef.current = { x: t.clientX, y: t.clientY }; }} onTouchEnd={(e) => { const t = e.changedTouches[0]; handleHomeSwipeEnd(t.clientX, t.clientY); }}>
+      <div ref={shellRef} className="h-[100dvh] bg-black flex justify-center">
         <div className="relative w-full max-w-[480px] h-full">
           <div
             ref={feedRef}
@@ -1882,7 +1903,7 @@ const TikTokFeed: React.FC = () => {
 
       {/* Search overlay */}
       <AnimatePresence>
-        {showSearch && <SearchOverlay open={showSearch} onClose={() => setShowSearch(false)} />}
+        {showSearch && <SearchOverlayV2 open={showSearch} onClose={() => setShowSearch(false)} />}
       </AnimatePresence>
 
       {/* Login modal */}
