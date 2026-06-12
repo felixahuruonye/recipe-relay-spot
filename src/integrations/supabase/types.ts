@@ -14,6 +14,48 @@ export type Database = {
   }
   public: {
     Tables: {
+      ad_impressions: {
+        Row: {
+          created_at: string
+          id: string
+          ip_address: string | null
+          meta: Json
+          network: string
+          ngn_payout: number
+          placement: string
+          silver_credited: number
+          status: string
+          user_agent: string | null
+          user_id: string | null
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          ip_address?: string | null
+          meta?: Json
+          network?: string
+          ngn_payout?: number
+          placement: string
+          silver_credited?: number
+          status?: string
+          user_agent?: string | null
+          user_id?: string | null
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          ip_address?: string | null
+          meta?: Json
+          network?: string
+          ngn_payout?: number
+          placement?: string
+          silver_credited?: number
+          status?: string
+          user_agent?: string | null
+          user_id?: string | null
+        }
+        Relationships: []
+      }
       admin_commands: {
         Row: {
           command: string
@@ -1958,6 +2000,68 @@ export type Database = {
         }
         Relationships: []
       }
+      silver_star_transactions: {
+        Row: {
+          ad_impression_id: string | null
+          amount_stars: number
+          created_at: string
+          creator_amount_ngn: number
+          creator_id: string | null
+          id: string
+          meta: Json
+          platform_amount_ngn: number
+          pool_ngn: number
+          post_id: string | null
+          sound_owner_amount_ngn: number
+          sound_owner_id: string | null
+          tx_type: string
+          user_id: string
+          viewer_cashback_ngn: number
+        }
+        Insert: {
+          ad_impression_id?: string | null
+          amount_stars: number
+          created_at?: string
+          creator_amount_ngn?: number
+          creator_id?: string | null
+          id?: string
+          meta?: Json
+          platform_amount_ngn?: number
+          pool_ngn?: number
+          post_id?: string | null
+          sound_owner_amount_ngn?: number
+          sound_owner_id?: string | null
+          tx_type: string
+          user_id: string
+          viewer_cashback_ngn?: number
+        }
+        Update: {
+          ad_impression_id?: string | null
+          amount_stars?: number
+          created_at?: string
+          creator_amount_ngn?: number
+          creator_id?: string | null
+          id?: string
+          meta?: Json
+          platform_amount_ngn?: number
+          pool_ngn?: number
+          post_id?: string | null
+          sound_owner_amount_ngn?: number
+          sound_owner_id?: string | null
+          tx_type?: string
+          user_id?: string
+          viewer_cashback_ngn?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "silver_star_transactions_ad_impression_id_fkey"
+            columns: ["ad_impression_id"]
+            isOneToOne: false
+            referencedRelation: "ad_impressions"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       star_market: {
         Row: {
           created_at: string | null
@@ -2792,19 +2896,23 @@ export type Database = {
           analytics_last_seen: string | null
           avatar_url: string | null
           bio: string | null
+          content_wallet_ngn: number
           created_at: string
           device_id: string | null
           follower_count: number | null
           following_count: number | null
           full_name: string | null
+          gold_star_balance: number
           id: string
           is_online: boolean | null
           is_suspended: boolean | null
           is_vip: boolean | null
           last_seen: string | null
+          market_wallet_ngn: number
           post_count: number | null
           post_count_free: number | null
           saved_searches: Json | null
+          silver_star_balance: number
           star_balance: number | null
           story_settings: Json | null
           suspended_at: string | null
@@ -2827,19 +2935,23 @@ export type Database = {
           analytics_last_seen?: string | null
           avatar_url?: string | null
           bio?: string | null
+          content_wallet_ngn?: number
           created_at?: string
           device_id?: string | null
           follower_count?: number | null
           following_count?: number | null
           full_name?: string | null
+          gold_star_balance?: number
           id: string
           is_online?: boolean | null
           is_suspended?: boolean | null
           is_vip?: boolean | null
           last_seen?: string | null
+          market_wallet_ngn?: number
           post_count?: number | null
           post_count_free?: number | null
           saved_searches?: Json | null
+          silver_star_balance?: number
           star_balance?: number | null
           story_settings?: Json | null
           suspended_at?: string | null
@@ -2862,19 +2974,23 @@ export type Database = {
           analytics_last_seen?: string | null
           avatar_url?: string | null
           bio?: string | null
+          content_wallet_ngn?: number
           created_at?: string
           device_id?: string | null
           follower_count?: number | null
           following_count?: number | null
           full_name?: string | null
+          gold_star_balance?: number
           id?: string
           is_online?: boolean | null
           is_suspended?: boolean | null
           is_vip?: boolean | null
           last_seen?: string | null
+          market_wallet_ngn?: number
           post_count?: number | null
           post_count_free?: number | null
           saved_searches?: Json | null
+          silver_star_balance?: number
           star_balance?: number | null
           story_settings?: Json | null
           suspended_at?: string | null
