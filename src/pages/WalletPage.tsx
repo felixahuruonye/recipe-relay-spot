@@ -3,6 +3,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { WalletBalance } from '@/components/Wallet/WalletBalance';
 import StarMarketplace from '@/pages/StarMarketplace';
 import { Wallet as WalletIcon, Star } from 'lucide-react';
+import { WatchAdToEarn } from '@/components/Ads/WatchAdToEarn';
 
 const WalletPage: React.FC = () => {
   return (
@@ -14,7 +15,12 @@ const WalletPage: React.FC = () => {
             <TabsTrigger value="buy" className="gap-2"><Star className="w-4 h-4" />Buy Stars</TabsTrigger>
           </TabsList>
         </div>
-        <TabsContent value="wallet" className="p-4"><WalletBalance /></TabsContent>
+        <TabsContent value="wallet" className="p-4 space-y-4">
+          <WalletBalance />
+          <div className="flex justify-center">
+            <WatchAdToEarn className="w-full max-w-sm" />
+          </div>
+        </TabsContent>
         <TabsContent value="buy" className="p-0"><StarMarketplace /></TabsContent>
       </Tabs>
     </div>
