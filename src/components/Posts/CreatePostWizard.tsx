@@ -7,11 +7,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Dialog, DialogContent } from '@/components/ui/dialog';
 import { Badge } from '@/components/ui/badge';
-import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
-import {
-  X, Image, Video, ArrowLeft, Check, Music, Hash,
-  Sparkles, Upload, Camera, RefreshCw, BookOpen
-} from 'lucide-react';
+import { X, ArrowLeft, Music, Sparkles, Upload, Camera, RefreshCw, BookOpen } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { motion, AnimatePresence } from 'framer-motion';
 
@@ -36,25 +32,19 @@ const CreatePostWizard: React.FC<CreatePostWizardProps> = ({
   const [step, setStep] = useState(0);
   const [loading, setLoading] = useState(false);
 
+  // Media
   const [mediaFiles, setMediaFiles] = useState<File[]>([]);
   const [mediaPreviews, setMediaPreviews] = useState<string[]>([]);
   const [thumbnailBlob, setThumbnailBlob] = useState<Blob | null>(null);
   const [thumbnailPreview, setThumbnailPreview] = useState('');
   const [thumbnailFile, setThumbnailFile] = useState<File | null>(null);
 
+  // Details
   const [title, setTitle] = useState('');
   const [body, setBody] = useState('');
   const [category, setCategory] = useState('');
-  const [tags, setTags] = useState<string[]>([]);
-  const [tagInput, setTagInput] = useState('');
-  const [tagSuggestions, setTagSuggestions] = useState<any[]>([]);
-  const [showTagSuggestions, setShowTagSuggestions] = useState(false);
-  const [mentionInput, setMentionInput] = useState('');
-  const [mentionSuggestions, setMentionSuggestions] = useState<any[]>([]);
-  const [showMentionSuggestions, setShowMentionSuggestions] = useState(false);
-  const [mentions, setMentions] = useState<any[]>([]);
-  const [cursorPos, setCursorPos] = useState(0);
 
+  // Vibe Sync
   const [selectedMusicTrack, setSelectedMusicTrack] = useState<any>(null);
   const [musicStart, setMusicStart] = useState(0);
   const [musicDuration, setMusicDuration] = useState(15);
@@ -63,18 +53,18 @@ const CreatePostWizard: React.FC<CreatePostWizardProps> = ({
   const [communityTracks, setCommunityTracks] = useState<any[]>([]);
   const [aiPickedTrack, setAiPickedTrack] = useState<any>(null);
 
+  // Storyline
   const [alsoPostToStoryline, setAlsoPostToStoryline] = useState(false);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const bodyRef = useRef<HTMLTextAreaElement>(null);
 
+  // Reset on close
   useEffect(() => {
     if (!isOpen) {
       setStep(0);
       if (!postToEdit) {
         setMediaFiles([]); setMediaPreviews([]); setTitle(''); setBody('');
-        setCategory(''); setTags([]); setTagInput(''); setMentions([]);
-        setSelectedMusicTrack(null); setThumbnailFile(null);
+        setCategory(''); setSelectedMusicTrack(null); setThumbnailFile(null);
         setThumbnailBlob(null); setThumbnailPreview('');
         setMusicStart(0); setMusicDuration(15); setAlsoPostToStoryline(false);
         setAiPickedTrack(null);
@@ -82,6 +72,7 @@ const CreatePostWizard: React.FC<CreatePostWizardProps> = ({
     }
   }, [isOpen]);
 
+  // Load postToEdit
   useEffect(() => {
     if (postToEdit) {
       setTitle(postToEdit.title || '');
@@ -98,6 +89,7 @@ const CreatePostWizard: React.FC<CreatePostWizardProps> = ({
     }
   }, [postToEdit]);
 
+  // Preselected track
   useEffect(() => {
     if (isOpen && preselectedTrack) {
       setSelectedMusicTrack(preselectedTrack);
@@ -107,6 +99,7 @@ const CreatePostWizard: React.FC<CreatePostWizardProps> = ({
     }
   }, [isOpen, preselectedTrack]);
 
+  // Generate video thumbnail
   const generateVideoThumbnail = (file: File): Promise<{ blob: Blob; url: string } | null> =>
     new Promise(resolve => {
       const video = document.createElement('video');
@@ -122,6 +115,7 @@ const CreatePostWizard: React.FC<CreatePostWizardProps> = ({
       video.onerror = () => { URL.revokeObjectURL(url); resolve(null); };
     });
 
+  // Handle media select
   const handleMediaChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = Array.from(e.target.files || []);
     const valid = files.filter(f => {
@@ -146,6 +140,7 @@ const CreatePostWizard: React.FC<CreatePostWizardProps> = ({
     setMediaPreviews(prev => prev.filter((_, idx) => idx !== i));
   };
 
+  // AI Vibe Sync
   const runVibeSync = useCallback(async () => {
     if (!title && !body) return;
     setVibeLoading(true);
@@ -163,10 +158,9 @@ const CreatePostWizard: React.FC<CreatePostWizardProps> = ({
 
       const keywords = `${title} ${body} ${category}`.toLowerCase().split(/\s+/);
       const scored = tracks.map(track => {
-        const trackText = `${track.title} ${track.artist_name} ${track.genre || ''} ${track.tags?.join(' ') || ''}`.toLowerCase();
+        const trackText = `${track.title} ${track.artist_name}`.toLowerCase();
         const score = keywords.reduce((acc, kw) => acc + (trackText.includes(kw) ? 2 : 0), 0);
-        const random = Math.random() * 0.5;
-        return { track, score: score + random };
+        return { track, score: score + Math.random() * 0.5 };
       });
       scored.sort((a, b) => b.score - a.score);
 
@@ -190,102 +184,7 @@ const CreatePostWizard: React.FC<CreatePostWizardProps> = ({
     }
   }, [step]);
 
-  const searchTags = async (query: string) => {
-    if (!query) { setTagSuggestions([]); setShowTagSuggestions(false); return; }
-    const { data } = await supabase
-      .from('hashtags')
-      .select('*')
-      .ilike('name', `%${query}%`)
-      .limit(8);
-    setTagSuggestions(data || []);
-    setShowTagSuggestions(true);
-  };
-
-  const handleTagInput = (val: string) => {
-    setTagInput(val);
-    searchTags(val.replace(/^#/, ''));
-  };
-
-  const addTag = async (tagName: string) => {
-    const clean = tagName.trim().replace(/^#/, '').toLowerCase();
-    if (!clean || tags.includes(clean) || tags.length >= 10) return;
-
-    const { data: existing } = await supabase
-      .from('hashtags')
-      .select('*')
-      .eq('name', clean)
-      .maybeSingle();
-
-    if (!existing) {
-      await supabase.from('hashtags').insert({
-        name: clean,
-        created_by: user?.id,
-        post_count: 1
-      });
-      toast({ title: `#${clean} created!`, description: 'New hashtag created on Lenory' });
-    } else {
-      await supabase.from('hashtags').update({ post_count: (existing.post_count || 0) + 1 }).eq('id', existing.id);
-    }
-
-    setTags(prev => [...prev, clean]);
-    setTagInput('');
-    setShowTagSuggestions(false);
-  };
-
-  const searchMentions = async (query: string) => {
-    if (!query) { setMentionSuggestions([]); setShowMentionSuggestions(false); return; }
-    const { data } = await supabase
-      .from('user_profiles')
-      .select('id, username, avatar_url')
-      .ilike('username', `%${query}%`)
-      .limit(8);
-    setMentionSuggestions(data || []);
-    setShowMentionSuggestions(true);
-  };
-
-  const handleBodyChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
-    const val = e.target.value;
-    const pos = e.target.selectionStart || 0;
-    setBody(val);
-    setCursorPos(pos);
-
-    const beforeCursor = val.slice(0, pos);
-    const hashMatch = beforeCursor.match(/#(\w*)$/);
-    if (hashMatch) {
-      searchTags(hashMatch[1]);
-      return;
-    }
-
-    const mentionMatch = beforeCursor.match(/@(\w*)$/);
-    if (mentionMatch) {
-      searchMentions(mentionMatch[1]);
-      return;
-    }
-
-    setShowTagSuggestions(false);
-    setShowMentionSuggestions(false);
-  };
-
-  const insertTag = (tagName: string) => {
-    const clean = tagName.replace(/^#/, '').toLowerCase();
-    const before = body.slice(0, cursorPos);
-    const after = body.slice(cursorPos);
-    const newBefore = before.replace(/#(\w*)$/, `#${clean} `);
-    setBody(newBefore + after);
-    if (!tags.includes(clean)) setTags(prev => [...prev, clean]);
-    setShowTagSuggestions(false);
-  };
-
-  const insertMention = (u: any) => {
-    if (mentions.length >= 5) { toast({ title: 'Max 5 mentions', variant: 'destructive' }); return; }
-    const before = body.slice(0, cursorPos);
-    const after = body.slice(cursorPos);
-    const newBefore = before.replace(/@(\w*)$/, `@${u.username} `);
-    setBody(newBefore + after);
-    setMentions(prev => [...prev, u]);
-    setShowMentionSuggestions(false);
-  };
-
+  // Upload helpers
   const uploadMedia = async (): Promise<string[]> => {
     if (!mediaFiles.length || !user) return mediaPreviews.filter(p => p.startsWith('http'));
     const results = await Promise.all(mediaFiles.map(async (file, i) => {
@@ -331,20 +230,7 @@ const CreatePostWizard: React.FC<CreatePostWizardProps> = ({
     return created?.id || null;
   };
 
-  const sendMentionNotifications = async (postId: string) => {
-    if (!mentions.length || !user) return;
-    await Promise.all(mentions.map(async (mentioned) => {
-      await supabase.from('notifications').insert({
-        user_id: mentioned.id,
-        type: 'mention',
-        message: `@${user.email?.split('@')[0]} mentioned you in a post`,
-        post_id: postId,
-        from_user_id: user.id,
-        read: false
-      });
-    }));
-  };
-
+  // SUBMIT
   const handleSubmit = async () => {
     if (!user || !title.trim() || !body.trim() || !category) {
       toast({ title: 'Missing info', description: 'Please fill title, caption and category', variant: 'destructive' });
@@ -355,14 +241,11 @@ const CreatePostWizard: React.FC<CreatePostWizardProps> = ({
       const mediaUrls = await uploadMedia();
       const thumbUrl = await uploadThumbnail();
       const musicTrackId = await ensureMusicTrackId();
-      const bodyWithTags = tags.length > 0 ? `${body.trim()}\n\n${tags.map(t => `#${t}`).join(' ')}` : body.trim();
-
-      let postId: string | null = null;
 
       if (postToEdit?.id) {
         await supabase.from('posts').update({
           title: title.trim(),
-          body: bodyWithTags,
+          body: body.trim(),
           category,
           media_urls: mediaUrls,
           thumbnail_url: thumbUrl,
@@ -370,12 +253,11 @@ const CreatePostWizard: React.FC<CreatePostWizardProps> = ({
           music_start_seconds: musicStart,
           music_duration_seconds: musicDuration,
         } as any).eq('id', postToEdit.id);
-        postId = postToEdit.id;
         toast({ title: 'Post updated!' });
       } else {
         const { data: newPost } = await supabase.from('posts').insert({
           title: title.trim(),
-          body: bodyWithTags,
+          body: body.trim(),
           category,
           media_urls: mediaUrls,
           user_id: user.id,
@@ -388,8 +270,7 @@ const CreatePostWizard: React.FC<CreatePostWizardProps> = ({
           boosted: selectedMusicTrack && selectedMusicTrack.id === aiPickedTrack?.id ? true : false,
         } as any).select('id').single();
 
-        postId = newPost?.id || null;
-
+        // Update music usage
         if (musicTrackId) {
           const { data: tr } = await supabase.from('music_tracks').select('usage_count').eq('id', musicTrackId).maybeSingle();
           await supabase.from('music_tracks').update({
@@ -401,7 +282,7 @@ const CreatePostWizard: React.FC<CreatePostWizardProps> = ({
         // FIXED STORYLINE TOGGLE
         if (alsoPostToStoryline && mediaUrls.length > 0) {
           const isVid = /\.(mp4|webm|ogg|mov)$/i.test(mediaUrls[0]);
-          const { error: storylineError } = await supabase.from('user_storylines').insert({
+          await supabase.from('user_storylines').insert({
             user_id: user.id,
             media_url: mediaUrls[0],
             media_type: isVid ? 'video' : 'image',
@@ -411,30 +292,12 @@ const CreatePostWizard: React.FC<CreatePostWizardProps> = ({
             music_track_id: musicTrackId,
             music_start_seconds: musicStart,
             music_duration_seconds: musicDuration,
-            star_price: 0,
             status: 'active',
             expires_at: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(),
           } as any);
-
-          if (storylineError) {
-            console.error('Storyline error:', storylineError);
-            toast({ title: 'Post created but storyline failed', description: storylineError.message, variant: 'destructive' });
-          } else {
-            toast({ title: '🎉 Post created!', description: 'Also added to your Storyline for 24 hours!' });
-          }
+          toast({ title: '🎉 Post created!', description: 'Also added to your Storyline for 24 hours!' });
         } else {
           toast({ title: '🎉 Post live!', description: 'Your post is now on the feed!' });
-        }
-
-        if (postId) await sendMentionNotifications(postId);
-
-        if (tags.length > 0 && postId) {
-          await Promise.all(tags.map(async (tag) => {
-            const { data: ht } = await supabase.from('hashtags').select('id, post_count').eq('name', tag).maybeSingle();
-            if (ht) {
-              await supabase.from('hashtags').update({ post_count: (ht.post_count || 0) + 1 }).eq('id', ht.id);
-            }
-          }));
         }
       }
 
@@ -442,17 +305,16 @@ const CreatePostWizard: React.FC<CreatePostWizardProps> = ({
       onPostCreated?.();
     } catch (e) {
       console.error(e);
-      toast({ title: 'Error', description: 'Failed to create post. Try again.', variant: 'destructive' });
+      toast({ title: 'Error', description: 'Failed to create post', variant: 'destructive' });
     } finally {
       setLoading(false);
     }
   };
 
   const hasMedia = mediaPreviews.length > 0;
-  const hasVideo = mediaFiles.some(f => f.type.startsWith('video/')) ||
-    mediaPreviews.some(p => /\.(mp4|webm|ogg|mov)/i.test(p));
   const canProceed = step === 0 ? hasMedia : step === 1 ? title.trim().length > 0 && !!category && body.trim().length >= 5 : true;
 
+  // STEP 0: CAPTURE
   const renderCapture = () => (
     <div className="flex flex-col h-full bg-black">
       <div className="flex items-center justify-between px-4 pt-4 pb-2">
@@ -534,6 +396,7 @@ const CreatePostWizard: React.FC<CreatePostWizardProps> = ({
     </div>
   );
 
+  // STEP 1: DETAILS
   const renderDetails = () => (
     <div className="flex flex-col h-full bg-background">
       <div className="flex items-center gap-3 px-4 pt-4 pb-3 border-b border-border/50">
@@ -559,97 +422,12 @@ const CreatePostWizard: React.FC<CreatePostWizardProps> = ({
           </div>
         )}
 
-        <div>
-          <Input
-            value={title}
-            onChange={e => setTitle(e.target.value)}
-            placeholder="Add a title..."
-            maxLength={100}
-            className="font-semibold text-base border-0 border-b rounded-none px-0 focus-visible:ring-0 bg-transparent"
-          />
-        </div>
+        <Input value={title} onChange={e => setTitle(e.target.value)} placeholder="Add a title..." maxLength={100}
+          className="font-semibold text-base border-0 border-b rounded-none px-0 focus-visible:ring-0 bg-transparent" />
 
-        <div className="relative">
-          <Textarea
-            ref={bodyRef}
-            value={body}
-            onChange={handleBodyChange}
-            placeholder="Write a caption... use # for tags, @ to mention"
-            maxLength={2000}
-            rows={4}
-            className="resize-none border-0 border-b rounded-none px-0 focus-visible:ring-0 bg-transparent text-sm"
-          />
-          <div className="text-[10px] text-muted-foreground text-right">{body.length}/2000</div>
-
-          <AnimatePresence>
-            {showTagSuggestions && (
-              <motion.div initial={{ opacity: 0, y: -5 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }}
-                className="absolute z-50 left-0 right-0 bg-card border border-border rounded-xl shadow-lg overflow-hidden">
-                {tagSuggestions.length > 0 ? (
-                  tagSuggestions.map(tag => (
-                    <button key={tag.id} onClick={() => insertTag(tag.name)}
-                      className="w-full flex items-center justify-between px-3 py-2 hover:bg-muted text-left">
-                      <span className="font-semibold text-sm text-primary">#{tag.name}</span>
-                      <span className="text-xs text-muted-foreground">{tag.post_count || 0} posts</span>
-                    </button>
-                  ))
-                ) : (
-                  <button onClick={() => addTag(tagInput)}
-                    className="w-full flex items-center gap-2 px-3 py-3 hover:bg-muted text-left">
-                    <Hash className="w-4 h-4 text-primary" />
-                    <div>
-                      <p className="text-sm font-semibold">Create #{tagInput.replace(/^#/, '')}</p>
-                      <p className="text-xs text-muted-foreground">Start a new hashtag</p>
-                    </div>
-                  </button>
-                )}
-              </motion.div>
-            )}
-          </AnimatePresence>
-
-          <AnimatePresence>
-            {showMentionSuggestions && (
-              <motion.div initial={{ opacity: 0, y: -5 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }}
-                className="absolute z-50 left-0 right-0 bg-card border border-border rounded-xl shadow-lg overflow-hidden">
-                {mentionSuggestions.map(u => (
-                  <button key={u.id} onClick={() => insertMention(u)}
-                    className="w-full flex items-center gap-2 px-3 py-2 hover:bg-muted text-left">
-                    <Avatar className="w-7 h-7">
-                      <AvatarImage src={u.avatar_url} />
-                      <AvatarFallback className="text-xs">{u.username?.charAt(0).toUpperCase()}</AvatarFallback>
-                    </Avatar>
-                    <span className="text-sm font-medium">@{u.username}</span>
-                  </button>
-                ))}
-                {mentionSuggestions.length === 0 && (
-                  <div className="px-3 py-3 text-xs text-muted-foreground">No users found</div>
-                )}
-              </motion.div>
-            )}
-          </AnimatePresence>
-        </div>
-
-        {tags.length > 0 && (
-          <div className="flex flex-wrap gap-1.5">
-            {tags.map(t => (
-              <Badge key={t} variant="secondary" className="gap-1 text-xs cursor-pointer"
-                onClick={() => setTags(prev => prev.filter(x => x !== t))}>
-                #{t} <X className="w-3 h-3" />
-              </Badge>
-            ))}
-          </div>
-        )}
-
-        {mentions.length > 0 && (
-          <div className="flex flex-wrap gap-1.5">
-            {mentions.map(m => (
-              <Badge key={m.id} className="gap-1 text-xs cursor-pointer bg-primary/20 text-primary"
-                onClick={() => setMentions(prev => prev.filter(x => x.id !== m.id))}>
-                @{m.username} <X className="w-3 h-3" />
-              </Badge>
-            ))}
-          </div>
-        )}
+        <Textarea value={body} onChange={e => setBody(e.target.value)} placeholder="Write a caption..."
+          maxLength={2000} rows={4} className="resize-none border-0 border-b rounded-none px-0 focus-visible:ring-0 bg-transparent text-sm" />
+        <div className="text-[10px] text-muted-foreground text-right">{body.length}/2000</div>
 
         <Select value={category} onValueChange={setCategory}>
           <SelectTrigger className="border-0 border-b rounded-none px-0 focus:ring-0 bg-transparent">
@@ -660,6 +438,7 @@ const CreatePostWizard: React.FC<CreatePostWizardProps> = ({
           </SelectContent>
         </Select>
 
+        {/* Vibe Sync */}
         <div className="p-3 rounded-2xl bg-muted/50 border border-border/50">
           <div className="flex items-center justify-between mb-2">
             <div className="flex items-center gap-2">
@@ -694,15 +473,6 @@ const CreatePostWizard: React.FC<CreatePostWizardProps> = ({
                   <X className="w-3.5 h-3.5" />
                 </button>
               </div>
-              <div className="space-y-1 px-1">
-                <div className="flex justify-between text-[10px] text-muted-foreground">
-                  <span>Start: {musicStart}s</span><span>Length: {musicDuration}s</span>
-                </div>
-                <input type="range" min={0}
-                  max={Math.max(0, (selectedMusicTrack.duration_seconds || 60) - 5)}
-                  value={musicStart} onChange={e => setMusicStart(parseInt(e.target.value))}
-                  className="w-full accent-primary h-1" />
-              </div>
               <button onClick={() => setShowMusicPicker(true)} className="text-xs text-primary underline">
                 Change sound
               </button>
@@ -715,6 +485,7 @@ const CreatePostWizard: React.FC<CreatePostWizardProps> = ({
           )}
         </div>
 
+        {/* Music picker */}
         <AnimatePresence>
           {showMusicPicker && (
             <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
@@ -726,7 +497,7 @@ const CreatePostWizard: React.FC<CreatePostWizardProps> = ({
                   <button onClick={() => setShowMusicPicker(false)}><X className="w-5 h-5" /></button>
                 </div>
                 {communityTracks.length === 0 ? (
-                  <p className="text-center text-muted-foreground text-sm py-6">No community sounds yet</p>
+                  <p className="text-center text-muted-foreground text-sm py-6">No sounds available</p>
                 ) : (
                   <div className="space-y-2">
                     {communityTracks.map(track => (
@@ -744,9 +515,8 @@ const CreatePostWizard: React.FC<CreatePostWizardProps> = ({
                         </div>
                         <div className="flex-1 min-w-0">
                           <p className="text-sm font-semibold truncate">{track.title}</p>
-                          <p className="text-xs text-muted-foreground truncate">@{track.artist_name} · {track.usage_count || 0} uses</p>
+                          <p className="text-xs text-muted-foreground truncate">@{track.artist_name}</p>
                         </div>
-                        {selectedMusicTrack?.id === track.id && <Check className="w-4 h-4 text-primary shrink-0" />}
                       </button>
                     ))}
                   </div>
@@ -756,6 +526,7 @@ const CreatePostWizard: React.FC<CreatePostWizardProps> = ({
           )}
         </AnimatePresence>
 
+        {/* Storyline toggle */}
         {!postToEdit && hasMedia && (
           <button onClick={() => setAlsoPostToStoryline(v => !v)}
             className={`w-full p-3 rounded-2xl border-2 transition-all text-left ${alsoPostToStoryline ? 'border-primary bg-primary/10' : 'border-border bg-muted/30'}`}>
@@ -784,6 +555,7 @@ const CreatePostWizard: React.FC<CreatePostWizardProps> = ({
     </div>
   );
 
+  // STEP 2: LAUNCH
   const renderLaunch = () => (
     <div className="flex flex-col h-full bg-background">
       <div className="flex items-center gap-3 px-4 pt-4 pb-3 border-b border-border/50">
@@ -818,16 +590,6 @@ const CreatePostWizard: React.FC<CreatePostWizardProps> = ({
             <p className="text-xs text-muted-foreground mb-1">Caption</p>
             <p className="text-sm line-clamp-3">{body}</p>
           </div>
-          {tags.length > 0 && (
-            <div className="flex flex-wrap gap-1">
-              {tags.map(t => <Badge key={t} variant="outline" className="text-xs">#{t}</Badge>)}
-            </div>
-          )}
-          {mentions.length > 0 && (
-            <div className="flex flex-wrap gap-1">
-              {mentions.map(m => <Badge key={m.id} className="text-xs bg-primary/20 text-primary">@{m.username}</Badge>)}
-            </div>
-          )}
           {selectedMusicTrack && (
             <div className="flex items-center gap-2 text-xs text-muted-foreground">
               <Music className="w-3.5 h-3.5" />
