@@ -294,9 +294,9 @@ const CreatePostWizard: React.FC<CreatePostWizardProps> = ({
             status: 'active',
             expires_at: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(),
           } as any);
-          toast({ title: '🎉 Post created!', description: 'Also added to your Storyline for 24 hours!' });
+          toast({ title: '🎉 Post created!', description: 'Also added to your Story for 24 hours, start earning!' });
         } else {
-          toast({ title: '🎉 Post live!', description: 'Your post is now on the feed!' });
+          toast({ title: '🎉 Post live!', description: 'Your post is now on the feed, share your post to reach more viewers to unlock higher rewards, more views more money!' });
         }
       }
 
@@ -583,7 +583,7 @@ const CreatePostWizard: React.FC<CreatePostWizardProps> = ({
           </div>
           <div>
             <p className="text-xs text-muted-foreground">Category</p>
-            <Badge variant="secondary">{category}</Badge>
+            <span className="text-xs bg-muted px-2 py-0.5 rounded">{category}</span>
           </div>
           <div>
             <p className="text-xs text-muted-foreground mb-1">Caption</p>
@@ -594,7 +594,7 @@ const CreatePostWizard: React.FC<CreatePostWizardProps> = ({
               <Music className="w-3.5 h-3.5" />
               <span>{selectedMusicTrack.title} — {selectedMusicTrack.artist_name}</span>
               {selectedMusicTrack.id === aiPickedTrack?.id && (
-                <Badge className="text-[9px] h-4 px-1 bg-green-500/20 text-green-600">✨ AI</Badge>
+                <span className="text-[9px] h-4 px-1 bg-green-500/20 text-green-600">✨ AI</span>
               )}
             </div>
           )}
