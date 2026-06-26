@@ -1,18 +1,19 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/integrations/supabase/client';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Dialog, DialogContent } from '@/components/ui/dialog';
 import { Badge } from '@/components/ui/badge';
-import { Progress } from '@/components/ui/progress';
-import { Upload, X, Image, Video, Star, ArrowLeft, ArrowRight, Check, Music, Hash, Sparkles, Eye, Coins } from 'lucide-react';
+import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
+import {
+  X, Image, Video, ArrowLeft, Check, Music, Hash,
+  Sparkles, Upload, Camera, RefreshCw, BookOpen
+} from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { motion, AnimatePresence } from 'framer-motion';
-import MusicBrowser from '@/components/Music/MusicBrowser';
 
 interface CreatePostWizardProps {
   onPostCreated?: () => void;
@@ -22,75 +23,64 @@ interface CreatePostWizardProps {
   preselectedTrack?: any;
 }
 
-const STEPS = [
-  { label: 'Media', icon: Image, desc: 'Upload your content' },
-  { label: 'Context', icon: Hash, desc: 'Title & category' },
-  { label: 'Canvas', icon: Sparkles, desc: 'Tags & caption' },
-  { label: 'Vibe Sync', icon: Music, desc: 'Add music' },
-  { label: 'Value', icon: Coins, desc: 'Set earnings' },
-  { label: 'Edit', icon: Eye, desc: 'Preview & tweak' },
-  { label: 'Launch', icon: Check, desc: 'Confirm & post' },
-];
-const TOTAL_STEPS = STEPS.length; // 7
-
 const categories = [
   'Wealth', 'Tech', 'Music', 'Lifestyle', 'Education',
   'Entertainment', 'Business', 'For Sale', 'General Discussion'
 ];
 
-const starPriceOptions = [
-  0, 1, 2, 3, 5, 10, 15, 20, 25, 30, 40, 50,
-  100, 200, 300, 500, 1000, 2000, 5000, 10000, 50000, 100000
-];
-
-const CreatePostWizard: React.FC<CreatePostWizardProps> = ({ onPostCreated, isOpen, onOpenChange, postToEdit, preselectedTrack }) => {
+const CreatePostWizard: React.FC<CreatePostWizardProps> = ({
+  onPostCreated, isOpen, onOpenChange, postToEdit, preselectedTrack
+}) => {
   const { user } = useAuth();
   const { toast } = useToast();
   const [step, setStep] = useState(0);
   const [loading, setLoading] = useState(false);
 
-  // Step 1: Media
   const [mediaFiles, setMediaFiles] = useState<File[]>([]);
   const [mediaPreviews, setMediaPreviews] = useState<string[]>([]);
-  const [thumbnailFile, setThumbnailFile] = useState<File | null>(null);
   const [thumbnailBlob, setThumbnailBlob] = useState<Blob | null>(null);
-  const [thumbnailPreview, setThumbnailPreview] = useState<string>('');
+  const [thumbnailPreview, setThumbnailPreview] = useState('');
+  const [thumbnailFile, setThumbnailFile] = useState<File | null>(null);
 
-  // Step 2: Context
   const [title, setTitle] = useState('');
-  const [category, setCategory] = useState('');
-
-  // Step 3: Canvas
   const [body, setBody] = useState('');
+  const [category, setCategory] = useState('');
   const [tags, setTags] = useState<string[]>([]);
   const [tagInput, setTagInput] = useState('');
+  const [tagSuggestions, setTagSuggestions] = useState<any[]>([]);
+  const [showTagSuggestions, setShowTagSuggestions] = useState(false);
+  const [mentionInput, setMentionInput] = useState('');
+  const [mentionSuggestions, setMentionSuggestions] = useState<any[]>([]);
+  const [showMentionSuggestions, setShowMentionSuggestions] = useState(false);
+  const [mentions, setMentions] = useState<any[]>([]);
+  const [cursorPos, setCursorPos] = useState(0);
 
-  // Step 4: Vibe Sync
-  const [selectedMusic, setSelectedMusic] = useState<string>('');
   const [selectedMusicTrack, setSelectedMusicTrack] = useState<any>(null);
-  const [musicStart, setMusicStart] = useState(0); // seconds
-  const [musicDuration, setMusicDuration] = useState(15); // seconds (drag)
+  const [musicStart, setMusicStart] = useState(0);
+  const [musicDuration, setMusicDuration] = useState(15);
+  const [vibeLoading, setVibeLoading] = useState(false);
+  const [showMusicPicker, setShowMusicPicker] = useState(false);
+  const [communityTracks, setCommunityTracks] = useState<any[]>([]);
+  const [aiPickedTrack, setAiPickedTrack] = useState<any>(null);
 
-  // Step 5: Value
-  const [starPrice, setStarPrice] = useState(0);
-  const [userStarBalance, setUserStarBalance] = useState(0);
-  const [followerCount, setFollowerCount] = useState(0);
-
-  // Storyline option
   const [alsoPostToStoryline, setAlsoPostToStoryline] = useState(false);
 
-  const isPaidTier = starPrice >= 100;
-  const postingFee = isPaidTier ? 40 : 0;
-  const canAffordFee = userStarBalance >= postingFee;
-  const requiresFollowerUnlock = starPrice >= 15 && starPrice <= 50;
-  const hasFollowerUnlock = followerCount >= 1000;
-
-  const hasVideo = mediaFiles.some(f => f.type.startsWith('video/')) ||
-    mediaPreviews.some(p => /\.(mp4|webm|ogg|mov)/i.test(p));
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const bodyRef = useRef<HTMLTextAreaElement>(null);
 
   useEffect(() => {
-    if (user) loadBalance();
-  }, [user]);
+    if (!isOpen) {
+      setStep(0);
+      if (!postToEdit) {
+        setMediaFiles([]); setMediaPreviews([]); setTitle(''); setBody('');
+        setCategory(''); setTags([]); setTagInput(''); setMentions([]);
+        setSelectedMusicTrack(null); setThumbnailFile(null);
+        setThumbnailBlob(null); setThumbnailPreview('');
+        setMusicStart(0); setMusicDuration(15); setAlsoPostToStoryline(false);
+        setAiPickedTrack(null);
+      }
+    }
+  }, [isOpen]);
 
   useEffect(() => {
     if (postToEdit) {
@@ -98,106 +88,56 @@ const CreatePostWizard: React.FC<CreatePostWizardProps> = ({ onPostCreated, isOp
       setBody(postToEdit.body || '');
       setCategory(postToEdit.category || '');
       setMediaPreviews(postToEdit.media_urls || []);
-      setStarPrice(postToEdit.star_price || 0);
       setThumbnailPreview(postToEdit.thumbnail_url || '');
       setMusicStart(postToEdit.music_start_seconds || 0);
       setMusicDuration(postToEdit.music_duration_seconds || 15);
-      // Load existing music track
       if (postToEdit.music_track_id) {
-        (async () => {
-          const { data } = await supabase.from('music_tracks').select('*').eq('id', postToEdit.music_track_id).maybeSingle();
-          if (data) {
-            setSelectedMusicTrack(data);
-            setSelectedMusic(data.audio_url || data.youtube_id || '');
-          }
-        })();
+        supabase.from('music_tracks').select('*').eq('id', postToEdit.music_track_id).maybeSingle()
+          .then(({ data }) => { if (data) setSelectedMusicTrack(data); });
       }
     }
   }, [postToEdit]);
 
-  // Apply preselected music track when opened from "Use this sound"
   useEffect(() => {
     if (isOpen && preselectedTrack) {
       setSelectedMusicTrack(preselectedTrack);
-      setSelectedMusic(preselectedTrack.audio_url || preselectedTrack.youtube_id || '');
-      if (preselectedTrack.duration_seconds) setMusicDuration(Math.min(preselectedTrack.duration_seconds, 30));
+      if (preselectedTrack.duration_seconds)
+        setMusicDuration(Math.min(preselectedTrack.duration_seconds, 30));
       setStep(0);
     }
   }, [isOpen, preselectedTrack]);
 
-  // Reset on close
-  useEffect(() => {
-    if (!isOpen) {
-      setStep(0);
-      if (!postToEdit) {
-        setMediaFiles([]); setMediaPreviews([]); setTitle(''); setBody('');
-        setCategory(''); setTags([]); setTagInput(''); setStarPrice(0);
-        setSelectedMusic(''); setSelectedMusicTrack(null); setThumbnailFile(null); setThumbnailBlob(null); setThumbnailPreview('');
-        setMusicStart(0); setMusicDuration(15); setAlsoPostToStoryline(false);
-      }
-    }
-  }, [isOpen]);
+  const generateVideoThumbnail = (file: File): Promise<{ blob: Blob; url: string } | null> =>
+    new Promise(resolve => {
+      const video = document.createElement('video');
+      const url = URL.createObjectURL(file);
+      video.preload = 'metadata'; video.muted = true; video.playsInline = true; video.src = url;
+      video.onloadedmetadata = () => { video.currentTime = Math.min(0.35, Math.max(0, (video.duration || 1) - 0.1)); };
+      video.onseeked = () => {
+        const canvas = document.createElement('canvas');
+        canvas.width = video.videoWidth || 720; canvas.height = video.videoHeight || 1280;
+        canvas.getContext('2d')?.drawImage(video, 0, 0, canvas.width, canvas.height);
+        canvas.toBlob(blob => { URL.revokeObjectURL(url); resolve(blob ? { blob, url: URL.createObjectURL(blob) } : null); }, 'image/jpeg', 0.82);
+      };
+      video.onerror = () => { URL.revokeObjectURL(url); resolve(null); };
+    });
 
-  const loadBalance = async () => {
-    if (!user) return;
-    const { data } = await supabase.from('user_profiles').select('star_balance, follower_count').eq('id', user.id).single();
-    setUserStarBalance(data?.star_balance || 0);
-    setFollowerCount((data as any)?.follower_count || 0);
-  };
-
-  const generateVideoThumbnail = (file: File): Promise<{ blob: Blob; url: string } | null> => new Promise(resolve => {
-    const video = document.createElement('video');
-    const url = URL.createObjectURL(file);
-    video.preload = 'metadata';
-    video.muted = true;
-    video.playsInline = true;
-    video.src = url;
-    video.onloadedmetadata = () => { video.currentTime = Math.min(0.35, Math.max(0, (video.duration || 1) - 0.1)); };
-    video.onseeked = () => {
-      const canvas = document.createElement('canvas');
-      canvas.width = video.videoWidth || 720;
-      canvas.height = video.videoHeight || 1280;
-      canvas.getContext('2d')?.drawImage(video, 0, 0, canvas.width, canvas.height);
-      canvas.toBlob(blob => {
-        URL.revokeObjectURL(url);
-        resolve(blob ? { blob, url: URL.createObjectURL(blob) } : null);
-      }, 'image/jpeg', 0.82);
-    };
-    video.onerror = () => { URL.revokeObjectURL(url); resolve(null); };
-  });
-
-  const handleMediaChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleMediaChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = Array.from(e.target.files || []);
-    const validFiles = files.filter(f => {
-      const maxSize = f.type.startsWith('video/') ? 500 * 1024 * 1024 : 20 * 1024 * 1024;
-      if (f.size > maxSize) {
-        toast({ title: 'File too large', description: `${f.name} exceeds limit`, variant: 'destructive' });
-        return false;
-      }
+    const valid = files.filter(f => {
+      const max = f.type.startsWith('video/') ? 500 * 1024 * 1024 : 20 * 1024 * 1024;
+      if (f.size > max) { toast({ title: 'File too large', variant: 'destructive' }); return false; }
       return f.type.startsWith('image/') || f.type.startsWith('video/');
     });
-    if (validFiles.length + mediaFiles.length > 3) {
-      toast({ title: 'Max 3 files', variant: 'destructive' });
-      return;
-    }
-    setMediaFiles(prev => [...prev, ...validFiles]);
-    validFiles.forEach(f => setMediaPreviews(prev => [...prev, URL.createObjectURL(f)]));
-    const firstVideo = validFiles.find(f => f.type.startsWith('video/'));
+    if (valid.length + mediaFiles.length > 3) { toast({ title: 'Max 3 files', variant: 'destructive' }); return; }
+    setMediaFiles(prev => [...prev, ...valid]);
+    valid.forEach(f => setMediaPreviews(prev => [...prev, URL.createObjectURL(f)]));
+    const firstVideo = valid.find(f => f.type.startsWith('video/'));
     if (firstVideo && !thumbnailPreview) {
-      generateVideoThumbnail(firstVideo).then(result => {
-        if (!result) return;
-        setThumbnailBlob(result.blob);
-        setThumbnailPreview(result.url);
-      });
+      const result = await generateVideoThumbnail(firstVideo);
+      if (result) { setThumbnailBlob(result.blob); setThumbnailPreview(result.url); }
     }
-  };
-
-  const handleThumbnailChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const f = e.target.files?.[0];
-    if (f && f.type.startsWith('image/')) {
-      setThumbnailFile(f);
-      setThumbnailPreview(URL.createObjectURL(f));
-    }
+    if (valid.length > 0) setStep(1);
   };
 
   const removeMedia = (i: number) => {
@@ -206,12 +146,144 @@ const CreatePostWizard: React.FC<CreatePostWizardProps> = ({ onPostCreated, isOp
     setMediaPreviews(prev => prev.filter((_, idx) => idx !== i));
   };
 
-  const addTag = () => {
-    const t = tagInput.trim().replace(/^#/, '');
-    if (t && !tags.includes(t) && tags.length < 10) {
-      setTags(prev => [...prev, t]);
-      setTagInput('');
+  const runVibeSync = useCallback(async () => {
+    if (!title && !body) return;
+    setVibeLoading(true);
+    try {
+      const { data: tracks } = await supabase
+        .from('music_tracks')
+        .select('*')
+        .eq('status', 'active')
+        .eq('source', 'community')
+        .order('usage_count', { ascending: false })
+        .limit(50);
+
+      if (!tracks || tracks.length === 0) return;
+      setCommunityTracks(tracks);
+
+      const keywords = `${title} ${body} ${category}`.toLowerCase().split(/\s+/);
+      const scored = tracks.map(track => {
+        const trackText = `${track.title} ${track.artist_name} ${track.genre || ''} ${track.tags?.join(' ') || ''}`.toLowerCase();
+        const score = keywords.reduce((acc, kw) => acc + (trackText.includes(kw) ? 2 : 0), 0);
+        const random = Math.random() * 0.5;
+        return { track, score: score + random };
+      });
+      scored.sort((a, b) => b.score - a.score);
+
+      const picked = scored[0]?.track;
+      if (picked) {
+        setAiPickedTrack(picked);
+        setSelectedMusicTrack(picked);
+        if (picked.duration_seconds) setMusicDuration(Math.min(picked.duration_seconds, 30));
+      }
+    } catch (e) {
+      console.error('Vibe sync error:', e);
+    } finally {
+      setVibeLoading(false);
     }
+  }, [title, body, category]);
+
+  useEffect(() => {
+    if (step === 1 && !selectedMusicTrack && !postToEdit) {
+      const timer = setTimeout(() => runVibeSync(), 800);
+      return () => clearTimeout(timer);
+    }
+  }, [step]);
+
+  const searchTags = async (query: string) => {
+    if (!query) { setTagSuggestions([]); setShowTagSuggestions(false); return; }
+    const { data } = await supabase
+      .from('hashtags')
+      .select('*')
+      .ilike('name', `%${query}%`)
+      .limit(8);
+    setTagSuggestions(data || []);
+    setShowTagSuggestions(true);
+  };
+
+  const handleTagInput = (val: string) => {
+    setTagInput(val);
+    searchTags(val.replace(/^#/, ''));
+  };
+
+  const addTag = async (tagName: string) => {
+    const clean = tagName.trim().replace(/^#/, '').toLowerCase();
+    if (!clean || tags.includes(clean) || tags.length >= 10) return;
+
+    const { data: existing } = await supabase
+      .from('hashtags')
+      .select('*')
+      .eq('name', clean)
+      .maybeSingle();
+
+    if (!existing) {
+      await supabase.from('hashtags').insert({
+        name: clean,
+        created_by: user?.id,
+        post_count: 1
+      });
+      toast({ title: `#${clean} created!`, description: 'New hashtag created on Lenory' });
+    } else {
+      await supabase.from('hashtags').update({ post_count: (existing.post_count || 0) + 1 }).eq('id', existing.id);
+    }
+
+    setTags(prev => [...prev, clean]);
+    setTagInput('');
+    setShowTagSuggestions(false);
+  };
+
+  const searchMentions = async (query: string) => {
+    if (!query) { setMentionSuggestions([]); setShowMentionSuggestions(false); return; }
+    const { data } = await supabase
+      .from('user_profiles')
+      .select('id, username, avatar_url')
+      .ilike('username', `%${query}%`)
+      .limit(8);
+    setMentionSuggestions(data || []);
+    setShowMentionSuggestions(true);
+  };
+
+  const handleBodyChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
+    const val = e.target.value;
+    const pos = e.target.selectionStart || 0;
+    setBody(val);
+    setCursorPos(pos);
+
+    const beforeCursor = val.slice(0, pos);
+    const hashMatch = beforeCursor.match(/#(\w*)$/);
+    if (hashMatch) {
+      searchTags(hashMatch[1]);
+      return;
+    }
+
+    const mentionMatch = beforeCursor.match(/@(\w*)$/);
+    if (mentionMatch) {
+      searchMentions(mentionMatch[1]);
+      return;
+    }
+
+    setShowTagSuggestions(false);
+    setShowMentionSuggestions(false);
+  };
+
+  const insertTag = (tagName: string) => {
+    const clean = tagName.replace(/^#/, '').toLowerCase();
+    const before = body.slice(0, cursorPos);
+    const after = body.slice(cursorPos);
+    const newBefore = before.replace(/#(\w*)$/, `#${clean} `);
+    setBody(newBefore + after);
+    if (!tags.includes(clean)) setTags(prev => [...prev, clean]);
+    setShowTagSuggestions(false);
+  };
+
+  const insertMention = (u: any) => {
+    if (mentions.length >= 5) { toast({ title: 'Max 5 mentions', variant: 'destructive' }); return; }
+    const before = body.slice(0, cursorPos);
+    const after = body.slice(cursorPos);
+    const newBefore = before.replace(/@(\w*)$/, `@${u.username} `);
+    setBody(newBefore + after);
+    setMentions(prev => [...prev, u]);
+    setShowMentionSuggestions(false);
   };
 
   const uploadMedia = async (): Promise<string[]> => {
@@ -239,10 +311,9 @@ const CreatePostWizard: React.FC<CreatePostWizardProps> = ({ onPostCreated, isOp
 
   const ensureMusicTrackId = async (): Promise<string | null> => {
     if (!selectedMusicTrack) return null;
-    // If id is a real DB uuid (no 'spotify-' prefix), return as-is
-    if (!selectedMusicTrack.id?.startsWith('spotify-') && !selectedMusicTrack.id?.startsWith('yt-')) return selectedMusicTrack.id;
-    // Lenory Free: upsert into music_tracks
-    const ext = selectedMusicTrack.spotify_id || selectedMusicTrack.external_id || selectedMusicTrack.youtube_id;
+    if (!selectedMusicTrack.id?.startsWith('spotify-') && !selectedMusicTrack.id?.startsWith('yt-'))
+      return selectedMusicTrack.id;
+    const ext = selectedMusicTrack.external_id || selectedMusicTrack.youtube_id;
     if (!ext) return null;
     const { data: existing } = await supabase.from('music_tracks').select('id').eq('external_id', ext).maybeSingle();
     if (existing?.id) return existing.id;
@@ -251,7 +322,7 @@ const CreatePostWizard: React.FC<CreatePostWizardProps> = ({ onPostCreated, isOp
       artist_name: selectedMusicTrack.artist_name,
       cover_url: selectedMusicTrack.cover_url,
       duration_seconds: selectedMusicTrack.duration_seconds || 0,
-      source: 'lenory_free',
+      source: 'community',
       external_id: ext,
       youtube_id: selectedMusicTrack.youtube_id,
       audio_url: '',
@@ -260,55 +331,77 @@ const CreatePostWizard: React.FC<CreatePostWizardProps> = ({ onPostCreated, isOp
     return created?.id || null;
   };
 
-  const handleSubmit = async () => {
-    if (!user || !title.trim() || !body.trim() || !category) return;
-    if (requiresFollowerUnlock && !hasFollowerUnlock) {
-      toast({ title: 'Locked', description: '15–50 Star posts unlock at 1,000 followers.', variant: 'destructive' });
-      return;
-    }
-    if (isPaidTier && !canAffordFee) {
-      toast({ title: 'Insufficient Stars', description: `Need ${postingFee} Stars`, variant: 'destructive' });
-      return;
-    }
+  const sendMentionNotifications = async (postId: string) => {
+    if (!mentions.length || !user) return;
+    await Promise.all(mentions.map(async (mentioned) => {
+      await supabase.from('notifications').insert({
+        user_id: mentioned.id,
+        type: 'mention',
+        message: `@${user.email?.split('@')[0]} mentioned you in a post`,
+        post_id: postId,
+        from_user_id: user.id,
+        read: false
+      });
+    }));
+  };
 
+  const handleSubmit = async () => {
+    if (!user || !title.trim() || !body.trim() || !category) {
+      toast({ title: 'Missing info', description: 'Please fill title, caption and category', variant: 'destructive' });
+      return;
+    }
     setLoading(true);
     try {
-      if (isPaidTier && !postToEdit) {
-        await supabase.from('user_profiles').update({ star_balance: userStarBalance - postingFee }).eq('id', user.id);
-      }
       const mediaUrls = await uploadMedia();
       const thumbUrl = await uploadThumbnail();
-      const bodyWithTags = tags.length > 0 ? `${body.trim()}\n\n${tags.map(t => `#${t}`).join(' ')}` : body.trim();
       const musicTrackId = await ensureMusicTrackId();
+      const bodyWithTags = tags.length > 0 ? `${body.trim()}\n\n${tags.map(t => `#${t}`).join(' ')}` : body.trim();
+
+      let postId: string | null = null;
 
       if (postToEdit?.id) {
         await supabase.from('posts').update({
-          title: title.trim(), body: bodyWithTags, category,
-          media_urls: mediaUrls, star_price: starPrice, thumbnail_url: thumbUrl,
+          title: title.trim(),
+          body: bodyWithTags,
+          category,
+          media_urls: mediaUrls,
+          thumbnail_url: thumbUrl,
           music_track_id: musicTrackId,
           music_start_seconds: musicStart,
           music_duration_seconds: musicDuration,
         } as any).eq('id', postToEdit.id);
+        postId = postToEdit.id;
         toast({ title: 'Post updated!' });
       } else {
         const { data: newPost } = await supabase.from('posts').insert({
-          title: title.trim(), body: bodyWithTags, category,
-          media_urls: mediaUrls, user_id: user.id, status: 'approved',
-          star_price: starPrice, post_status: 'new', thumbnail_url: thumbUrl,
+          title: title.trim(),
+          body: bodyWithTags,
+          category,
+          media_urls: mediaUrls,
+          user_id: user.id,
+          status: 'approved',
+          post_status: 'new',
+          thumbnail_url: thumbUrl,
           music_track_id: musicTrackId,
           music_start_seconds: musicStart,
           music_duration_seconds: musicDuration,
+          boosted: selectedMusicTrack && selectedMusicTrack.id === aiPickedTrack?.id ? true : false,
         } as any).select('id').single();
+
+        postId = newPost?.id || null;
 
         if (musicTrackId) {
           const { data: tr } = await supabase.from('music_tracks').select('usage_count').eq('id', musicTrackId).maybeSingle();
-          await supabase.from('music_tracks').update({ usage_count: (tr?.usage_count || 0) + 1, last_used_at: new Date().toISOString() }).eq('id', musicTrackId);
+          await supabase.from('music_tracks').update({
+            usage_count: (tr?.usage_count || 0) + 1,
+            last_used_at: new Date().toISOString()
+          }).eq('id', musicTrackId);
         }
 
-        // Optionally also post to storyline
-        if (alsoPostToStoryline && mediaUrls[0]) {
+        // FIXED STORYLINE TOGGLE
+        if (alsoPostToStoryline && mediaUrls.length > 0) {
           const isVid = /\.(mp4|webm|ogg|mov)$/i.test(mediaUrls[0]);
-          await supabase.from('user_storylines').insert({
+          const { error: storylineError } = await supabase.from('user_storylines').insert({
             user_id: user.id,
             media_url: mediaUrls[0],
             media_type: isVid ? 'video' : 'image',
@@ -318,381 +411,464 @@ const CreatePostWizard: React.FC<CreatePostWizardProps> = ({ onPostCreated, isOp
             music_track_id: musicTrackId,
             music_start_seconds: musicStart,
             music_duration_seconds: musicDuration,
-            star_price: starPrice,
+            star_price: 0,
             status: 'active',
+            expires_at: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(),
           } as any);
+
+          if (storylineError) {
+            console.error('Storyline error:', storylineError);
+            toast({ title: 'Post created but storyline failed', description: storylineError.message, variant: 'destructive' });
+          } else {
+            toast({ title: '🎉 Post created!', description: 'Also added to your Storyline for 24 hours!' });
+          }
+        } else {
+          toast({ title: '🎉 Post live!', description: 'Your post is now on the feed!' });
         }
 
-        toast({ title: '🎉 Post created!', description: isPaidTier ? `${postingFee} Stars deducted` : 'Your post is live!' });
+        if (postId) await sendMentionNotifications(postId);
+
+        if (tags.length > 0 && postId) {
+          await Promise.all(tags.map(async (tag) => {
+            const { data: ht } = await supabase.from('hashtags').select('id, post_count').eq('name', tag).maybeSingle();
+            if (ht) {
+              await supabase.from('hashtags').update({ post_count: (ht.post_count || 0) + 1 }).eq('id', ht.id);
+            }
+          }));
+        }
       }
 
       onOpenChange?.(false);
       onPostCreated?.();
-      loadBalance();
     } catch (e) {
       console.error(e);
-      toast({ title: 'Error', description: 'Failed to create post', variant: 'destructive' });
+      toast({ title: 'Error', description: 'Failed to create post. Try again.', variant: 'destructive' });
     } finally {
       setLoading(false);
     }
   };
 
-  const canProceed = () => {
-    switch (step) {
-      case 0: return mediaPreviews.length > 0 || (postToEdit?.media_urls?.length > 0);
-      case 1: return title.trim().length > 0 && !!category;
-      case 2: return body.trim().length >= 10;
-      case 3: return true;
-      case 4: return !(requiresFollowerUnlock && !hasFollowerUnlock);
-      case 5: return true;
-      default: return false;
-    }
-  };
+  const hasMedia = mediaPreviews.length > 0;
+  const hasVideo = mediaFiles.some(f => f.type.startsWith('video/')) ||
+    mediaPreviews.some(p => /\.(mp4|webm|ogg|mov)/i.test(p));
+  const canProceed = step === 0 ? hasMedia : step === 1 ? title.trim().length > 0 && !!category && body.trim().length >= 5 : true;
 
-  const renderStep = () => {
-    switch (step) {
-      case 0: return (
-        <div className="space-y-4">
-          <div className="border-2 border-dashed border-border rounded-2xl p-8 text-center">
-            <Upload className="w-10 h-10 mx-auto mb-3 text-muted-foreground" />
-            <label className="cursor-pointer">
-              <span className="text-sm font-semibold text-primary hover:underline">
-                Upload images or videos
-              </span>
-              <input type="file" multiple accept="image/*,video/*" onChange={handleMediaChange} className="hidden" />
-            </label>
-            <p className="text-xs text-muted-foreground mt-1">Max 3 files · Images 20MB · Videos 500MB</p>
-          </div>
-          {mediaPreviews.length > 0 && (
-            <div className="grid grid-cols-2 gap-2">
-              {mediaPreviews.map((p, i) => (
-                <div key={i} className="relative rounded-xl overflow-hidden">
-                  {mediaFiles[i]?.type.startsWith('video/') ? (
-                    <video src={p} className="w-full h-28 object-cover" muted />
+  const renderCapture = () => (
+    <div className="flex flex-col h-full bg-black">
+      <div className="flex items-center justify-between px-4 pt-4 pb-2">
+        <button onClick={() => onOpenChange?.(false)} className="w-9 h-9 rounded-full bg-white/10 flex items-center justify-center">
+          <X className="w-5 h-5 text-white" />
+        </button>
+        <span className="text-white font-bold text-base">New Post</span>
+        <div className="w-9" />
+      </div>
+
+      {hasMedia ? (
+        <div className="flex-1 relative">
+          {mediaFiles[0]?.type.startsWith('video/') || mediaPreviews[0]?.match(/\.(mp4|webm|ogg|mov)/i) ? (
+            <video src={mediaPreviews[0]} className="w-full h-full object-cover" muted playsInline />
+          ) : (
+            <img src={mediaPreviews[0]} className="w-full h-full object-cover" alt="preview" />
+          )}
+          <button onClick={() => removeMedia(0)} className="absolute top-3 right-3 w-8 h-8 rounded-full bg-black/60 flex items-center justify-center">
+            <X className="w-4 h-4 text-white" />
+          </button>
+          {mediaPreviews.length > 1 && (
+            <div className="absolute bottom-3 left-3 flex gap-2">
+              {mediaPreviews.slice(1).map((p, i) => (
+                <div key={i} className="relative w-12 h-12 rounded-lg overflow-hidden border-2 border-white">
+                  {mediaFiles[i + 1]?.type.startsWith('video/') ? (
+                    <video src={p} className="w-full h-full object-cover" muted />
                   ) : (
-                    <img src={p} alt="" className="w-full h-28 object-cover" />
+                    <img src={p} className="w-full h-full object-cover" alt="" />
                   )}
-                  <button onClick={() => removeMedia(i)} className="absolute top-1 right-1 bg-destructive text-destructive-foreground rounded-full p-0.5">
-                    <X className="w-3.5 h-3.5" />
+                  <button onClick={() => removeMedia(i + 1)} className="absolute top-0 right-0 w-4 h-4 bg-red-500 rounded-full flex items-center justify-center">
+                    <X className="w-2.5 h-2.5 text-white" />
                   </button>
-                  <div className="absolute bottom-1 left-1">
-                    {mediaFiles[i]?.type.startsWith('video/') ? <Video className="w-3.5 h-3.5 text-white" /> : <Image className="w-3.5 h-3.5 text-white" />}
-                  </div>
                 </div>
               ))}
-            </div>
-          )}
-          {hasVideo && (
-            <div className="space-y-2 p-3 bg-muted/50 rounded-xl">
-              <Label className="text-xs font-semibold flex items-center gap-1"><Image className="w-3.5 h-3.5" /> Video Thumbnail</Label>
-              <p className="text-[10px] text-muted-foreground">Add a thumbnail image so your video displays clearly on the app and home feed. Without a thumbnail, your post may not display well.</p>
-              {thumbnailPreview ? (
-                <div className="relative w-24 h-16 rounded-lg overflow-hidden">
-                  <img src={thumbnailPreview} className="w-full h-full object-cover" />
-                  <button onClick={() => { setThumbnailFile(null); setThumbnailPreview(''); }} className="absolute top-0.5 right-0.5 bg-destructive text-destructive-foreground rounded-full p-0.5"><X className="w-3 h-3" /></button>
-                </div>
-              ) : (
-                <label className="cursor-pointer text-xs text-primary hover:underline">
-                  Upload thumbnail or <span className="text-accent font-bold">Generate with AI ✨</span>
-                  <input type="file" accept="image/*" onChange={handleThumbnailChange} className="hidden" />
+              {mediaPreviews.length < 3 && (
+                <label className="w-12 h-12 rounded-lg border-2 border-dashed border-white/50 flex items-center justify-center cursor-pointer">
+                  <Upload className="w-4 h-4 text-white/70" />
+                  <input type="file" multiple accept="image/*,video/*" onChange={handleMediaChange} className="hidden" />
                 </label>
               )}
             </div>
           )}
-        </div>
-      );
-      case 1: return (
-        <div className="space-y-4">
-          <div className="space-y-2">
-            <Label>Title *</Label>
-            <Input value={title} onChange={e => setTitle(e.target.value)} placeholder="What's your post about?" maxLength={100} />
-          </div>
-          <div className="space-y-2">
-            <Label>Domain / Category *</Label>
-            <Select value={category} onValueChange={setCategory}>
-              <SelectTrigger><SelectValue placeholder="Select domain" /></SelectTrigger>
-              <SelectContent>
-                {categories.map(c => <SelectItem key={c} value={c}>{c}</SelectItem>)}
-              </SelectContent>
-            </Select>
+          <div className="absolute bottom-4 right-4">
+            <Button onClick={() => setStep(1)} className="bg-primary text-white font-bold px-6 rounded-full">
+              Next →
+            </Button>
           </div>
         </div>
-      );
-      case 2: return (
-        <div className="space-y-4">
-          <div className="space-y-2">
-            <Label>Caption / Description *</Label>
-            <Textarea value={body} onChange={e => setBody(e.target.value)} placeholder="Share your thoughts..." minLength={10} maxLength={2000} rows={5} />
-            <div className="text-xs text-muted-foreground text-right">{body.length}/2000</div>
-          </div>
-          <div className="space-y-2">
-            <Label className="flex items-center gap-1"><Hash className="w-3.5 h-3.5" /> Tags</Label>
-            <div className="flex gap-2">
-              <Input value={tagInput} onChange={e => setTagInput(e.target.value)} placeholder="Add a tag"
-                onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); addTag(); } }} className="flex-1" />
-              <Button type="button" size="sm" variant="outline" onClick={addTag}>Add</Button>
-            </div>
-            {tags.length > 0 && (
-              <div className="flex flex-wrap gap-1.5 mt-1">
-                {tags.map(t => (
-                  <Badge key={t} variant="secondary" className="gap-1 text-xs cursor-pointer" onClick={() => setTags(prev => prev.filter(x => x !== t))}>
-                    #{t} <X className="w-3 h-3" />
-                  </Badge>
-                ))}
+      ) : (
+        <div className="flex-1 flex flex-col items-center justify-center gap-6 px-6">
+          <label className="w-full cursor-pointer">
+            <div className="w-full border-2 border-dashed border-white/30 rounded-2xl p-10 flex flex-col items-center gap-4">
+              <div className="w-16 h-16 rounded-full bg-primary/20 flex items-center justify-center">
+                <Upload className="w-8 h-8 text-primary" />
               </div>
-            )}
-          </div>
-        </div>
-      );
-      case 3: return (
-        <div className="space-y-3">
-          <div className="text-center">
-            <h3 className="font-bold text-base">Vibe Sync 🎵</h3>
-            <p className="text-xs text-muted-foreground">Add background music · Musicians earn 10% royalty per view!</p>
-          </div>
-          <MusicBrowser
-            selectedTrackId={selectedMusicTrack?.id}
-            onSelect={(track) => {
-              setSelectedMusicTrack(track);
-              setSelectedMusic(track?.audio_url || track?.youtube_id || '');
-              if (track?.duration_seconds) setMusicDuration(Math.min(track.duration_seconds, 30));
-            }}
-          />
-          {selectedMusicTrack && (
-            <div className="p-3 bg-muted/50 rounded-xl space-y-2">
-              <Label className="text-xs font-semibold flex items-center gap-1"><Music className="w-3 h-3" /> Sync Music to Media</Label>
-              <div className="space-y-1">
-                <div className="flex items-center justify-between text-[10px] text-muted-foreground">
-                  <span>Start at: {musicStart}s</span>
-                  <span>Length: {musicDuration}s</span>
-                </div>
-                <input
-                  type="range"
-                  min={0}
-                  max={Math.max(0, (selectedMusicTrack.duration_seconds || 60) - 5)}
-                  value={musicStart}
-                  onChange={e => setMusicStart(parseInt(e.target.value))}
-                  className="w-full accent-primary"
-                />
-                <input
-                  type="range"
-                  min={5}
-                  max={Math.min(60, selectedMusicTrack.duration_seconds || 30)}
-                  value={musicDuration}
-                  onChange={e => setMusicDuration(parseInt(e.target.value))}
-                  className="w-full accent-primary"
-                />
+              <div className="text-center">
+                <p className="text-white font-bold text-base">Upload Video or Photo</p>
+                <p className="text-white/50 text-xs mt-1">Max 3 files · Images 20MB · Videos 500MB</p>
               </div>
-              <p className="text-[10px] text-muted-foreground">Drag to choose what part of the song plays with your post (min 5s for images).</p>
             </div>
-          )}
-        </div>
-      );
-      case 4: return (
-        <div className="space-y-4">
-          <Label className="flex items-center gap-2"><Star className="w-4 h-4 text-yellow-500" /> Set Star Price</Label>
-          <Select value={starPrice.toString()} onValueChange={v => setStarPrice(parseInt(v))}>
-            <SelectTrigger><SelectValue /></SelectTrigger>
-            <SelectContent>
-              {starPriceOptions.map(p => (
-                <SelectItem key={p} value={p.toString()} disabled={p >= 15 && p <= 50 && !hasFollowerUnlock}>
-                  {p === 0 ? 'Free' : `${p} Stars`}{p >= 15 && p <= 50 && !hasFollowerUnlock ? ' (Unlock at 1,000 followers)' : p >= 100 ? ' (40⭐ fee)' : p > 0 ? ' (Free to post)' : ''}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-          {requiresFollowerUnlock && !hasFollowerUnlock && (
-            <div className="p-3 rounded-xl border border-primary/30 bg-primary/10 text-xs text-primary font-semibold">
-              15–50 Star posts unlock at 1,000 followers. You have {followerCount.toLocaleString()} followers.
-            </div>
-          )}
-          {starPrice > 0 && (
-            <div className="p-3 bg-muted rounded-xl space-y-1.5 text-sm">
-              <p className="font-semibold">💰 Viewers pay: ₦{(starPrice * 300).toLocaleString()}</p>
-              <p className="text-primary">✅ You earn: ₦{(starPrice * 300 * (selectedMusic ? 0.30 : 0.40)).toLocaleString()} ({selectedMusic ? '30' : '40'}%)</p>
-              <p className="text-muted-foreground">🎁 Viewer cashback: ₦{(starPrice * 300 * 0.35).toLocaleString()} (35%)</p>
-              {selectedMusic && <p className="text-accent">🎵 Musician: ₦{(starPrice * 300 * 0.10).toLocaleString()} (10%)</p>}
-              <p className="text-muted-foreground">🏢 Platform: 25%</p>
-              {isPaidTier && (
-                <p className={canAffordFee ? 'text-yellow-600 font-semibold' : 'text-destructive font-semibold'}>
-                  ⭐ Posting fee: {postingFee} Stars {canAffordFee ? '✓' : `(Need ${postingFee}, have ${userStarBalance})`}
-                </p>
-              )}
-            </div>
-          )}
-        </div>
-      );
-      case 5: return (
-        <div className="space-y-4">
-          <div className="text-center">
-            <h3 className="font-bold text-base">Preview & Edit ✏️</h3>
-            <p className="text-[11px] text-muted-foreground">Make last-minute tweaks before launch.</p>
+            <input ref={fileInputRef} type="file" multiple accept="image/*,video/*" onChange={handleMediaChange} className="hidden" />
+          </label>
+
+          <div className="flex items-center gap-3 w-full">
+            <div className="flex-1 h-px bg-white/20" />
+            <span className="text-white/40 text-xs">or</span>
+            <div className="flex-1 h-px bg-white/20" />
           </div>
 
-          {mediaPreviews.length > 0 && (
-            <div className="flex gap-2 overflow-x-auto pb-1">
-              {mediaPreviews.map((p, i) => (
-                /\.(mp4|webm|ogg|mov|m4v)(\?|$)/i.test(p) ? (
-                  <video key={i} src={p} className="w-24 h-16 object-cover rounded-lg shrink-0 border border-border" muted playsInline preload="metadata" />
+          <label className="cursor-pointer">
+            <div className="w-20 h-20 rounded-full border-4 border-white flex items-center justify-center bg-white/10">
+              <Camera className="w-9 h-9 text-white" />
+            </div>
+            <input type="file" accept="image/*,video/*" capture="environment" onChange={handleMediaChange} className="hidden" />
+          </label>
+          <p className="text-white/50 text-xs">Tap to open camera</p>
+        </div>
+      )}
+    </div>
+  );
+
+  const renderDetails = () => (
+    <div className="flex flex-col h-full bg-background">
+      <div className="flex items-center gap-3 px-4 pt-4 pb-3 border-b border-border/50">
+        <button onClick={() => setStep(0)} className="w-8 h-8 rounded-full bg-muted flex items-center justify-center">
+          <ArrowLeft className="w-4 h-4" />
+        </button>
+        <span className="font-bold text-sm flex-1">Add Details</span>
+        <span className="text-xs text-muted-foreground">Step 2 of 3</span>
+      </div>
+
+      <div className="flex-1 overflow-y-auto px-4 py-3 space-y-4">
+        {hasMedia && (
+          <div className="flex gap-2">
+            {mediaPreviews.slice(0, 3).map((p, i) => (
+              <div key={i} className="w-14 h-14 rounded-xl overflow-hidden border border-border">
+                {mediaFiles[i]?.type.startsWith('video/') ? (
+                  <video src={p} className="w-full h-full object-cover" muted />
                 ) : (
-                  <img key={i} src={p} alt="" className="w-24 h-16 object-cover rounded-lg shrink-0 border border-border" />
-                )
-              ))}
-            </div>
-          )}
-
-          <div className="space-y-3 p-3 rounded-xl border border-border bg-muted/30">
-            <div className="space-y-1">
-              <Label className="text-[11px]">Title</Label>
-              <Input value={title} onChange={e => setTitle(e.target.value)} maxLength={100} className="h-8 text-sm" />
-            </div>
-            <div className="space-y-1">
-              <Label className="text-[11px]">Caption</Label>
-              <Textarea value={body} onChange={e => setBody(e.target.value)} rows={3} maxLength={2000} className="text-sm" />
-            </div>
-            <div className="space-y-1">
-              <Label className="text-[11px]">Category</Label>
-              <Select value={category} onValueChange={setCategory}>
-                <SelectTrigger className="h-8 text-sm"><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  {categories.map(c => <SelectItem key={c} value={c}>{c}</SelectItem>)}
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="space-y-1">
-              <Label className="text-[11px] flex items-center gap-1"><Hash className="w-3 h-3" /> Tags</Label>
-              <div className="flex gap-2">
-                <Input value={tagInput} onChange={e => setTagInput(e.target.value)} placeholder="Add tag"
-                  onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); addTag(); } }} className="h-8 text-xs flex-1" />
-                <Button type="button" size="sm" variant="outline" onClick={addTag} className="h-8">Add</Button>
+                  <img src={p} className="w-full h-full object-cover" alt="" />
+                )}
               </div>
-              {tags.length > 0 && (
-                <div className="flex flex-wrap gap-1 mt-1">
-                  {tags.map(t => (
-                    <Badge key={t} variant="secondary" className="gap-1 text-[10px] cursor-pointer" onClick={() => setTags(prev => prev.filter(x => x !== t))}>
-                      #{t} <X className="w-2.5 h-2.5" />
-                    </Badge>
-                  ))}
-                </div>
-              )}
-            </div>
-            <div className="space-y-1">
-              <Label className="text-[11px] flex items-center gap-1"><Star className="w-3 h-3 text-yellow-500" /> Star Price</Label>
-              <Select value={starPrice.toString()} onValueChange={v => setStarPrice(parseInt(v))}>
-                <SelectTrigger className="h-8 text-sm"><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  {starPriceOptions.map(p => (
-                    <SelectItem key={p} value={p.toString()}>
-                      {p === 0 ? 'Free' : `${p} Stars`}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-            {selectedMusicTrack && (
-              <div className="text-[11px] text-muted-foreground flex items-center justify-between">
-                <span>♪ {selectedMusicTrack.title} — {selectedMusicTrack.artist_name}</span>
-                <button type="button" onClick={() => setStep(3)} className="text-primary text-[10px] underline">Change</button>
-              </div>
-            )}
-          </div>
-
-          {!postToEdit && mediaPreviews.length > 0 && (
-            <button
-              type="button"
-              onClick={() => setAlsoPostToStoryline(v => !v)}
-              className={`w-full p-3 rounded-xl border-2 transition-colors text-left ${alsoPostToStoryline ? 'border-primary bg-primary/10' : 'border-border bg-muted/30'}`}
-            >
-              <p className="text-sm font-semibold flex items-center gap-1.5">📖 Add to Storyline {alsoPostToStoryline && <Check className="w-4 h-4 text-primary" />}</p>
-              <p className="text-[10px] text-muted-foreground">Also share this as a 24-hour story</p>
-            </button>
-          )}
-        </div>
-      );
-      case 6: return (
-        <div className="space-y-4">
-          <h3 className="font-bold text-base text-center">Ready to Launch 🚀</h3>
-          {mediaPreviews.length > 0 && (
-            <div className="flex gap-2 overflow-x-auto">
-              {mediaPreviews.map((p, i) => (
-                /\.(mp4|webm|ogg|mov|m4v)(\?|$)/i.test(p) ? (
-                  <video key={i} src={p} className="w-20 h-14 object-cover rounded-lg shrink-0" muted playsInline preload="metadata" />
-                ) : (
-                  <img key={i} src={p} alt="" className="w-20 h-14 object-cover rounded-lg shrink-0" />
-                )
-              ))}
-            </div>
-          )}
-          <div className="space-y-2 text-sm">
-            <div><span className="text-muted-foreground">Title:</span> <span className="font-medium">{title}</span></div>
-            <div><span className="text-muted-foreground">Category:</span> <Badge variant="secondary">{category}</Badge></div>
-            <div><span className="text-muted-foreground">Caption:</span> <span className="line-clamp-2">{body}</span></div>
-            {tags.length > 0 && <div className="flex flex-wrap gap-1">{tags.map(t => <Badge key={t} variant="outline" className="text-xs">#{t}</Badge>)}</div>}
-            <div><span className="text-muted-foreground">Star Price:</span> <span className="font-bold text-yellow-500">{starPrice === 0 ? 'Free' : `${starPrice} ⭐`}</span></div>
-            {selectedMusicTrack && <div><span className="text-muted-foreground">Music:</span> <span>♪ {selectedMusicTrack.title} — {selectedMusicTrack.artist_name}</span></div>}
-            {alsoPostToStoryline && <div className="text-primary text-xs">📖 Will also be added to your Storyline</div>}
-            {isPaidTier && (
-              <div className={canAffordFee ? 'text-yellow-600 text-xs' : 'text-destructive text-xs font-semibold'}>
-                ⭐ Posting fee: {postingFee} Stars {canAffordFee ? '✓' : `(insufficient)`}
-              </div>
-            )}
-          </div>
-        </div>
-      );
-    }
-  };
-
-  return (
-    <Dialog open={isOpen} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-lg max-h-[90vh] overflow-hidden flex flex-col p-0">
-        {/* Progress */}
-        <div className="px-4 pt-4 pb-2">
-          <div className="flex items-center justify-between mb-2">
-            <h2 className="text-sm font-bold">{postToEdit ? 'Edit Post' : 'Create Post To Earn'}</h2>
-            <span className="text-xs text-muted-foreground">{step + 1}/{TOTAL_STEPS}</span>
-          </div>
-          <Progress value={((step + 1) / TOTAL_STEPS) * 100} className="h-1.5" />
-          {/* Step indicators */}
-          <div className="flex justify-between mt-2">
-            {STEPS.map((s, i) => (
-              <button key={i} onClick={() => i <= step && setStep(i)}
-                className={`flex flex-col items-center gap-0.5 transition-colors ${i <= step ? 'text-primary' : 'text-muted-foreground/40'}`}
-              >
-                <s.icon className="w-3.5 h-3.5" />
-                <span className="text-[9px] font-medium">{s.label}</span>
-              </button>
             ))}
           </div>
+        )}
+
+        <div>
+          <Input
+            value={title}
+            onChange={e => setTitle(e.target.value)}
+            placeholder="Add a title..."
+            maxLength={100}
+            className="font-semibold text-base border-0 border-b rounded-none px-0 focus-visible:ring-0 bg-transparent"
+          />
         </div>
 
-        {/* Step content */}
-        <div className="flex-1 overflow-y-auto px-4 pb-2">
-          <AnimatePresence mode="wait">
-            <motion.div key={step} initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -20 }} transition={{ duration: 0.2 }}>
-              {renderStep()}
-            </motion.div>
+        <div className="relative">
+          <Textarea
+            ref={bodyRef}
+            value={body}
+            onChange={handleBodyChange}
+            placeholder="Write a caption... use # for tags, @ to mention"
+            maxLength={2000}
+            rows={4}
+            className="resize-none border-0 border-b rounded-none px-0 focus-visible:ring-0 bg-transparent text-sm"
+          />
+          <div className="text-[10px] text-muted-foreground text-right">{body.length}/2000</div>
+
+          <AnimatePresence>
+            {showTagSuggestions && (
+              <motion.div initial={{ opacity: 0, y: -5 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }}
+                className="absolute z-50 left-0 right-0 bg-card border border-border rounded-xl shadow-lg overflow-hidden">
+                {tagSuggestions.length > 0 ? (
+                  tagSuggestions.map(tag => (
+                    <button key={tag.id} onClick={() => insertTag(tag.name)}
+                      className="w-full flex items-center justify-between px-3 py-2 hover:bg-muted text-left">
+                      <span className="font-semibold text-sm text-primary">#{tag.name}</span>
+                      <span className="text-xs text-muted-foreground">{tag.post_count || 0} posts</span>
+                    </button>
+                  ))
+                ) : (
+                  <button onClick={() => addTag(tagInput)}
+                    className="w-full flex items-center gap-2 px-3 py-3 hover:bg-muted text-left">
+                    <Hash className="w-4 h-4 text-primary" />
+                    <div>
+                      <p className="text-sm font-semibold">Create #{tagInput.replace(/^#/, '')}</p>
+                      <p className="text-xs text-muted-foreground">Start a new hashtag</p>
+                    </div>
+                  </button>
+                )}
+              </motion.div>
+            )}
+          </AnimatePresence>
+
+          <AnimatePresence>
+            {showMentionSuggestions && (
+              <motion.div initial={{ opacity: 0, y: -5 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }}
+                className="absolute z-50 left-0 right-0 bg-card border border-border rounded-xl shadow-lg overflow-hidden">
+                {mentionSuggestions.map(u => (
+                  <button key={u.id} onClick={() => insertMention(u)}
+                    className="w-full flex items-center gap-2 px-3 py-2 hover:bg-muted text-left">
+                    <Avatar className="w-7 h-7">
+                      <AvatarImage src={u.avatar_url} />
+                      <AvatarFallback className="text-xs">{u.username?.charAt(0).toUpperCase()}</AvatarFallback>
+                    </Avatar>
+                    <span className="text-sm font-medium">@{u.username}</span>
+                  </button>
+                ))}
+                {mentionSuggestions.length === 0 && (
+                  <div className="px-3 py-3 text-xs text-muted-foreground">No users found</div>
+                )}
+              </motion.div>
+            )}
           </AnimatePresence>
         </div>
 
-        {/* Navigation */}
-        <div className="flex gap-2 p-4 pt-2 border-t border-border/50">
-          {step > 0 && (
-            <Button variant="outline" size="sm" onClick={() => setStep(s => s - 1)} className="gap-1">
-              <ArrowLeft className="w-3.5 h-3.5" /> Back
-            </Button>
-          )}
-          <div className="flex-1" />
-          {step < TOTAL_STEPS - 1 ? (
-            <Button size="sm" onClick={() => setStep(s => s + 1)} disabled={!canProceed()} className="gap-1">
-              {step === TOTAL_STEPS - 2 ? 'Preview' : 'Next'} <ArrowRight className="w-3.5 h-3.5" />
-            </Button>
+        {tags.length > 0 && (
+          <div className="flex flex-wrap gap-1.5">
+            {tags.map(t => (
+              <Badge key={t} variant="secondary" className="gap-1 text-xs cursor-pointer"
+                onClick={() => setTags(prev => prev.filter(x => x !== t))}>
+                #{t} <X className="w-3 h-3" />
+              </Badge>
+            ))}
+          </div>
+        )}
+
+        {mentions.length > 0 && (
+          <div className="flex flex-wrap gap-1.5">
+            {mentions.map(m => (
+              <Badge key={m.id} className="gap-1 text-xs cursor-pointer bg-primary/20 text-primary"
+                onClick={() => setMentions(prev => prev.filter(x => x.id !== m.id))}>
+                @{m.username} <X className="w-3 h-3" />
+              </Badge>
+            ))}
+          </div>
+        )}
+
+        <Select value={category} onValueChange={setCategory}>
+          <SelectTrigger className="border-0 border-b rounded-none px-0 focus:ring-0 bg-transparent">
+            <SelectValue placeholder="Select category..." />
+          </SelectTrigger>
+          <SelectContent>
+            {categories.map(c => <SelectItem key={c} value={c}>{c}</SelectItem>)}
+          </SelectContent>
+        </Select>
+
+        <div className="p-3 rounded-2xl bg-muted/50 border border-border/50">
+          <div className="flex items-center justify-between mb-2">
+            <div className="flex items-center gap-2">
+              <Sparkles className="w-4 h-4 text-primary" />
+              <span className="text-sm font-bold">Vibe Sync</span>
+              {vibeLoading && <span className="text-xs text-muted-foreground animate-pulse">AI picking...</span>}
+            </div>
+            <button onClick={runVibeSync} className="text-xs text-primary flex items-center gap-1">
+              <RefreshCw className="w-3 h-3" /> Resync
+            </button>
+          </div>
+
+          {selectedMusicTrack ? (
+            <div className="space-y-2">
+              <div className="flex items-center gap-2 p-2 bg-primary/10 rounded-xl">
+                {selectedMusicTrack.cover_url ? (
+                  <img src={selectedMusicTrack.cover_url} className="w-10 h-10 rounded-lg object-cover" alt="" />
+                ) : (
+                  <div className="w-10 h-10 rounded-lg bg-primary/20 flex items-center justify-center">
+                    <Music className="w-5 h-5 text-primary" />
+                  </div>
+                )}
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-semibold truncate">{selectedMusicTrack.title}</p>
+                  <p className="text-xs text-muted-foreground truncate">@{selectedMusicTrack.artist_name}</p>
+                  {selectedMusicTrack.id === aiPickedTrack?.id && (
+                    <Badge className="text-[9px] h-4 px-1 bg-green-500/20 text-green-600 mt-0.5">✨ AI · More views</Badge>
+                  )}
+                </div>
+                <button onClick={() => { setSelectedMusicTrack(null); setAiPickedTrack(null); }}
+                  className="w-7 h-7 rounded-full bg-muted flex items-center justify-center shrink-0">
+                  <X className="w-3.5 h-3.5" />
+                </button>
+              </div>
+              <div className="space-y-1 px-1">
+                <div className="flex justify-between text-[10px] text-muted-foreground">
+                  <span>Start: {musicStart}s</span><span>Length: {musicDuration}s</span>
+                </div>
+                <input type="range" min={0}
+                  max={Math.max(0, (selectedMusicTrack.duration_seconds || 60) - 5)}
+                  value={musicStart} onChange={e => setMusicStart(parseInt(e.target.value))}
+                  className="w-full accent-primary h-1" />
+              </div>
+              <button onClick={() => setShowMusicPicker(true)} className="text-xs text-primary underline">
+                Change sound
+              </button>
+            </div>
           ) : (
-            <Button size="sm" onClick={handleSubmit} disabled={loading || (isPaidTier && !canAffordFee) || (requiresFollowerUnlock && !hasFollowerUnlock)}
-              className="gap-1 bg-gradient-to-r from-primary to-accent text-primary-foreground">
-              {loading ? 'Publishing...' : '🚀 Launch Post'}
-            </Button>
+            <button onClick={() => setShowMusicPicker(true)}
+              className="w-full py-2 rounded-xl border border-dashed border-border text-xs text-muted-foreground flex items-center justify-center gap-2">
+              <Music className="w-4 h-4" /> Pick community sound
+            </button>
           )}
         </div>
+
+        <AnimatePresence>
+          {showMusicPicker && (
+            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+              className="fixed inset-0 z-50 bg-black/60 flex items-end">
+              <motion.div initial={{ y: 100 }} animate={{ y: 0 }} exit={{ y: 100 }}
+                className="w-full bg-card rounded-t-2xl p-4 max-h-[70vh] overflow-y-auto">
+                <div className="flex items-center justify-between mb-3">
+                  <h3 className="font-bold text-base">Community Sounds</h3>
+                  <button onClick={() => setShowMusicPicker(false)}><X className="w-5 h-5" /></button>
+                </div>
+                {communityTracks.length === 0 ? (
+                  <p className="text-center text-muted-foreground text-sm py-6">No community sounds yet</p>
+                ) : (
+                  <div className="space-y-2">
+                    {communityTracks.map(track => (
+                      <button key={track.id} onClick={() => {
+                        setSelectedMusicTrack(track);
+                        if (track.duration_seconds) setMusicDuration(Math.min(track.duration_seconds, 30));
+                        setShowMusicPicker(false);
+                      }} className="w-full flex items-center gap-3 p-2 rounded-xl hover:bg-muted text-left">
+                        <div className="w-10 h-10 rounded-lg bg-primary/10 flex items-center justify-center shrink-0">
+                          {track.cover_url ? (
+                            <img src={track.cover_url} className="w-full h-full rounded-lg object-cover" alt="" />
+                          ) : (
+                            <Music className="w-5 h-5 text-primary" />
+                          )}
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <p className="text-sm font-semibold truncate">{track.title}</p>
+                          <p className="text-xs text-muted-foreground truncate">@{track.artist_name} · {track.usage_count || 0} uses</p>
+                        </div>
+                        {selectedMusicTrack?.id === track.id && <Check className="w-4 h-4 text-primary shrink-0" />}
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </motion.div>
+            </motion.div>
+          )}
+        </AnimatePresence>
+
+        {!postToEdit && hasMedia && (
+          <button onClick={() => setAlsoPostToStoryline(v => !v)}
+            className={`w-full p-3 rounded-2xl border-2 transition-all text-left ${alsoPostToStoryline ? 'border-primary bg-primary/10' : 'border-border bg-muted/30'}`}>
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <BookOpen className={`w-4 h-4 ${alsoPostToStoryline ? 'text-primary' : 'text-muted-foreground'}`} />
+                <div>
+                  <p className="text-sm font-semibold">Add to Storyline</p>
+                  <p className="text-[10px] text-muted-foreground">Share as 24-hour story</p>
+                </div>
+              </div>
+              <div className={`w-10 h-6 rounded-full transition-colors flex items-center px-1 ${alsoPostToStoryline ? 'bg-primary' : 'bg-muted'}`}>
+                <div className={`w-4 h-4 rounded-full bg-white shadow transition-transform ${alsoPostToStoryline ? 'translate-x-4' : 'translate-x-0'}`} />
+              </div>
+            </div>
+          </button>
+        )}
+      </div>
+
+      <div className="px-4 pb-6 pt-3 border-t border-border/50">
+        <Button onClick={() => setStep(2)} disabled={!canProceed}
+          className="w-full h-12 rounded-2xl font-bold text-base bg-gradient-to-r from-primary to-accent text-white">
+          Preview Post →
+        </Button>
+      </div>
+    </div>
+  );
+
+  const renderLaunch = () => (
+    <div className="flex flex-col h-full bg-background">
+      <div className="flex items-center gap-3 px-4 pt-4 pb-3 border-b border-border/50">
+        <button onClick={() => setStep(1)} className="w-8 h-8 rounded-full bg-muted flex items-center justify-center">
+          <ArrowLeft className="w-4 h-4" />
+        </button>
+        <span className="font-bold text-sm flex-1">Ready to Post</span>
+        <span className="text-xs text-muted-foreground">Step 3 of 3</span>
+      </div>
+
+      <div className="flex-1 overflow-y-auto px-4 py-4 space-y-4">
+        {hasMedia && (
+          <div className="rounded-2xl overflow-hidden border border-border">
+            {mediaFiles[0]?.type.startsWith('video/') || mediaPreviews[0]?.match(/\.(mp4|webm|ogg|mov)/i) ? (
+              <video src={mediaPreviews[0]} className="w-full max-h-48 object-cover" muted playsInline />
+            ) : (
+              <img src={mediaPreviews[0]} className="w-full max-h-48 object-cover" alt="" />
+            )}
+          </div>
+        )}
+
+        <div className="space-y-3 p-4 rounded-2xl bg-muted/30 border border-border/50">
+          <div>
+            <p className="text-xs text-muted-foreground">Title</p>
+            <p className="font-bold text-sm">{title}</p>
+          </div>
+          <div>
+            <p className="text-xs text-muted-foreground">Category</p>
+            <Badge variant="secondary">{category}</Badge>
+          </div>
+          <div>
+            <p className="text-xs text-muted-foreground mb-1">Caption</p>
+            <p className="text-sm line-clamp-3">{body}</p>
+          </div>
+          {tags.length > 0 && (
+            <div className="flex flex-wrap gap-1">
+              {tags.map(t => <Badge key={t} variant="outline" className="text-xs">#{t}</Badge>)}
+            </div>
+          )}
+          {mentions.length > 0 && (
+            <div className="flex flex-wrap gap-1">
+              {mentions.map(m => <Badge key={m.id} className="text-xs bg-primary/20 text-primary">@{m.username}</Badge>)}
+            </div>
+          )}
+          {selectedMusicTrack && (
+            <div className="flex items-center gap-2 text-xs text-muted-foreground">
+              <Music className="w-3.5 h-3.5" />
+              <span>{selectedMusicTrack.title} — {selectedMusicTrack.artist_name}</span>
+              {selectedMusicTrack.id === aiPickedTrack?.id && (
+                <Badge className="text-[9px] h-4 px-1 bg-green-500/20 text-green-600">✨ AI</Badge>
+              )}
+            </div>
+          )}
+          {alsoPostToStoryline && (
+            <div className="flex items-center gap-2 text-xs text-primary font-semibold">
+              <BookOpen className="w-3.5 h-3.5" />
+              <span>Posting to Storyline (24hrs)</span>
+            </div>
+          )}
+        </div>
+      </div>
+
+      <div className="px-4 pb-6 pt-3 border-t border-border/50 space-y-2">
+        <Button onClick={handleSubmit} disabled={loading}
+          className="w-full h-14 rounded-2xl font-black text-lg bg-gradient-to-r from-primary to-accent text-white shadow-lg shadow-primary/30">
+          {loading ? 'Publishing...' : '🚀 Post & Earn'}
+        </Button>
+        <p className="text-center text-[10px] text-muted-foreground">
+          Your post will be live on the feed instantly
+        </p>
+      </div>
+    </div>
+  );
+
+  return (
+    <Dialog open={isOpen} onOpenChange={onOpenChange}>
+      <DialogContent className="sm:max-w-lg h-[90vh] overflow-hidden flex flex-col p-0 gap-0 rounded-2xl">
+        <AnimatePresence mode="wait">
+          <motion.div key={step} initial={{ opacity: 0, x: 30 }} animate={{ opacity: 1, x: 0 }}
+            exit={{ opacity: 0, x: -30 }} transition={{ duration: 0.2 }} className="flex flex-col h-full">
+            {step === 0 && renderCapture()}
+            {step === 1 && renderDetails()}
+            {step === 2 && renderLaunch()}
+          </motion.div>
+        </AnimatePresence>
       </DialogContent>
     </Dialog>
   );
