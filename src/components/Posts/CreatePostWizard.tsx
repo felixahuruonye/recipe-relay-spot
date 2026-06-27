@@ -30,20 +30,14 @@ const CreatePostWizard: React.FC<CreatePostWizardProps> = ({
   const { toast } = useToast();
   const [step, setStep] = useState(0);
   const [loading, setLoading] = useState(false);
-
-  // Media
   const [mediaFiles, setMediaFiles] = useState<File[]>([]);
   const [mediaPreviews, setMediaPreviews] = useState<string[]>([]);
   const [thumbnailBlob, setThumbnailBlob] = useState<Blob | null>(null);
   const [thumbnailPreview, setThumbnailPreview] = useState('');
   const [thumbnailFile, setThumbnailFile] = useState<File | null>(null);
-
-  // Details
   const [title, setTitle] = useState('');
   const [body, setBody] = useState('');
   const [category, setCategory] = useState('');
-
-  // Vibe Sync
   const [selectedMusicTrack, setSelectedMusicTrack] = useState<any>(null);
   const [musicStart, setMusicStart] = useState(0);
   const [musicDuration, setMusicDuration] = useState(15);
@@ -51,27 +45,30 @@ const CreatePostWizard: React.FC<CreatePostWizardProps> = ({
   const [showMusicPicker, setShowMusicPicker] = useState(false);
   const [communityTracks, setCommunityTracks] = useState<any[]>([]);
   const [aiPickedTrack, setAiPickedTrack] = useState<any>(null);
-
-  // Storyline
   const [alsoPostToStoryline, setAlsoPostToStoryline] = useState(false);
-
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  // Reset on close
   useEffect(() => {
     if (!isOpen) {
       setStep(0);
       if (!postToEdit) {
-        setMediaFiles([]); setMediaPreviews([]); setTitle(''); setBody('');
-        setCategory(''); setSelectedMusicTrack(null); setThumbnailFile(null);
-        setThumbnailBlob(null); setThumbnailPreview('');
-        setMusicStart(0); setMusicDuration(15); setAlsoPostToStoryline(false);
+        setMediaFiles([]);
+        setMediaPreviews([]);
+        setTitle('');
+        setBody('');
+        setCategory('');
+        setSelectedMusicTrack(null);
+        setThumbnailFile(null);
+        setThumbnailBlob(null);
+        setThumbnailPreview('');
+        setMusicStart(0);
+        setMusicDuration(15);
+        setAlsoPostToStoryline(false);
         setAiPickedTrack(null);
       }
     }
   }, [isOpen]);
 
-  // Load postToEdit
   useEffect(() => {
     if (postToEdit) {
       setTitle(postToEdit.title || '');
@@ -88,7 +85,6 @@ const CreatePostWizard: React.FC<CreatePostWizardProps> = ({
     }
   }, [postToEdit]);
 
-  // Preselected track
   useEffect(() => {
     if (isOpen && preselectedTrack) {
       setSelectedMusicTrack(preselectedTrack);
@@ -98,23 +94,30 @@ const CreatePostWizard: React.FC<CreatePostWizardProps> = ({
     }
   }, [isOpen, preselectedTrack]);
 
-  // Generate video thumbnail
   const generateVideoThumbnail = (file: File): Promise<{ blob: Blob; url: string } | null> =>
     new Promise(resolve => {
       const video = document.createElement('video');
       const url = URL.createObjectURL(file);
-      video.preload = 'metadata'; video.muted = true; video.playsInline = true; video.src = url;
-      video.onloadedmetadata = () => { video.currentTime = Math.min(0.35, Math.max(0, (video.duration || 1) - 0.1)); };
+      video.preload = 'metadata';
+      video.muted = true;
+      video.playsInline = true;
+      video.src = url;
+      video.onloadedmetadata = () => {
+        video.currentTime = Math.min(0.35, Math.max(0, (video.duration || 1) - 0.1));
+      };
       video.onseeked = () => {
         const canvas = document.createElement('canvas');
-        canvas.width = video.videoWidth || 720; canvas.height = video.videoHeight || 1280;
+        canvas.width = video.videoWidth || 720;
+        canvas.height = video.videoHeight || 1280;
         canvas.getContext('2d')?.drawImage(video, 0, 0, canvas.width, canvas.height);
-        canvas.toBlob(blob => { URL.revokeObjectURL(url); resolve(blob ? { blob, url: URL.createObjectURL(blob) } : null); }, 'image/jpeg', 0.82);
+        canvas.toBlob(blob => {
+          URL.revokeObjectURL(url);
+          resolve(blob ? { blob, url: URL.createObjectURL(blob) } : null);
+        }, 'image/jpeg', 0.82);
       };
       video.onerror = () => { URL.revokeObjectURL(url); resolve(null); };
     });
 
-  // Handle media select
   const handleMediaChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = Array.from(e.target.files || []);
     const valid = files.filter(f => {
@@ -122,7 +125,10 @@ const CreatePostWizard: React.FC<CreatePostWizardProps> = ({
       if (f.size > max) { toast({ title: 'File too large', variant: 'destructive' }); return false; }
       return f.type.startsWith('image/') || f.type.startsWith('video/');
     });
-    if (valid.length + mediaFiles.length > 3) { toast({ title: 'Max 3 files', variant: 'destructive' }); return; }
+    if (valid.length + mediaFiles.length > 3) {
+      toast({ title: 'Max 3 files', variant: 'destructive' });
+      return;
+    }
     setMediaFiles(prev => [...prev, ...valid]);
     valid.forEach(f => setMediaPreviews(prev => [...prev, URL.createObjectURL(f)]));
     const firstVideo = valid.find(f => f.type.startsWith('video/'));
@@ -139,7 +145,6 @@ const CreatePostWizard: React.FC<CreatePostWizardProps> = ({
     setMediaPreviews(prev => prev.filter((_, idx) => idx !== i));
   };
 
-  // AI Vibe Sync
   const runVibeSync = useCallback(async () => {
     if (!title && !body) return;
     setVibeLoading(true);
@@ -151,10 +156,8 @@ const CreatePostWizard: React.FC<CreatePostWizardProps> = ({
         .eq('source', 'community')
         .order('usage_count', { ascending: false })
         .limit(50);
-
       if (!tracks || tracks.length === 0) return;
       setCommunityTracks(tracks);
-
       const keywords = `${title} ${body} ${category}`.toLowerCase().split(/\s+/);
       const scored = tracks.map(track => {
         const trackText = `${track.title} ${track.artist_name}`.toLowerCase();
@@ -162,7 +165,6 @@ const CreatePostWizard: React.FC<CreatePostWizardProps> = ({
         return { track, score: score + Math.random() * 0.5 };
       });
       scored.sort((a, b) => b.score - a.score);
-
       const picked = scored[0]?.track;
       if (picked) {
         setAiPickedTrack(picked);
@@ -183,7 +185,6 @@ const CreatePostWizard: React.FC<CreatePostWizardProps> = ({
     }
   }, [step]);
 
-  // Upload helpers
   const uploadMedia = async (): Promise<string[]> => {
     if (!mediaFiles.length || !user) return mediaPreviews.filter(p => p.startsWith('http'));
     const results = await Promise.all(mediaFiles.map(async (file, i) => {
@@ -229,7 +230,6 @@ const CreatePostWizard: React.FC<CreatePostWizardProps> = ({
     return created?.id || null;
   };
 
-  // SUBMIT
   const handleSubmit = async () => {
     if (!user || !title.trim() || !body.trim() || !category) {
       toast({ title: 'Missing info', description: 'Please fill title, caption and category', variant: 'destructive' });
@@ -254,7 +254,7 @@ const CreatePostWizard: React.FC<CreatePostWizardProps> = ({
         } as any).eq('id', postToEdit.id);
         toast({ title: 'Post updated!' });
       } else {
-        const { data: newPost } = await supabase.from('posts').insert({
+        await supabase.from('posts').insert({
           title: title.trim(),
           body: body.trim(),
           category,
@@ -269,7 +269,6 @@ const CreatePostWizard: React.FC<CreatePostWizardProps> = ({
           boosted: selectedMusicTrack && selectedMusicTrack.id === aiPickedTrack?.id ? true : false,
         } as any).select('id').single();
 
-        // Update music usage
         if (musicTrackId) {
           const { data: tr } = await supabase.from('music_tracks').select('usage_count').eq('id', musicTrackId).maybeSingle();
           await supabase.from('music_tracks').update({
@@ -278,7 +277,6 @@ const CreatePostWizard: React.FC<CreatePostWizardProps> = ({
           }).eq('id', musicTrackId);
         }
 
-        // FIXED STORYLINE TOGGLE
         if (alsoPostToStoryline && mediaUrls.length > 0) {
           const isVid = /\.(mp4|webm|ogg|mov)$/i.test(mediaUrls[0]);
           await supabase.from('user_storylines').insert({
@@ -294,12 +292,11 @@ const CreatePostWizard: React.FC<CreatePostWizardProps> = ({
             status: 'active',
             expires_at: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(),
           } as any);
-          toast({ title: '🎉 Post created!', description: 'Also added to your Story for 24 hours, start earning!' });
+          toast({ title: '🎉 Post created!', description: 'Also added to your Storyline for 24 hours!' });
         } else {
-          toast({ title: '🎉 Post live!', description: 'Your post is now on the feed, share your post to reach more viewers to unlock higher rewards, more views more money!' });
+          toast({ title: '🎉 Post live!', description: 'Your post is now on the feed!' });
         }
       }
-
       onOpenChange?.(false);
       onPostCreated?.();
     } catch (e) {
@@ -313,7 +310,6 @@ const CreatePostWizard: React.FC<CreatePostWizardProps> = ({
   const hasMedia = mediaPreviews.length > 0;
   const canProceed = step === 0 ? hasMedia : step === 1 ? title.trim().length > 0 && !!category && body.trim().length >= 5 : true;
 
-  // STEP 0: CAPTURE
   const renderCapture = () => (
     <div className="flex flex-col h-full bg-black">
       <div className="flex items-center justify-between px-4 pt-4 pb-2">
@@ -323,7 +319,6 @@ const CreatePostWizard: React.FC<CreatePostWizardProps> = ({
         <span className="text-white font-bold text-base">New Post</span>
         <div className="w-9" />
       </div>
-
       {hasMedia ? (
         <div className="flex-1 relative">
           {mediaFiles[0]?.type.startsWith('video/') || mediaPreviews[0]?.match(/\.(mp4|webm|ogg|mov)/i) ? (
@@ -376,13 +371,11 @@ const CreatePostWizard: React.FC<CreatePostWizardProps> = ({
             </div>
             <input ref={fileInputRef} type="file" multiple accept="image/*,video/*" onChange={handleMediaChange} className="hidden" />
           </label>
-
           <div className="flex items-center gap-3 w-full">
             <div className="flex-1 h-px bg-white/20" />
             <span className="text-white/40 text-xs">or</span>
             <div className="flex-1 h-px bg-white/20" />
           </div>
-
           <label className="cursor-pointer">
             <div className="w-20 h-20 rounded-full border-4 border-white flex items-center justify-center bg-white/10">
               <Camera className="w-9 h-9 text-white" />
@@ -395,7 +388,6 @@ const CreatePostWizard: React.FC<CreatePostWizardProps> = ({
     </div>
   );
 
-  // STEP 1: DETAILS
   const renderDetails = () => (
     <div className="flex flex-col h-full bg-background">
       <div className="flex items-center gap-3 px-4 pt-4 pb-3 border-b border-border/50">
@@ -405,7 +397,6 @@ const CreatePostWizard: React.FC<CreatePostWizardProps> = ({
         <span className="font-bold text-sm flex-1">Add Details</span>
         <span className="text-xs text-muted-foreground">Step 2 of 3</span>
       </div>
-
       <div className="flex-1 overflow-y-auto px-4 py-3 space-y-4">
         {hasMedia && (
           <div className="flex gap-2">
@@ -420,14 +411,11 @@ const CreatePostWizard: React.FC<CreatePostWizardProps> = ({
             ))}
           </div>
         )}
-
         <Input value={title} onChange={e => setTitle(e.target.value)} placeholder="Add a title..." maxLength={100}
           className="font-semibold text-base border-0 border-b rounded-none px-0 focus-visible:ring-0 bg-transparent" />
-
         <Textarea value={body} onChange={e => setBody(e.target.value)} placeholder="Write a caption..."
           maxLength={2000} rows={4} className="resize-none border-0 border-b rounded-none px-0 focus-visible:ring-0 bg-transparent text-sm" />
         <div className="text-[10px] text-muted-foreground text-right">{body.length}/2000</div>
-
         <Select value={category} onValueChange={setCategory}>
           <SelectTrigger className="border-0 border-b rounded-none px-0 focus:ring-0 bg-transparent">
             <SelectValue placeholder="Select category..." />
@@ -436,8 +424,6 @@ const CreatePostWizard: React.FC<CreatePostWizardProps> = ({
             {categories.map(c => <SelectItem key={c} value={c}>{c}</SelectItem>)}
           </SelectContent>
         </Select>
-
-        {/* Vibe Sync */}
         <div className="p-3 rounded-2xl bg-muted/50 border border-border/50">
           <div className="flex items-center justify-between mb-2">
             <div className="flex items-center gap-2">
@@ -449,7 +435,6 @@ const CreatePostWizard: React.FC<CreatePostWizardProps> = ({
               <RefreshCw className="w-3 h-3" /> Resync
             </button>
           </div>
-
           {selectedMusicTrack ? (
             <div className="space-y-2">
               <div className="flex items-center gap-2 p-2 bg-primary/10 rounded-xl">
@@ -464,7 +449,7 @@ const CreatePostWizard: React.FC<CreatePostWizardProps> = ({
                   <p className="text-sm font-semibold truncate">{selectedMusicTrack.title}</p>
                   <p className="text-xs text-muted-foreground truncate">@{selectedMusicTrack.artist_name}</p>
                   {selectedMusicTrack.id === aiPickedTrack?.id && (
-                    <Badge className="text-[9px] h-4 px-1 bg-green-500/20 text-green-600 mt-0.5">✨ AI · More views</Badge>
+                    <span className="text-[9px] bg-green-500/20 text-green-600 px-1 rounded">✨ AI · More views</span>
                   )}
                 </div>
                 <button onClick={() => { setSelectedMusicTrack(null); setAiPickedTrack(null); }}
@@ -483,8 +468,6 @@ const CreatePostWizard: React.FC<CreatePostWizardProps> = ({
             </button>
           )}
         </div>
-
-        {/* Music picker */}
         <AnimatePresence>
           {showMusicPicker && (
             <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
@@ -524,8 +507,6 @@ const CreatePostWizard: React.FC<CreatePostWizardProps> = ({
             </motion.div>
           )}
         </AnimatePresence>
-
-        {/* Storyline toggle */}
         {!postToEdit && hasMedia && (
           <button onClick={() => setAlsoPostToStoryline(v => !v)}
             className={`w-full p-3 rounded-2xl border-2 transition-all text-left ${alsoPostToStoryline ? 'border-primary bg-primary/10' : 'border-border bg-muted/30'}`}>
@@ -544,7 +525,6 @@ const CreatePostWizard: React.FC<CreatePostWizardProps> = ({
           </button>
         )}
       </div>
-
       <div className="px-4 pb-6 pt-3 border-t border-border/50">
         <Button onClick={() => setStep(2)} disabled={!canProceed}
           className="w-full h-12 rounded-2xl font-bold text-base bg-gradient-to-r from-primary to-accent text-white">
@@ -554,7 +534,6 @@ const CreatePostWizard: React.FC<CreatePostWizardProps> = ({
     </div>
   );
 
-  // STEP 2: LAUNCH
   const renderLaunch = () => (
     <div className="flex flex-col h-full bg-background">
       <div className="flex items-center gap-3 px-4 pt-4 pb-3 border-b border-border/50">
@@ -564,7 +543,6 @@ const CreatePostWizard: React.FC<CreatePostWizardProps> = ({
         <span className="font-bold text-sm flex-1">Ready to Post</span>
         <span className="text-xs text-muted-foreground">Step 3 of 3</span>
       </div>
-
       <div className="flex-1 overflow-y-auto px-4 py-4 space-y-4">
         {hasMedia && (
           <div className="rounded-2xl overflow-hidden border border-border">
@@ -575,7 +553,6 @@ const CreatePostWizard: React.FC<CreatePostWizardProps> = ({
             )}
           </div>
         )}
-
         <div className="space-y-3 p-4 rounded-2xl bg-muted/30 border border-border/50">
           <div>
             <p className="text-xs text-muted-foreground">Title</p>
@@ -594,7 +571,7 @@ const CreatePostWizard: React.FC<CreatePostWizardProps> = ({
               <Music className="w-3.5 h-3.5" />
               <span>{selectedMusicTrack.title} — {selectedMusicTrack.artist_name}</span>
               {selectedMusicTrack.id === aiPickedTrack?.id && (
-                <span className="text-[9px] h-4 px-1 bg-green-500/20 text-green-600">✨ AI</span>
+                <span className="text-[9px] bg-green-500/20 text-green-600 px-1 rounded">✨ AI</span>
               )}
             </div>
           )}
@@ -606,7 +583,6 @@ const CreatePostWizard: React.FC<CreatePostWizardProps> = ({
           )}
         </div>
       </div>
-
       <div className="px-4 pb-6 pt-3 border-t border-border/50 space-y-2">
         <Button onClick={handleSubmit} disabled={loading}
           className="w-full h-14 rounded-2xl font-black text-lg bg-gradient-to-r from-primary to-accent text-white shadow-lg shadow-primary/30">
