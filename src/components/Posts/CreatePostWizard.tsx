@@ -597,10 +597,10 @@ const CreatePostWizard: React.FC<CreatePostWizardProps> = ({
 
   return (
     <Dialog open={isOpen} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-lg h-[90vh] overflow-hidden flex flex-col p-0 gap-0 rounded-2xl">
+      <DialogContent className="max-w-full w-screen h-screen sm:max-w-full p-0 gap-0 rounded-none border-0 [&>button]:hidden flex flex-col overflow-hidden">
         <AnimatePresence mode="wait">
           <motion.div key={step} initial={{ opacity: 0, x: 30 }} animate={{ opacity: 1, x: 0 }}
-            exit={{ opacity: 0, x: -30 }} transition={{ duration: 0.2 }} className="flex flex-col h-full">
+            exit={{ opacity: 0, x: -30 }} transition={{ duration: 0.2 }} className="flex flex-col h-full w-full">
             {step === 0 && renderCapture()}
             {step === 1 && renderDetails()}
             {step === 2 && renderLaunch()}

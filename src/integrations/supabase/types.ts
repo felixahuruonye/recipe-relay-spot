@@ -319,6 +319,41 @@ export type Database = {
         }
         Relationships: []
       }
+      analytics_events: {
+        Row: {
+          created_at: string
+          event_data: Json | null
+          event_type: string
+          id: string
+          school_id: string | null
+          user_id: string | null
+        }
+        Insert: {
+          created_at?: string
+          event_data?: Json | null
+          event_type: string
+          id?: string
+          school_id?: string | null
+          user_id?: string | null
+        }
+        Update: {
+          created_at?: string
+          event_data?: Json | null
+          event_type?: string
+          id?: string
+          school_id?: string | null
+          user_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "analytics_events_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       balance_history: {
         Row: {
           amount: number
@@ -358,6 +393,336 @@ export type Database = {
         }
         Relationships: []
       }
+      cbt_analytics: {
+        Row: {
+          attempt_count: number | null
+          average_score: number | null
+          correct_count: number | null
+          id: string
+          last_attempt: string | null
+          strength_level: string | null
+          subject: string
+          topic: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          attempt_count?: number | null
+          average_score?: number | null
+          correct_count?: number | null
+          id?: string
+          last_attempt?: string | null
+          strength_level?: string | null
+          subject: string
+          topic: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          attempt_count?: number | null
+          average_score?: number | null
+          correct_count?: number | null
+          id?: string
+          last_attempt?: string | null
+          strength_level?: string | null
+          subject?: string
+          topic?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "cbt_analytics_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      cbt_answers: {
+        Row: {
+          created_at: string
+          flagged: boolean | null
+          id: string
+          is_correct: boolean | null
+          question_id: string
+          session_id: string
+          time_spent: number | null
+          user_answer: string | null
+        }
+        Insert: {
+          created_at?: string
+          flagged?: boolean | null
+          id?: string
+          is_correct?: boolean | null
+          question_id: string
+          session_id: string
+          time_spent?: number | null
+          user_answer?: string | null
+        }
+        Update: {
+          created_at?: string
+          flagged?: boolean | null
+          id?: string
+          is_correct?: boolean | null
+          question_id?: string
+          session_id?: string
+          time_spent?: number | null
+          user_answer?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "cbt_answers_question_id_fkey"
+            columns: ["question_id"]
+            isOneToOne: false
+            referencedRelation: "cbt_questions"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "cbt_answers_session_id_fkey"
+            columns: ["session_id"]
+            isOneToOne: false
+            referencedRelation: "cbt_sessions"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      cbt_exam_history: {
+        Row: {
+          ai_analysis: Json | null
+          correct_answers: number
+          created_at: string
+          exam_type: string
+          id: string
+          score: number
+          session_id: string
+          subjects: string[]
+          summary: string | null
+          time_spent: number
+          total_questions: number
+          user_id: string
+        }
+        Insert: {
+          ai_analysis?: Json | null
+          correct_answers: number
+          created_at?: string
+          exam_type: string
+          id?: string
+          score: number
+          session_id: string
+          subjects: string[]
+          summary?: string | null
+          time_spent: number
+          total_questions: number
+          user_id: string
+        }
+        Update: {
+          ai_analysis?: Json | null
+          correct_answers?: number
+          created_at?: string
+          exam_type?: string
+          id?: string
+          score?: number
+          session_id?: string
+          subjects?: string[]
+          summary?: string | null
+          time_spent?: number
+          total_questions?: number
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "cbt_exam_history_session_id_fkey"
+            columns: ["session_id"]
+            isOneToOne: false
+            referencedRelation: "cbt_sessions"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "cbt_exam_history_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      cbt_exams: {
+        Row: {
+          created_at: string
+          exam_type: Database["public"]["Enums"]["exam_type"]
+          id: string
+          questions_per_subject: Json | null
+          subjects: string[]
+          total_duration: number
+          total_questions: number
+        }
+        Insert: {
+          created_at?: string
+          exam_type: Database["public"]["Enums"]["exam_type"]
+          id?: string
+          questions_per_subject?: Json | null
+          subjects: string[]
+          total_duration: number
+          total_questions: number
+        }
+        Update: {
+          created_at?: string
+          exam_type?: Database["public"]["Enums"]["exam_type"]
+          id?: string
+          questions_per_subject?: Json | null
+          subjects?: string[]
+          total_duration?: number
+          total_questions?: number
+        }
+        Relationships: []
+      }
+      cbt_question_licensing: {
+        Row: {
+          copyright: string | null
+          created_at: string
+          id: string
+          is_active: boolean | null
+          license_id: string | null
+          license_provider: string | null
+          question_id: string
+          source: string
+          year: number | null
+        }
+        Insert: {
+          copyright?: string | null
+          created_at?: string
+          id?: string
+          is_active?: boolean | null
+          license_id?: string | null
+          license_provider?: string | null
+          question_id: string
+          source: string
+          year?: number | null
+        }
+        Update: {
+          copyright?: string | null
+          created_at?: string
+          id?: string
+          is_active?: boolean | null
+          license_id?: string | null
+          license_provider?: string | null
+          question_id?: string
+          source?: string
+          year?: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "cbt_question_licensing_question_id_fkey"
+            columns: ["question_id"]
+            isOneToOne: false
+            referencedRelation: "cbt_questions"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      cbt_questions: {
+        Row: {
+          correct_answer: string
+          created_at: string
+          exam_id: string
+          explanation: string | null
+          id: string
+          options: Json
+          question_number: number
+          question_text: string
+          subject: string
+        }
+        Insert: {
+          correct_answer: string
+          created_at?: string
+          exam_id: string
+          explanation?: string | null
+          id?: string
+          options: Json
+          question_number: number
+          question_text: string
+          subject: string
+        }
+        Update: {
+          correct_answer?: string
+          created_at?: string
+          exam_id?: string
+          explanation?: string | null
+          id?: string
+          options?: Json
+          question_number?: number
+          question_text?: string
+          subject?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "cbt_questions_exam_id_fkey"
+            columns: ["exam_id"]
+            isOneToOne: false
+            referencedRelation: "cbt_exams"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      cbt_sessions: {
+        Row: {
+          completed_at: string | null
+          exam_id: string
+          id: string
+          score: number | null
+          session_data: Json | null
+          started_at: string
+          status: string
+          time_spent: number | null
+          total_attempted: number | null
+          total_correct: number | null
+          user_id: string
+        }
+        Insert: {
+          completed_at?: string | null
+          exam_id: string
+          id?: string
+          score?: number | null
+          session_data?: Json | null
+          started_at?: string
+          status?: string
+          time_spent?: number | null
+          total_attempted?: number | null
+          total_correct?: number | null
+          user_id: string
+        }
+        Update: {
+          completed_at?: string | null
+          exam_id?: string
+          id?: string
+          score?: number | null
+          session_data?: Json | null
+          started_at?: string
+          status?: string
+          time_spent?: number | null
+          total_attempted?: number | null
+          total_correct?: number | null
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "cbt_sessions_exam_id_fkey"
+            columns: ["exam_id"]
+            isOneToOne: false
+            referencedRelation: "cbt_exams"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "cbt_sessions_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       challenges: {
         Row: {
           description: string
@@ -391,6 +756,51 @@ export type Database = {
         }
         Relationships: []
       }
+      chat_messages: {
+        Row: {
+          attachments: Json | null
+          content: string
+          created_at: string
+          id: string
+          role: string
+          session_id: string | null
+          user_id: string
+        }
+        Insert: {
+          attachments?: Json | null
+          content: string
+          created_at?: string
+          id?: string
+          role: string
+          session_id?: string | null
+          user_id: string
+        }
+        Update: {
+          attachments?: Json | null
+          content?: string
+          created_at?: string
+          id?: string
+          role?: string
+          session_id?: string | null
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "chat_messages_session_id_fkey"
+            columns: ["session_id"]
+            isOneToOne: false
+            referencedRelation: "chat_sessions"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "chat_messages_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       chat_responses: {
         Row: {
           answer: string
@@ -420,6 +830,103 @@ export type Database = {
           user_id?: string | null
         }
         Relationships: []
+      }
+      chat_sessions: {
+        Row: {
+          created_at: string
+          id: string
+          is_bookmarked: boolean | null
+          message_count: number | null
+          mode: string | null
+          summary: string | null
+          title: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          is_bookmarked?: boolean | null
+          message_count?: number | null
+          mode?: string | null
+          summary?: string | null
+          title: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          is_bookmarked?: boolean | null
+          message_count?: number | null
+          mode?: string | null
+          summary?: string | null
+          title?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "chat_sessions_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      code_snippets: {
+        Row: {
+          code: string
+          created_at: string
+          debugged: boolean | null
+          explanation: string | null
+          fixed_code: string | null
+          id: string
+          issues: Json | null
+          language: string
+          learnings: string | null
+          title: string | null
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          code: string
+          created_at?: string
+          debugged?: boolean | null
+          explanation?: string | null
+          fixed_code?: string | null
+          id?: string
+          issues?: Json | null
+          language: string
+          learnings?: string | null
+          title?: string | null
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          code?: string
+          created_at?: string
+          debugged?: boolean | null
+          explanation?: string | null
+          fixed_code?: string | null
+          id?: string
+          issues?: Json | null
+          language?: string
+          learnings?: string | null
+          title?: string | null
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "code_snippets_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       comment_reactions: {
         Row: {
@@ -574,6 +1081,53 @@ export type Database = {
           },
         ]
       }
+      courses: {
+        Row: {
+          created_at: string
+          description: string | null
+          id: string
+          is_published: boolean
+          price: number | null
+          school_id: string | null
+          syllabus: Json | null
+          teacher_id: string
+          title: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          description?: string | null
+          id?: string
+          is_published?: boolean
+          price?: number | null
+          school_id?: string | null
+          syllabus?: Json | null
+          teacher_id: string
+          title: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          description?: string | null
+          id?: string
+          is_published?: boolean
+          price?: number | null
+          school_id?: string | null
+          syllabus?: Json | null
+          teacher_id?: string
+          title?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "courses_teacher_id_fkey"
+            columns: ["teacher_id"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       crawled_pages: {
         Row: {
           content: string
@@ -597,6 +1151,41 @@ export type Database = {
           url?: string
         }
         Relationships: []
+      }
+      device_sessions: {
+        Row: {
+          created_at: string
+          device_info: Json | null
+          device_token: string
+          id: string
+          last_used_at: string | null
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          device_info?: Json | null
+          device_token: string
+          id?: string
+          last_used_at?: string | null
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          device_info?: Json | null
+          device_token?: string
+          id?: string
+          last_used_at?: string | null
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "device_sessions_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       disputes: {
         Row: {
@@ -634,6 +1223,106 @@ export type Database = {
         }
         Relationships: []
       }
+      document_uploads: {
+        Row: {
+          ai_analysis: Json | null
+          created_at: string
+          extracted_text: string | null
+          file_name: string
+          file_size: number | null
+          file_type: string
+          file_url: string
+          id: string
+          is_processing: boolean | null
+          user_id: string
+        }
+        Insert: {
+          ai_analysis?: Json | null
+          created_at?: string
+          extracted_text?: string | null
+          file_name: string
+          file_size?: number | null
+          file_type: string
+          file_url: string
+          id?: string
+          is_processing?: boolean | null
+          user_id: string
+        }
+        Update: {
+          ai_analysis?: Json | null
+          created_at?: string
+          extracted_text?: string | null
+          file_name?: string
+          file_size?: number | null
+          file_type?: string
+          file_url?: string
+          id?: string
+          is_processing?: boolean | null
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "document_uploads_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      exam_results: {
+        Row: {
+          answers: Json | null
+          correct_answers: number | null
+          created_at: string
+          exam_name: string
+          id: string
+          score: number | null
+          subject: string | null
+          time_spent: number | null
+          topics_strong: string[] | null
+          topics_weak: string[] | null
+          total_questions: number | null
+          user_id: string
+        }
+        Insert: {
+          answers?: Json | null
+          correct_answers?: number | null
+          created_at?: string
+          exam_name: string
+          id?: string
+          score?: number | null
+          subject?: string | null
+          time_spent?: number | null
+          topics_strong?: string[] | null
+          topics_weak?: string[] | null
+          total_questions?: number | null
+          user_id: string
+        }
+        Update: {
+          answers?: Json | null
+          correct_answers?: number | null
+          created_at?: string
+          exam_name?: string
+          id?: string
+          score?: number | null
+          subject?: string | null
+          time_spent?: number | null
+          topics_strong?: string[] | null
+          topics_weak?: string[] | null
+          total_questions?: number | null
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "exam_results_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       exams: {
         Row: {
           created_at: string
@@ -669,6 +1358,50 @@ export type Database = {
           user_id?: string
         }
         Relationships: []
+      }
+      file_uploads: {
+        Row: {
+          created_at: string
+          extracted_text: string | null
+          file_name: string
+          file_size: number
+          file_type: string
+          file_url: string
+          id: string
+          processing_status: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          extracted_text?: string | null
+          file_name: string
+          file_size: number
+          file_type: string
+          file_url: string
+          id?: string
+          processing_status?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          extracted_text?: string | null
+          file_name?: string
+          file_size?: number
+          file_type?: string
+          file_url?: string
+          id?: string
+          processing_status?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "file_uploads_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       followers: {
         Row: {
@@ -714,6 +1447,154 @@ export type Database = {
           title?: string
         }
         Relationships: []
+      }
+      generated_images: {
+        Row: {
+          created_at: string
+          id: string
+          image_url: string
+          prompt: string
+          related_topic: string | null
+          tags: string[] | null
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          image_url: string
+          prompt: string
+          related_topic?: string | null
+          tags?: string[] | null
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          image_url?: string
+          prompt?: string
+          related_topic?: string | null
+          tags?: string[] | null
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "generated_images_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      generated_lessons: {
+        Row: {
+          created_at: string
+          id: string
+          key_points: string[]
+          objectives: string[]
+          original_text: string | null
+          recording_id: string | null
+          summary: string
+          title: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          key_points: string[]
+          objectives: string[]
+          original_text?: string | null
+          recording_id?: string | null
+          summary: string
+          title: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          key_points?: string[]
+          objectives?: string[]
+          original_text?: string | null
+          recording_id?: string | null
+          summary?: string
+          title?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "generated_lessons_recording_id_fkey"
+            columns: ["recording_id"]
+            isOneToOne: false
+            referencedRelation: "recordings"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "generated_lessons_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      generated_websites: {
+        Row: {
+          created_at: string
+          css_code: string
+          description: string | null
+          html_code: string
+          id: string
+          is_favorite: boolean | null
+          js_code: string | null
+          preview_url: string | null
+          prompt: string
+          tags: string[] | null
+          title: string
+          updated_at: string
+          user_id: string
+          view_count: number | null
+        }
+        Insert: {
+          created_at?: string
+          css_code: string
+          description?: string | null
+          html_code: string
+          id?: string
+          is_favorite?: boolean | null
+          js_code?: string | null
+          preview_url?: string | null
+          prompt: string
+          tags?: string[] | null
+          title: string
+          updated_at?: string
+          user_id: string
+          view_count?: number | null
+        }
+        Update: {
+          created_at?: string
+          css_code?: string
+          description?: string | null
+          html_code?: string
+          id?: string
+          is_favorite?: boolean | null
+          js_code?: string | null
+          preview_url?: string | null
+          prompt?: string
+          tags?: string[] | null
+          title?: string
+          updated_at?: string
+          user_id?: string
+          view_count?: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "generated_websites_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       group_members: {
         Row: {
@@ -875,6 +1756,136 @@ export type Database = {
         }
         Relationships: []
       }
+      learning_history: {
+        Row: {
+          created_at: string
+          duration: number | null
+          id: string
+          mode: string | null
+          notes: string | null
+          performance: string | null
+          subject: string
+          topic: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          duration?: number | null
+          id?: string
+          mode?: string | null
+          notes?: string | null
+          performance?: string | null
+          subject: string
+          topic: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          duration?: number | null
+          id?: string
+          mode?: string | null
+          notes?: string | null
+          performance?: string | null
+          subject?: string
+          topic?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "learning_history_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      lessons: {
+        Row: {
+          content: Json
+          course_id: string | null
+          created_at: string
+          created_by_id: string
+          id: string
+          title: string
+          transcript_id: string | null
+          updated_at: string
+        }
+        Insert: {
+          content: Json
+          course_id?: string | null
+          created_at?: string
+          created_by_id: string
+          id?: string
+          title: string
+          transcript_id?: string | null
+          updated_at?: string
+        }
+        Update: {
+          content?: Json
+          course_id?: string | null
+          created_at?: string
+          created_by_id?: string
+          id?: string
+          title?: string
+          transcript_id?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "lessons_course_id_fkey"
+            columns: ["course_id"]
+            isOneToOne: false
+            referencedRelation: "courses"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "lessons_created_by_id_fkey"
+            columns: ["created_by_id"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      live_ai_features: {
+        Row: {
+          context: Json | null
+          created_at: string
+          feature_type: string
+          id: string
+          result: Json | null
+          status: string | null
+          user_id: string
+        }
+        Insert: {
+          context?: Json | null
+          created_at?: string
+          feature_type: string
+          id?: string
+          result?: Json | null
+          status?: string | null
+          user_id: string
+        }
+        Update: {
+          context?: Json | null
+          created_at?: string
+          feature_type?: string
+          id?: string
+          result?: Json | null
+          status?: string | null
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "live_ai_features_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       live_chat_sessions: {
         Row: {
           created_at: string
@@ -901,6 +1912,47 @@ export type Database = {
           user_id?: string | null
         }
         Relationships: []
+      }
+      live_sessions: {
+        Row: {
+          ended_at: string | null
+          host_id: string
+          id: string
+          participants: string[] | null
+          settings: Json | null
+          started_at: string
+          status: Database["public"]["Enums"]["session_status"]
+          title: string
+        }
+        Insert: {
+          ended_at?: string | null
+          host_id: string
+          id?: string
+          participants?: string[] | null
+          settings?: Json | null
+          started_at?: string
+          status?: Database["public"]["Enums"]["session_status"]
+          title: string
+        }
+        Update: {
+          ended_at?: string | null
+          host_id?: string
+          id?: string
+          participants?: string[] | null
+          settings?: Json | null
+          started_at?: string
+          status?: Database["public"]["Enums"]["session_status"]
+          title?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "live_sessions_host_id_fkey"
+            columns: ["host_id"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       marketplace_deliveries: {
         Row: {
@@ -1075,6 +2127,38 @@ export type Database = {
         }
         Relationships: []
       }
+      memory_entries: {
+        Row: {
+          created_at: string
+          data: Json
+          id: string
+          type: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          data: Json
+          id?: string
+          type: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          data?: Json
+          id?: string
+          type?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "memory_entries_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       messages: {
         Row: {
           body: string
@@ -1215,36 +2299,50 @@ export type Database = {
       }
       notifications: {
         Row: {
+          action_url: string | null
           created_at: string
-          data: Json | null
+          icon: string | null
           id: string
-          is_read: boolean | null
           message: string
+          read: boolean
+          sent_at: string
           title: string
-          type: string
+          type: Database["public"]["Enums"]["notification_type"]
           user_id: string
         }
         Insert: {
+          action_url?: string | null
           created_at?: string
-          data?: Json | null
+          icon?: string | null
           id?: string
-          is_read?: boolean | null
           message: string
+          read?: boolean
+          sent_at?: string
           title: string
-          type: string
+          type: Database["public"]["Enums"]["notification_type"]
           user_id: string
         }
         Update: {
+          action_url?: string | null
           created_at?: string
-          data?: Json | null
+          icon?: string | null
           id?: string
-          is_read?: boolean | null
           message?: string
+          read?: boolean
+          sent_at?: string
           title?: string
-          type?: string
+          type?: Database["public"]["Enums"]["notification_type"]
           user_id?: string
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "notifications_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       orders: {
         Row: {
@@ -1674,6 +2772,63 @@ export type Database = {
           },
         ]
       }
+      pricing_tiers: {
+        Row: {
+          access_to_advanced_ai: boolean | null
+          access_to_cbt: boolean | null
+          access_to_voice_features: boolean | null
+          access_to_website_generator: boolean | null
+          billing_period: string | null
+          created_at: string
+          description: string | null
+          features: string[]
+          id: string
+          is_active: boolean | null
+          max_chats: number | null
+          max_generations: number | null
+          max_projects: number | null
+          name: string
+          price_naira: number
+          priority: number | null
+        }
+        Insert: {
+          access_to_advanced_ai?: boolean | null
+          access_to_cbt?: boolean | null
+          access_to_voice_features?: boolean | null
+          access_to_website_generator?: boolean | null
+          billing_period?: string | null
+          created_at?: string
+          description?: string | null
+          features: string[]
+          id?: string
+          is_active?: boolean | null
+          max_chats?: number | null
+          max_generations?: number | null
+          max_projects?: number | null
+          name: string
+          price_naira: number
+          priority?: number | null
+        }
+        Update: {
+          access_to_advanced_ai?: boolean | null
+          access_to_cbt?: boolean | null
+          access_to_voice_features?: boolean | null
+          access_to_website_generator?: boolean | null
+          billing_period?: string | null
+          created_at?: string
+          description?: string | null
+          features?: string[]
+          id?: string
+          is_active?: boolean | null
+          max_chats?: number | null
+          max_generations?: number | null
+          max_projects?: number | null
+          name?: string
+          price_naira?: number
+          priority?: number | null
+        }
+        Relationships: []
+      }
       private_messages: {
         Row: {
           created_at: string
@@ -1824,6 +2979,312 @@ export type Database = {
         }
         Relationships: []
       }
+      project_files: {
+        Row: {
+          content: string | null
+          created_at: string
+          file_type: string | null
+          id: string
+          name: string
+          project_id: string
+        }
+        Insert: {
+          content?: string | null
+          created_at?: string
+          file_type?: string | null
+          id?: string
+          name: string
+          project_id: string
+        }
+        Update: {
+          content?: string | null
+          created_at?: string
+          file_type?: string | null
+          id?: string
+          name?: string
+          project_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "project_files_project_id_fkey"
+            columns: ["project_id"]
+            isOneToOne: false
+            referencedRelation: "projects"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      project_tasks: {
+        Row: {
+          created_at: string
+          description: string | null
+          id: string
+          priority: string | null
+          project_id: string
+          status: string | null
+          title: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          description?: string | null
+          id?: string
+          priority?: string | null
+          project_id: string
+          status?: string | null
+          title: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          description?: string | null
+          id?: string
+          priority?: string | null
+          project_id?: string
+          status?: string | null
+          title?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "project_tasks_project_id_fkey"
+            columns: ["project_id"]
+            isOneToOne: false
+            referencedRelation: "projects"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      projects: {
+        Row: {
+          created_at: string
+          description: string | null
+          id: string
+          name: string
+          settings: Json | null
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          description?: string | null
+          id?: string
+          name: string
+          settings?: Json | null
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          description?: string | null
+          id?: string
+          name?: string
+          settings?: Json | null
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "projects_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      purchases: {
+        Row: {
+          amount: number
+          buyer_id: string
+          course_id: string
+          created_at: string
+          id: string
+          payment_status: Database["public"]["Enums"]["payment_status"]
+          paystack_reference: string | null
+        }
+        Insert: {
+          amount: number
+          buyer_id: string
+          course_id: string
+          created_at?: string
+          id?: string
+          payment_status?: Database["public"]["Enums"]["payment_status"]
+          paystack_reference?: string | null
+        }
+        Update: {
+          amount?: number
+          buyer_id?: string
+          course_id?: string
+          created_at?: string
+          id?: string
+          payment_status?: Database["public"]["Enums"]["payment_status"]
+          paystack_reference?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "purchases_buyer_id_fkey"
+            columns: ["buyer_id"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "purchases_course_id_fkey"
+            columns: ["course_id"]
+            isOneToOne: false
+            referencedRelation: "courses"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      quiz_attempts: {
+        Row: {
+          answers: Json
+          completed_at: string
+          feedback: Json | null
+          id: string
+          quiz_id: string
+          score: number | null
+          student_id: string
+        }
+        Insert: {
+          answers: Json
+          completed_at?: string
+          feedback?: Json | null
+          id?: string
+          quiz_id: string
+          score?: number | null
+          student_id: string
+        }
+        Update: {
+          answers?: Json
+          completed_at?: string
+          feedback?: Json | null
+          id?: string
+          quiz_id?: string
+          score?: number | null
+          student_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "quiz_attempts_quiz_id_fkey"
+            columns: ["quiz_id"]
+            isOneToOne: false
+            referencedRelation: "quizzes"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "quiz_attempts_student_id_fkey"
+            columns: ["student_id"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      quizzes: {
+        Row: {
+          course_id: string | null
+          created_at: string
+          created_by_id: string
+          description: string | null
+          difficulty: Database["public"]["Enums"]["quiz_difficulty"]
+          id: string
+          questions: Json
+          rubric: Json | null
+          time_limit: number | null
+          title: string
+        }
+        Insert: {
+          course_id?: string | null
+          created_at?: string
+          created_by_id: string
+          description?: string | null
+          difficulty?: Database["public"]["Enums"]["quiz_difficulty"]
+          id?: string
+          questions: Json
+          rubric?: Json | null
+          time_limit?: number | null
+          title: string
+        }
+        Update: {
+          course_id?: string | null
+          created_at?: string
+          created_by_id?: string
+          description?: string | null
+          difficulty?: Database["public"]["Enums"]["quiz_difficulty"]
+          id?: string
+          questions?: Json
+          rubric?: Json | null
+          time_limit?: number | null
+          title?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "quizzes_course_id_fkey"
+            columns: ["course_id"]
+            isOneToOne: false
+            referencedRelation: "courses"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "quizzes_created_by_id_fkey"
+            columns: ["created_by_id"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      recordings: {
+        Row: {
+          audio_data: string
+          created_at: string
+          duration: number
+          id: string
+          session_id: string | null
+          title: string
+          transcript: Json
+          user_id: string
+        }
+        Insert: {
+          audio_data: string
+          created_at?: string
+          duration: number
+          id?: string
+          session_id?: string | null
+          title: string
+          transcript: Json
+          user_id: string
+        }
+        Update: {
+          audio_data?: string
+          created_at?: string
+          duration?: number
+          id?: string
+          session_id?: string | null
+          title?: string
+          transcript?: Json
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "recordings_session_id_fkey"
+            columns: ["session_id"]
+            isOneToOne: false
+            referencedRelation: "live_sessions"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "recordings_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       referrals: {
         Row: {
           completed_at: string | null
@@ -1961,6 +3422,30 @@ export type Database = {
         }
         Relationships: []
       }
+      schools: {
+        Row: {
+          created_at: string
+          domain: string | null
+          id: string
+          name: string
+          settings: Json | null
+        }
+        Insert: {
+          created_at?: string
+          domain?: string | null
+          id?: string
+          name: string
+          settings?: Json | null
+        }
+        Update: {
+          created_at?: string
+          domain?: string | null
+          id?: string
+          name?: string
+          settings?: Json | null
+        }
+        Relationships: []
+      }
       search_trends: {
         Row: {
           created_at: string | null
@@ -1997,6 +3482,24 @@ export type Database = {
           search_count?: number | null
           search_date?: string | null
           weekly_count?: number | null
+        }
+        Relationships: []
+      }
+      sessions: {
+        Row: {
+          expire: string
+          sess: Json
+          sid: string
+        }
+        Insert: {
+          expire: string
+          sess: Json
+          sid: string
+        }
+        Update: {
+          expire?: string
+          sess?: Json
+          sid?: string
         }
         Relationships: []
       }
@@ -2379,38 +3882,144 @@ export type Database = {
           },
         ]
       }
+      student_profiles: {
+        Row: {
+          completed_courses: string[] | null
+          created_at: string
+          id: string
+          user_id: string
+          weak_topics: string[] | null
+        }
+        Insert: {
+          completed_courses?: string[] | null
+          created_at?: string
+          id?: string
+          user_id: string
+          weak_topics?: string[] | null
+        }
+        Update: {
+          completed_courses?: string[] | null
+          created_at?: string
+          id?: string
+          user_id?: string
+          weak_topics?: string[] | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "student_profiles_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       study_plans: {
         Row: {
           created_at: string
-          current_day: number | null
-          description: string | null
+          deadline: string | null
+          exam_type: Database["public"]["Enums"]["exam_type"] | null
+          hours_per_day: number | null
           id: string
-          plan: Json
+          progress: Json | null
+          schedule: Json | null
+          subjects: string[]
           title: string
+          updated_at: string
+          user_id: string
+          weak_areas: string[] | null
+        }
+        Insert: {
+          created_at?: string
+          deadline?: string | null
+          exam_type?: Database["public"]["Enums"]["exam_type"] | null
+          hours_per_day?: number | null
+          id?: string
+          progress?: Json | null
+          schedule?: Json | null
+          subjects: string[]
+          title: string
+          updated_at?: string
+          user_id: string
+          weak_areas?: string[] | null
+        }
+        Update: {
+          created_at?: string
+          deadline?: string | null
+          exam_type?: Database["public"]["Enums"]["exam_type"] | null
+          hours_per_day?: number | null
+          id?: string
+          progress?: Json | null
+          schedule?: Json | null
+          subjects?: string[]
+          title?: string
+          updated_at?: string
+          user_id?: string
+          weak_areas?: string[] | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "study_plans_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      subscriptions: {
+        Row: {
+          auto_renew: boolean | null
+          created_at: string
+          expires_at: string
+          id: string
+          paystack_reference: string | null
+          started_at: string
+          status: string | null
+          tier_id: string
           updated_at: string
           user_id: string
         }
         Insert: {
+          auto_renew?: boolean | null
           created_at?: string
-          current_day?: number | null
-          description?: string | null
+          expires_at: string
           id?: string
-          plan: Json
-          title: string
+          paystack_reference?: string | null
+          started_at?: string
+          status?: string | null
+          tier_id: string
           updated_at?: string
           user_id: string
         }
         Update: {
+          auto_renew?: boolean | null
           created_at?: string
-          current_day?: number | null
-          description?: string | null
+          expires_at?: string
           id?: string
-          plan?: Json
-          title?: string
+          paystack_reference?: string | null
+          started_at?: string
+          status?: string | null
+          tier_id?: string
           updated_at?: string
           user_id?: string
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "subscriptions_tier_id_fkey"
+            columns: ["tier_id"]
+            isOneToOne: false
+            referencedRelation: "pricing_tiers"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "subscriptions_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       system_errors: {
         Row: {
@@ -2619,6 +4228,50 @@ export type Database = {
         }
         Relationships: []
       }
+      topic_explanations: {
+        Row: {
+          created_at: string
+          examples: Json | null
+          explanation: string
+          id: string
+          related_topics: string[] | null
+          subject: string
+          topic: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          examples?: Json | null
+          explanation: string
+          id?: string
+          related_topics?: string[] | null
+          subject: string
+          topic: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          examples?: Json | null
+          explanation?: string
+          id?: string
+          related_topics?: string[] | null
+          subject?: string
+          topic?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "topic_explanations_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       transactions: {
         Row: {
           amount_ngn: number
@@ -2654,6 +4307,48 @@ export type Database = {
           user_id?: string
         }
         Relationships: []
+      }
+      transcripts: {
+        Row: {
+          audio_url: string | null
+          created_at: string
+          created_by_id: string
+          id: string
+          segments: Json
+          session_id: string | null
+        }
+        Insert: {
+          audio_url?: string | null
+          created_at?: string
+          created_by_id: string
+          id?: string
+          segments: Json
+          session_id?: string | null
+        }
+        Update: {
+          audio_url?: string | null
+          created_at?: string
+          created_by_id?: string
+          id?: string
+          segments?: Json
+          session_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "transcripts_created_by_id_fkey"
+            columns: ["created_by_id"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "transcripts_session_id_fkey"
+            columns: ["session_id"]
+            isOneToOne: false
+            referencedRelation: "live_sessions"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       user_activity_logs: {
         Row: {
@@ -3009,6 +4704,62 @@ export type Database = {
         }
         Relationships: []
       }
+      user_progress: {
+        Row: {
+          average_score: number | null
+          created_at: string
+          id: string
+          last_studied_at: string | null
+          learning_mode: Database["public"]["Enums"]["learning_mode"] | null
+          preferred_language: string | null
+          questions_attempted: number | null
+          strong_topics: string[] | null
+          subject: string
+          topics_studied: string[] | null
+          updated_at: string
+          user_id: string
+          weak_topics: string[] | null
+        }
+        Insert: {
+          average_score?: number | null
+          created_at?: string
+          id?: string
+          last_studied_at?: string | null
+          learning_mode?: Database["public"]["Enums"]["learning_mode"] | null
+          preferred_language?: string | null
+          questions_attempted?: number | null
+          strong_topics?: string[] | null
+          subject: string
+          topics_studied?: string[] | null
+          updated_at?: string
+          user_id: string
+          weak_topics?: string[] | null
+        }
+        Update: {
+          average_score?: number | null
+          created_at?: string
+          id?: string
+          last_studied_at?: string | null
+          learning_mode?: Database["public"]["Enums"]["learning_mode"] | null
+          preferred_language?: string | null
+          questions_attempted?: number | null
+          strong_topics?: string[] | null
+          subject?: string
+          topics_studied?: string[] | null
+          updated_at?: string
+          user_id?: string
+          weak_topics?: string[] | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "user_progress_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       user_reports: {
         Row: {
           admin_action: string | null
@@ -3191,88 +4942,49 @@ export type Database = {
       }
       users: {
         Row: {
-          analytics_last_seen: string | null
-          avatar_url: string | null
-          country: string | null
-          country_code: string | null
           created_at: string
-          currency_code: string | null
-          currency_symbol: string | null
-          device_id: string | null
-          email: string
-          full_name: string
-          gender: string | null
-          ip_address: string | null
-          is_active: boolean | null
-          last_login: string | null
-          mobile: string | null
-          payment_method: string | null
-          postal_code: string | null
-          state: string | null
-          telegram_chat_id: string | null
+          email: string | null
+          first_name: string | null
+          id: string
+          last_name: string | null
+          lenory_id: string | null
+          paystack_customer_id: string | null
+          profile_image_url: string | null
+          role: Database["public"]["Enums"]["user_role"]
+          school_id: string | null
+          subscription_expires_at: string | null
+          subscription_tier: string | null
           updated_at: string
-          username: string | null
-          vip: boolean | null
-          vip_expires_at: string | null
-          vip_started_at: string | null
-          wallet_balance: number | null
-          welcome_bonus: number | null
         }
         Insert: {
-          analytics_last_seen?: string | null
-          avatar_url?: string | null
-          country?: string | null
-          country_code?: string | null
           created_at?: string
-          currency_code?: string | null
-          currency_symbol?: string | null
-          device_id?: string | null
-          email: string
-          full_name: string
-          gender?: string | null
-          ip_address?: string | null
-          is_active?: boolean | null
-          last_login?: string | null
-          mobile?: string | null
-          payment_method?: string | null
-          postal_code?: string | null
-          state?: string | null
-          telegram_chat_id?: string | null
+          email?: string | null
+          first_name?: string | null
+          id?: string
+          last_name?: string | null
+          lenory_id?: string | null
+          paystack_customer_id?: string | null
+          profile_image_url?: string | null
+          role?: Database["public"]["Enums"]["user_role"]
+          school_id?: string | null
+          subscription_expires_at?: string | null
+          subscription_tier?: string | null
           updated_at?: string
-          username?: string | null
-          vip?: boolean | null
-          vip_expires_at?: string | null
-          vip_started_at?: string | null
-          wallet_balance?: number | null
-          welcome_bonus?: number | null
         }
         Update: {
-          analytics_last_seen?: string | null
-          avatar_url?: string | null
-          country?: string | null
-          country_code?: string | null
           created_at?: string
-          currency_code?: string | null
-          currency_symbol?: string | null
-          device_id?: string | null
-          email?: string
-          full_name?: string
-          gender?: string | null
-          ip_address?: string | null
-          is_active?: boolean | null
-          last_login?: string | null
-          mobile?: string | null
-          payment_method?: string | null
-          postal_code?: string | null
-          state?: string | null
-          telegram_chat_id?: string | null
+          email?: string | null
+          first_name?: string | null
+          id?: string
+          last_name?: string | null
+          lenory_id?: string | null
+          paystack_customer_id?: string | null
+          profile_image_url?: string | null
+          role?: Database["public"]["Enums"]["user_role"]
+          school_id?: string | null
+          subscription_expires_at?: string | null
+          subscription_tier?: string | null
           updated_at?: string
-          username?: string | null
-          vip?: boolean | null
-          vip_expires_at?: string | null
-          vip_started_at?: string | null
-          wallet_balance?: number | null
-          welcome_bonus?: number | null
         }
         Relationships: []
       }
@@ -3422,6 +5134,56 @@ export type Database = {
             columns: ["story_id"]
             isOneToOne: false
             referencedRelation: "user_storylines"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      voice_conversations: {
+        Row: {
+          audio_segments: Json | null
+          created_at: string
+          current_phase: string | null
+          id: string
+          initial_prompt: string | null
+          is_active: boolean | null
+          last_activity_at: string | null
+          subject: string | null
+          turn_count: number | null
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          audio_segments?: Json | null
+          created_at?: string
+          current_phase?: string | null
+          id?: string
+          initial_prompt?: string | null
+          is_active?: boolean | null
+          last_activity_at?: string | null
+          subject?: string | null
+          turn_count?: number | null
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          audio_segments?: Json | null
+          created_at?: string
+          current_phase?: string | null
+          id?: string
+          initial_prompt?: string | null
+          is_active?: boolean | null
+          last_activity_at?: string | null
+          subject?: string | null
+          turn_count?: number | null
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "voice_conversations_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "users"
             referencedColumns: ["id"]
           },
         ]
@@ -3676,6 +5438,28 @@ export type Database = {
     }
     Enums: {
       app_role: "admin" | "moderator" | "user"
+      exam_type: "waec" | "neco" | "jamb" | "university" | "custom"
+      learning_mode:
+        | "learning"
+        | "exam"
+        | "revision"
+        | "quick"
+        | "eli5"
+        | "advanced"
+        | "practice"
+      notification_type:
+        | "chat"
+        | "chat_history"
+        | "motivation"
+        | "achievement"
+        | "reminder"
+        | "exam"
+        | "study_plan"
+        | "system"
+      payment_status: "pending" | "completed" | "failed"
+      quiz_difficulty: "easy" | "medium" | "hard"
+      session_status: "active" | "paused" | "ended"
+      user_role: "student" | "teacher" | "admin" | "lecturer" | "school"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -3804,6 +5588,30 @@ export const Constants = {
   public: {
     Enums: {
       app_role: ["admin", "moderator", "user"],
+      exam_type: ["waec", "neco", "jamb", "university", "custom"],
+      learning_mode: [
+        "learning",
+        "exam",
+        "revision",
+        "quick",
+        "eli5",
+        "advanced",
+        "practice",
+      ],
+      notification_type: [
+        "chat",
+        "chat_history",
+        "motivation",
+        "achievement",
+        "reminder",
+        "exam",
+        "study_plan",
+        "system",
+      ],
+      payment_status: ["pending", "completed", "failed"],
+      quiz_difficulty: ["easy", "medium", "hard"],
+      session_status: ["active", "paused", "ended"],
+      user_role: ["student", "teacher", "admin", "lecturer", "school"],
     },
   },
 } as const
