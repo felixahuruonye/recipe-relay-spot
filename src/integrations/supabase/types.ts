@@ -2192,6 +2192,60 @@ export type Database = {
         }
         Relationships: []
       }
+      monetization_events: {
+        Row: {
+          created_at: string
+          creator_amount: number
+          creator_id: string | null
+          event_type: string
+          id: string
+          meta: Json
+          musician_amount: number
+          musician_id: string | null
+          ngn_gross: number
+          platform_amount: number
+          post_id: string | null
+          stars_spent: number
+          storyline_id: string | null
+          viewer_cashback: number
+          viewer_id: string | null
+        }
+        Insert: {
+          created_at?: string
+          creator_amount?: number
+          creator_id?: string | null
+          event_type: string
+          id?: string
+          meta?: Json
+          musician_amount?: number
+          musician_id?: string | null
+          ngn_gross?: number
+          platform_amount?: number
+          post_id?: string | null
+          stars_spent?: number
+          storyline_id?: string | null
+          viewer_cashback?: number
+          viewer_id?: string | null
+        }
+        Update: {
+          created_at?: string
+          creator_amount?: number
+          creator_id?: string | null
+          event_type?: string
+          id?: string
+          meta?: Json
+          musician_amount?: number
+          musician_id?: string | null
+          ngn_gross?: number
+          platform_amount?: number
+          post_id?: string | null
+          stars_spent?: number
+          storyline_id?: string | null
+          viewer_cashback?: number
+          viewer_id?: string | null
+        }
+        Relationships: []
+      }
       music_offers: {
         Row: {
           approved_at: string | null
@@ -2632,19 +2686,25 @@ export type Database = {
       post_views: {
         Row: {
           id: string
+          is_first_view: boolean
           post_id: string
+          stars_charged: number
           user_id: string
           viewed_at: string
         }
         Insert: {
           id?: string
+          is_first_view?: boolean
           post_id: string
+          stars_charged?: number
           user_id: string
           viewed_at?: string
         }
         Update: {
           id?: string
+          is_first_view?: boolean
           post_id?: string
+          stars_charged?: number
           user_id?: string
           viewed_at?: string
         }
@@ -4589,11 +4649,13 @@ export type Database = {
           age: number | null
           ai_credits: number | null
           analytics_last_seen: string | null
+          auto_spend: boolean
           avatar_url: string | null
           bio: string | null
           content_wallet_ngn: number
           created_at: string
           device_id: string | null
+          earning_banned: boolean
           follower_count: number | null
           following_count: number | null
           full_name: string | null
@@ -4604,11 +4666,13 @@ export type Database = {
           is_vip: boolean | null
           last_seen: string | null
           market_wallet_ngn: number
+          monetization_level: number
           post_count: number | null
           post_count_free: number | null
           saved_searches: Json | null
           silver_star_balance: number
           star_balance: number | null
+          story_earn_progress: number
           story_settings: Json | null
           suspended_at: string | null
           suspension_reason: string | null
@@ -4616,6 +4680,7 @@ export type Database = {
           total_reactions: number | null
           updated_at: string
           username: string
+          view_earn_progress: number
           vip: boolean | null
           vip_days: number | null
           vip_expires_at: string | null
@@ -4628,11 +4693,13 @@ export type Database = {
           age?: number | null
           ai_credits?: number | null
           analytics_last_seen?: string | null
+          auto_spend?: boolean
           avatar_url?: string | null
           bio?: string | null
           content_wallet_ngn?: number
           created_at?: string
           device_id?: string | null
+          earning_banned?: boolean
           follower_count?: number | null
           following_count?: number | null
           full_name?: string | null
@@ -4643,11 +4710,13 @@ export type Database = {
           is_vip?: boolean | null
           last_seen?: string | null
           market_wallet_ngn?: number
+          monetization_level?: number
           post_count?: number | null
           post_count_free?: number | null
           saved_searches?: Json | null
           silver_star_balance?: number
           star_balance?: number | null
+          story_earn_progress?: number
           story_settings?: Json | null
           suspended_at?: string | null
           suspension_reason?: string | null
@@ -4655,6 +4724,7 @@ export type Database = {
           total_reactions?: number | null
           updated_at?: string
           username: string
+          view_earn_progress?: number
           vip?: boolean | null
           vip_days?: number | null
           vip_expires_at?: string | null
@@ -4667,11 +4737,13 @@ export type Database = {
           age?: number | null
           ai_credits?: number | null
           analytics_last_seen?: string | null
+          auto_spend?: boolean
           avatar_url?: string | null
           bio?: string | null
           content_wallet_ngn?: number
           created_at?: string
           device_id?: string | null
+          earning_banned?: boolean
           follower_count?: number | null
           following_count?: number | null
           full_name?: string | null
@@ -4682,11 +4754,13 @@ export type Database = {
           is_vip?: boolean | null
           last_seen?: string | null
           market_wallet_ngn?: number
+          monetization_level?: number
           post_count?: number | null
           post_count_free?: number | null
           saved_searches?: Json | null
           silver_star_balance?: number
           star_balance?: number | null
+          story_earn_progress?: number
           story_settings?: Json | null
           suspended_at?: string | null
           suspension_reason?: string | null
@@ -4694,6 +4768,7 @@ export type Database = {
           total_reactions?: number | null
           updated_at?: string
           username?: string
+          view_earn_progress?: number
           vip?: boolean | null
           vip_days?: number | null
           vip_expires_at?: string | null
@@ -5384,6 +5459,10 @@ export type Database = {
         | { Args: { p_recharge?: boolean; p_user_id: string }; Returns: number }
       delete_own_group: { Args: { p_group_id: string }; Returns: Json }
       execute_admin_sql: { Args: { query: string }; Returns: Json }
+      get_admin_setting_num: {
+        Args: { p_default: number; p_key: string }
+        Returns: number
+      }
       get_user_device_info: {
         Args: { user_agent_string: string }
         Returns: Json
@@ -5425,12 +5504,14 @@ export type Database = {
         Args: { p_post_id: string; p_viewer_id: string }
         Returns: Json
       }
+      record_post_first_view: { Args: { p_post_id: string }; Returns: Json }
       record_public_post_view: { Args: { p_post_id: string }; Returns: Json }
       spend_stars: {
         Args: { p_amount: number; p_meta?: Json; p_type: string }
         Returns: Json
       }
       sync_post_view_count: { Args: { p_post_id: string }; Returns: undefined }
+      tip_post: { Args: { p_post_id: string; p_stars: number }; Returns: Json }
       track_search: { Args: { search_keyword: string }; Returns: undefined }
       update_post_status: { Args: never; Returns: undefined }
       use_ai_credit: { Args: { p_user_id: string }; Returns: Json }
