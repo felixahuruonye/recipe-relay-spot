@@ -49,7 +49,7 @@ export const CreateStoryline: React.FC<CreateStorylineProps> = ({ onCreated, use
       artist_name: selectedMusicTrack.artist_name,
       cover_url: selectedMusicTrack.cover_url,
       duration_seconds: selectedMusicTrack.duration_seconds || 0,
-      source: 'lenory_free',
+      source: 'community',
       external_id: externalId,
       youtube_id: selectedMusicTrack.youtube_id,
       audio_url: '',
