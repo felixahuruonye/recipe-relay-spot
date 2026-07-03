@@ -1704,16 +1704,7 @@ const TikTokFeed: React.FC = () => {
             </div>
 
             <div className="flex items-center gap-3 px-3 pt-3 pb-1 pointer-events-auto overflow-hidden">
-              <div className="flex items-center gap-2 shrink-0 max-w-[34%]">
-                {user && myProfile && (
-                  <div className="flex items-center gap-1.5 bg-black/40 backdrop-blur-sm rounded-full px-2.5 py-1">
-                    <span className="text-white font-bold text-xs">₦{(myProfile.wallet_balance || 0).toLocaleString()}</span>
-                    <button onClick={() => { navigator.clipboard.writeText(String(myProfile.wallet_balance || 0)); toast({ title: 'Copied!' }); }} className="p-0.5">
-                      <Copy className="w-3 h-3 text-white/60" />
-                    </button>
-                  </div>
-                )}
-              </div>
+              <div className="shrink-0" />
               <div className="flex items-end justify-center gap-4 flex-1 min-w-0 text-white font-black">
                 <button className="text-base border-b-2 border-white pb-1 whitespace-nowrap" onClick={() => feedRef.current?.scrollTo({ top: 0, behavior: 'smooth' })}>For You</button>
                 <button className="relative text-base text-white/55 pb-1 whitespace-nowrap" onClick={() => user ? navigate('/storyline') : requireLogin('Login for stories')}>
