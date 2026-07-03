@@ -1147,6 +1147,9 @@ const TikTokFeed: React.FC = () => {
     const channel = supabase
       .channel(`feed-money-notifications-${user.id}`)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'wallet_history', filter: `user_id=eq.${user.id}` }, () => loadMyProfile())
+      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'user_profiles', filter: `id=eq.${user.id}` }, (payload: any) => {
+        setMyProfile((prev: any) => prev ? { ...prev, ...payload.new } : payload.new);
+      })
       .on('postgres_changes', { event: '*', schema: 'public', table: 'user_notifications', filter: `user_id=eq.${user.id}` }, () => loadCounts())
       .subscribe();
     return () => { supabase.removeChannel(channel); };
