@@ -384,6 +384,9 @@ const Profile = () => {
       )}
 
       {/* Tabs for Posts */}
+      {isOwnProfile && profile && <CreatorMonetizationCard userId={profile.id} />}
+
+      {/* Tabs for Posts */}
       <Tabs defaultValue="posts" className="space-y-4">
         <TabsList className="grid w-full grid-cols-2">
           <TabsTrigger value="posts">{isOwnProfile ? 'My Posts' : 'Posts'}</TabsTrigger>
