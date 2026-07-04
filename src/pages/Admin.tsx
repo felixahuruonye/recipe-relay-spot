@@ -160,6 +160,7 @@ const AdminPanel = () => {
             <TabsList className="inline-flex w-max gap-1">
               <TabsTrigger value="overview">Overview</TabsTrigger>
               <TabsTrigger value="balances">Balances</TabsTrigger>
+              <TabsTrigger value="monetization">Monetization</TabsTrigger>
               <TabsTrigger value="withdrawals">Withdrawals</TabsTrigger>
               <TabsTrigger value="broadcast">Broadcast</TabsTrigger>
               <TabsTrigger value="messages">Admin Chat</TabsTrigger>
