@@ -1424,6 +1424,42 @@ export type Database = {
         }
         Relationships: []
       }
+      fraud_flags: {
+        Row: {
+          created_at: string
+          details: Json
+          flag_type: string
+          id: string
+          reviewed_at: string | null
+          reviewed_by: string | null
+          severity: string
+          status: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          details?: Json
+          flag_type: string
+          id?: string
+          reviewed_at?: string | null
+          reviewed_by?: string | null
+          severity?: string
+          status?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          details?: Json
+          flag_type?: string
+          id?: string
+          reviewed_at?: string | null
+          reviewed_by?: string | null
+          severity?: string
+          status?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       general_messages: {
         Row: {
           created_at: string | null
@@ -5435,6 +5471,14 @@ export type Database = {
         Args: { p_message: string; p_title: string; p_type?: string }
         Returns: Json
       }
+      admin_set_earning_ban: {
+        Args: { p_banned: boolean; p_reason?: string; p_user_id: string }
+        Returns: Json
+      }
+      admin_set_monetization_level: {
+        Args: { p_level: number; p_user_id: string }
+        Returns: Json
+      }
       admin_set_user_balances: {
         Args: {
           p_reason?: string
@@ -5446,6 +5490,10 @@ export type Database = {
       }
       admin_update_payment_request: {
         Args: { p_admin_notes?: string; p_request_id: string; p_status: string }
+        Returns: Json
+      }
+      admin_update_setting: {
+        Args: { p_key: string; p_value: string }
         Returns: Json
       }
       archive_old_posts: { Args: never; Returns: undefined }
