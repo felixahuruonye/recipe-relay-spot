@@ -18,6 +18,7 @@ import { EditProfile } from '@/components/Profile/EditProfile';
 import { WithdrawalForm } from '@/components/Profile/WithdrawalForm';
 import { FollowersList } from '@/components/Profile/FollowersList';
 import { PostViewers } from '@/components/Profile/PostViewers';
+import { CreatorMonetizationCard } from '@/components/Profile/CreatorMonetizationCard';
 
 interface UserProfile {
   id: string;
