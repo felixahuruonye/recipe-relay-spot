@@ -19,6 +19,7 @@ import { MarketplaceTab } from '@/components/Admin/MarketplaceTab';
 import { UserMessagesTab } from '@/components/Admin/UserMessagesTab';
 import { DeleteUsersTab } from '@/components/Admin/DeleteUsersTab';
 import { DeliveriesTab } from '@/components/Admin/DeliveriesTab';
+import { MonetizationTab } from '@/components/Admin/MonetizationTab';
 import { useAuth } from '@/contexts/AuthContext';
 import { useNavigate } from 'react-router-dom';
 
