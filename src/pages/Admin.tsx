@@ -19,6 +19,7 @@ import { MarketplaceTab } from '@/components/Admin/MarketplaceTab';
 import { UserMessagesTab } from '@/components/Admin/UserMessagesTab';
 import { DeleteUsersTab } from '@/components/Admin/DeleteUsersTab';
 import { DeliveriesTab } from '@/components/Admin/DeliveriesTab';
+import { MonetizationTab } from '@/components/Admin/MonetizationTab';
 import { useAuth } from '@/contexts/AuthContext';
 import { useNavigate } from 'react-router-dom';
 
@@ -159,6 +160,7 @@ const AdminPanel = () => {
             <TabsList className="inline-flex w-max gap-1">
               <TabsTrigger value="overview">Overview</TabsTrigger>
               <TabsTrigger value="balances">Balances</TabsTrigger>
+              <TabsTrigger value="monetization">Monetization</TabsTrigger>
               <TabsTrigger value="withdrawals">Withdrawals</TabsTrigger>
               <TabsTrigger value="broadcast">Broadcast</TabsTrigger>
               <TabsTrigger value="messages">Admin Chat</TabsTrigger>
@@ -179,6 +181,7 @@ const AdminPanel = () => {
           </TabsContent>
 
           <TabsContent value="balances"><UserBalancesTab /></TabsContent>
+          <TabsContent value="monetization"><MonetizationTab /></TabsContent>
           <TabsContent value="withdrawals"><WithdrawalsTab /></TabsContent>
           <TabsContent value="broadcast"><BroadcastTab /></TabsContent>
           <TabsContent value="messages"><Card><CardContent className="pt-6"><AdminChat /></CardContent></Card></TabsContent>

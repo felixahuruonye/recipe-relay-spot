@@ -1278,20 +1278,25 @@ const TikTokFeed: React.FC = () => {
     (async () => {
       try {
         await ensureUserProfile(supabase as any, { id: user.id, email: user.email });
-        const { data } = await supabase.rpc('process_post_view', { p_post_id: post.id, p_viewer_id: user.id });
+        const { data } = await supabase.rpc('record_post_first_view' as any, { p_post_id: post.id });
         const result = data as any;
         if (result?.success) {
           setProcessedPosts(prev => new Set(prev).add(post.id));
-          setPostViewCounts(prev => ({ ...prev, [post.id]: (prev[post.id] ?? post.view_count ?? 0) + (result.already_viewed ? 0 : 1) }));
+          if (result.first_view) {
+            setPostViewCounts(prev => ({ ...prev, [post.id]: (prev[post.id] ?? post.view_count ?? 0) + 1 }));
+          }
           loadMyProfile();
           fetchPosts();
           if (result.charged) {
-            setLastEarnAmount(result.viewer_earn || 0);
+            setLastEarnAmount(result.viewer_cashback || 0);
             setShowStarFloat(true);
             setTimeout(() => setShowStarFloat(false), 2500);
-            toast({ title: '💰 Earned!', description: `⭐ ${result.stars_spent} → ₦${result.viewer_earn} cashback` });
-          } else if (result.insufficient_stars) {
+            toast({ title: '💰 Earned!', description: `⭐ ${result.stars_spent} → ₦${Number(result.viewer_cashback).toFixed(0)} cashback` });
+          } else if (result.reason === 'insufficient_stars') {
             setStarNotification('no_earn');
+          } else if (result.reason === 'already_viewed') {
+            // repeat view: offer to tip instead
+            setTipPost(post); setTipAmount(5);
           }
         }
       } finally {
@@ -1299,6 +1304,7 @@ const TikTokFeed: React.FC = () => {
       }
     })();
   }, [user, processedPosts, toast, autoSpend, myProfile]);
+
 
   const scrollToNext = useCallback(() => {
     if (!feedRef.current || !autoScroll) return;
@@ -1494,28 +1500,20 @@ const TikTokFeed: React.FC = () => {
 
   const confirmTip = async () => {
     if (!user || !tipPost) return;
-    if (tipAmount < 5 || tipAmount > 100) { toast({ title: 'Invalid amount', description: 'Min 5, Max 100 stars' }); return; }
+    if (![5,10,20,50,100].includes(tipAmount)) { toast({ title: 'Invalid amount', description: 'Pick 5, 10, 20, 50 or 100 stars' }); return; }
     const starBal = myProfile?.star_balance || 0;
     if (starBal < tipAmount) { setStarNotification('no_earn'); setShowTipDialog(false); return; }
-    const starValue = 300;
-    const creatorShare = tipPost.music_track_id ? 0.30 : 0.40;
-    const viewerShare = 0.35;
-    const totalValue = tipAmount * starValue;
-    await supabase.rpc('spend_stars', { p_amount: tipAmount, p_type: 'tip', p_meta: { post_id: tipPost.id } });
-    const { data: cp } = await supabase.from('user_profiles').select('wallet_balance, total_earned').eq('id', tipPost.user_id).single();
-    if (cp) await supabase.from('user_profiles').update({ wallet_balance: (cp.wallet_balance||0)+totalValue*creatorShare, total_earned: (cp.total_earned||0)+totalValue*creatorShare }).eq('id', tipPost.user_id);
-    const { data: vp } = await supabase.from('user_profiles').select('wallet_balance').eq('id', user.id).single();
-    if (vp) await supabase.from('user_profiles').update({ wallet_balance: (vp.wallet_balance||0)+totalValue*viewerShare }).eq('id', user.id);
-    await (supabase as any).from('user_notifications').insert({
-      user_id: tipPost.user_id, title: '⭐ Star Tip!',
-      message: (myProfile?.username||'Someone')+' sent you '+tipAmount+' stars',
-      type: 'success', notification_category: 'tip',
-      action_data: { tipper_id: user.id, username: myProfile?.username, avatar_url: myProfile?.avatar_url, post_id: tipPost.id, stars: tipAmount }
-    });
-    toast({ title: '⭐ '+tipAmount+' Stars sent!', description: '₦'+(totalValue*viewerShare).toFixed(0)+' cashback' });
+    const { data, error } = await supabase.rpc('tip_post' as any, { p_post_id: tipPost.id, p_stars: tipAmount });
+    const res = data as any;
+    if (error || !res?.success) {
+      toast({ title: 'Tip failed', description: res?.error || error?.message || 'Try again', variant: 'destructive' as any });
+      return;
+    }
+    toast({ title: '⭐ ' + tipAmount + ' Stars sent!', description: '₦' + Number(res.viewer_cashback).toFixed(0) + ' cashback' });
     setShowTipDialog(false);
     loadMyProfile();
   };
+
 
   const requireLogin = (msg?: string) => {
     setLoginMessage(msg || 'Sign in to continue');

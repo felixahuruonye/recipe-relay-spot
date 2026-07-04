@@ -18,6 +18,7 @@ import { EditProfile } from '@/components/Profile/EditProfile';
 import { WithdrawalForm } from '@/components/Profile/WithdrawalForm';
 import { FollowersList } from '@/components/Profile/FollowersList';
 import { PostViewers } from '@/components/Profile/PostViewers';
+import { CreatorMonetizationCard } from '@/components/Profile/CreatorMonetizationCard';
 
 interface UserProfile {
   id: string;
@@ -381,6 +382,9 @@ const Profile = () => {
           </CardContent>
         </Card>
       )}
+
+      {/* Tabs for Posts */}
+      {isOwnProfile && profile && <CreatorMonetizationCard userId={profile.id} />}
 
       {/* Tabs for Posts */}
       <Tabs defaultValue="posts" className="space-y-4">
