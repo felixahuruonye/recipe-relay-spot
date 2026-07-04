@@ -181,6 +181,7 @@ const AdminPanel = () => {
           </TabsContent>
 
           <TabsContent value="balances"><UserBalancesTab /></TabsContent>
+          <TabsContent value="monetization"><MonetizationTab /></TabsContent>
           <TabsContent value="withdrawals"><WithdrawalsTab /></TabsContent>
           <TabsContent value="broadcast"><BroadcastTab /></TabsContent>
           <TabsContent value="messages"><Card><CardContent className="pt-6"><AdminChat /></CardContent></Card></TabsContent>
