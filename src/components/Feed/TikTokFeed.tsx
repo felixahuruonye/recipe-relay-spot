@@ -1278,20 +1278,25 @@ const TikTokFeed: React.FC = () => {
     (async () => {
       try {
         await ensureUserProfile(supabase as any, { id: user.id, email: user.email });
-        const { data } = await supabase.rpc('process_post_view', { p_post_id: post.id, p_viewer_id: user.id });
+        const { data } = await supabase.rpc('record_post_first_view' as any, { p_post_id: post.id });
         const result = data as any;
         if (result?.success) {
           setProcessedPosts(prev => new Set(prev).add(post.id));
-          setPostViewCounts(prev => ({ ...prev, [post.id]: (prev[post.id] ?? post.view_count ?? 0) + (result.already_viewed ? 0 : 1) }));
+          if (result.first_view) {
+            setPostViewCounts(prev => ({ ...prev, [post.id]: (prev[post.id] ?? post.view_count ?? 0) + 1 }));
+          }
           loadMyProfile();
           fetchPosts();
           if (result.charged) {
-            setLastEarnAmount(result.viewer_earn || 0);
+            setLastEarnAmount(result.viewer_cashback || 0);
             setShowStarFloat(true);
             setTimeout(() => setShowStarFloat(false), 2500);
-            toast({ title: '💰 Earned!', description: `⭐ ${result.stars_spent} → ₦${result.viewer_earn} cashback` });
-          } else if (result.insufficient_stars) {
+            toast({ title: '💰 Earned!', description: `⭐ ${result.stars_spent} → ₦${Number(result.viewer_cashback).toFixed(0)} cashback` });
+          } else if (result.reason === 'insufficient_stars') {
             setStarNotification('no_earn');
+          } else if (result.reason === 'already_viewed') {
+            // repeat view: offer to tip instead
+            setTipPost(post); setTipAmount(5);
           }
         }
       } finally {
@@ -1299,6 +1304,7 @@ const TikTokFeed: React.FC = () => {
       }
     })();
   }, [user, processedPosts, toast, autoSpend, myProfile]);
+
 
   const scrollToNext = useCallback(() => {
     if (!feedRef.current || !autoScroll) return;
