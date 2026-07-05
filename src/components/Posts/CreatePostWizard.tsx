@@ -699,25 +699,42 @@ const CreatePostWizard: React.FC<CreatePostWizardProps> = ({
                   <p className="text-center text-muted-foreground text-sm py-6">No sounds available</p>
                 ) : (
                   <div className="space-y-2">
-                    {communityTracks.map(track => (
-                      <button key={track.id} onClick={() => {
-                        setSelectedMusicTrack(track);
-                        if (track.duration_seconds) setMusicDuration(Math.min(track.duration_seconds, 30));
-                        setShowMusicPicker(false);
-                      }} className="w-full flex items-center gap-3 p-2 rounded-xl hover:bg-muted text-left">
-                        <div className="w-10 h-10 rounded-lg bg-primary/10 flex items-center justify-center shrink-0">
-                          {track.cover_url ? (
-                            <img src={track.cover_url} className="w-full h-full rounded-lg object-cover" alt="" />
-                          ) : (
-                            <Music className="w-5 h-5 text-primary" />
+                    {communityTracks.map(track => {
+                      const isPlaying = playingPickerId === track.id;
+                      return (
+                        <div key={track.id} className="w-full flex items-center gap-3 p-2 rounded-xl hover:bg-muted">
+                          <div className="w-10 h-10 rounded-lg bg-primary/10 flex items-center justify-center shrink-0 relative">
+                            {track.cover_url ? (
+                              <img src={track.cover_url} className="w-full h-full rounded-lg object-cover" alt="" />
+                            ) : (
+                              <Music className="w-5 h-5 text-primary" />
+                            )}
+                          </div>
+                          <button
+                            onClick={() => {
+                              setSelectedMusicTrack(track);
+                              if (track.duration_seconds) setMusicDuration(Math.min(track.duration_seconds, 30));
+                              previewAudioRef.current?.pause();
+                              setPlayingPickerId(null);
+                              setShowMusicPicker(false);
+                            }}
+                            className="flex-1 min-w-0 text-left"
+                          >
+                            <p className="text-sm font-semibold truncate">{track.title}</p>
+                            <p className="text-xs text-muted-foreground truncate">@{track.artist_name}</p>
+                          </button>
+                          {track.audio_url && (
+                            <button
+                              onClick={(e) => { e.stopPropagation(); togglePickerPreview(track); }}
+                              className="w-9 h-9 rounded-full bg-primary/15 hover:bg-primary/25 flex items-center justify-center shrink-0"
+                              title={isPlaying ? 'Stop preview' : 'Preview'}
+                            >
+                              {isPlaying ? <Pause className="w-4 h-4 text-primary" /> : <Play className="w-4 h-4 text-primary ml-0.5" />}
+                            </button>
                           )}
                         </div>
-                        <div className="flex-1 min-w-0">
-                          <p className="text-sm font-semibold truncate">{track.title}</p>
-                          <p className="text-xs text-muted-foreground truncate">@{track.artist_name}</p>
-                        </div>
-                      </button>
-                    ))}
+                      );
+                    })}
                   </div>
                 )}
               </motion.div>
