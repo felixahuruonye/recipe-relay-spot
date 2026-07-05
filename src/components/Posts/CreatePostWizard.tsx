@@ -110,7 +110,7 @@ const CreatePostWizard: React.FC<CreatePostWizardProps> = ({
   }, [facingMode, stopCamera]);
 
   useEffect(() => {
-    if (isOpen && step === 0 && !hasMediaGuard(mediaPreviews)) {
+    if (isOpen && step === 0) {
       startCamera(facingMode);
     } else {
       stopCamera();
