@@ -153,8 +153,8 @@ const CreatePostWizard: React.FC<CreatePostWizardProps> = ({
         .from('music_tracks')
         .select('*')
         .eq('status', 'active')
-        .eq('source', 'community')
-        .order('usage_count', { ascending: false })
+        .order('usage_count', { ascending: false, nullsFirst: false })
+        .order('created_at', { ascending: false })
         .limit(50);
       if (!tracks || tracks.length === 0) return;
       setCommunityTracks(tracks);
