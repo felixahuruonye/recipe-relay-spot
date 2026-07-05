@@ -47,6 +47,20 @@ const CreatePostWizard: React.FC<CreatePostWizardProps> = ({
   const [aiPickedTrack, setAiPickedTrack] = useState<any>(null);
   const [alsoPostToStoryline, setAlsoPostToStoryline] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const galleryInputRef = useRef<HTMLInputElement>(null);
+  const cameraVideoRef = useRef<HTMLVideoElement>(null);
+  const streamRef = useRef<MediaStream | null>(null);
+  const recorderRef = useRef<MediaRecorder | null>(null);
+  const recordChunksRef = useRef<Blob[]>([]);
+  const recordAudioRef = useRef<HTMLAudioElement | null>(null);
+  const previewAudioRef = useRef<HTMLAudioElement | null>(null);
+  const [cameraReady, setCameraReady] = useState(false);
+  const [cameraError, setCameraError] = useState<string | null>(null);
+  const [facingMode, setFacingMode] = useState<'user' | 'environment'>('environment');
+  const [isRecording, setIsRecording] = useState(false);
+  const [recordSeconds, setRecordSeconds] = useState(0);
+  const recordTimerRef = useRef<number | null>(null);
+  const [playingPickerId, setPlayingPickerId] = useState<string | null>(null);
 
   useEffect(() => {
     if (!isOpen) {
