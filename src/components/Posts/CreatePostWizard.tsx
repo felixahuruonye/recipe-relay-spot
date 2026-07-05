@@ -83,6 +83,150 @@ const CreatePostWizard: React.FC<CreatePostWizardProps> = ({
     }
   }, [isOpen]);
 
+  // ---------- Live camera lifecycle ----------
+  const stopCamera = useCallback(() => {
+    streamRef.current?.getTracks().forEach(t => t.stop());
+    streamRef.current = null;
+    setCameraReady(false);
+  }, []);
+
+  const startCamera = useCallback(async (mode: 'user' | 'environment' = facingMode) => {
+    setCameraError(null);
+    stopCamera();
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({
+        video: { facingMode: { ideal: mode }, width: { ideal: 1080 }, height: { ideal: 1920 } },
+        audio: true,
+      });
+      streamRef.current = stream;
+      if (cameraVideoRef.current) {
+        cameraVideoRef.current.srcObject = stream;
+        await cameraVideoRef.current.play().catch(() => {});
+      }
+      setCameraReady(true);
+    } catch (e: any) {
+      setCameraError(e?.message || 'Camera not available');
+    }
+  }, [facingMode, stopCamera]);
+
+  useEffect(() => {
+    if (isOpen && step === 0 && !hasMediaGuard(mediaPreviews)) {
+      startCamera(facingMode);
+    } else {
+      stopCamera();
+    }
+    return () => { stopCamera(); };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isOpen, step, facingMode]);
+
+  // Preview-audio cleanup
+  useEffect(() => () => {
+    previewAudioRef.current?.pause();
+    recordAudioRef.current?.pause();
+    if (recordTimerRef.current) window.clearInterval(recordTimerRef.current);
+  }, []);
+
+  const pickRandomCommunityTrack = useCallback(async () => {
+    if (selectedMusicTrack) return selectedMusicTrack;
+    let pool = communityTracks;
+    if (!pool.length) {
+      const { data } = await supabase
+        .from('music_tracks').select('*').eq('status', 'active')
+        .order('usage_count', { ascending: false, nullsFirst: false }).limit(50);
+      pool = data || [];
+      if (pool.length) setCommunityTracks(pool);
+    }
+    const withAudio = pool.filter((t: any) => t.audio_url);
+    const picked = (withAudio.length ? withAudio : pool)[Math.floor(Math.random() * (withAudio.length || pool.length))];
+    if (picked) {
+      setSelectedMusicTrack(picked);
+      setAiPickedTrack(picked);
+      if (picked.duration_seconds) setMusicDuration(Math.min(picked.duration_seconds, 30));
+    }
+    return picked;
+  }, [communityTracks, selectedMusicTrack]);
+
+  const takePhoto = async () => {
+    const video = cameraVideoRef.current;
+    if (!video || !cameraReady) return;
+    const canvas = document.createElement('canvas');
+    canvas.width = video.videoWidth || 720;
+    canvas.height = video.videoHeight || 1280;
+    canvas.getContext('2d')?.drawImage(video, 0, 0, canvas.width, canvas.height);
+    canvas.toBlob(blob => {
+      if (!blob) return;
+      const file = new File([blob], `photo-${Date.now()}.jpg`, { type: 'image/jpeg' });
+      if (mediaFiles.length >= 3) { toast({ title: 'Max 3 files', variant: 'destructive' }); return; }
+      setMediaFiles(prev => [...prev, file]);
+      setMediaPreviews(prev => [...prev, URL.createObjectURL(blob)]);
+    }, 'image/jpeg', 0.9);
+  };
+
+  const startRecording = async () => {
+    if (!streamRef.current || isRecording) return;
+    // AI auto-pick a community sound to play during the recording
+    const track = await pickRandomCommunityTrack();
+    if (track?.audio_url) {
+      const audio = new Audio(track.audio_url);
+      audio.volume = 0.7;
+      audio.play().catch(() => {});
+      recordAudioRef.current = audio;
+    }
+    try {
+      recordChunksRef.current = [];
+      const mime = MediaRecorder.isTypeSupported('video/webm;codecs=vp9,opus') ? 'video/webm;codecs=vp9,opus'
+        : MediaRecorder.isTypeSupported('video/webm') ? 'video/webm' : '';
+      const rec = new MediaRecorder(streamRef.current, mime ? { mimeType: mime } : undefined);
+      rec.ondataavailable = e => { if (e.data.size > 0) recordChunksRef.current.push(e.data); };
+      rec.onstop = async () => {
+        recordAudioRef.current?.pause(); recordAudioRef.current = null;
+        const blob = new Blob(recordChunksRef.current, { type: mime || 'video/webm' });
+        const file = new File([blob], `clip-${Date.now()}.webm`, { type: blob.type });
+        if (mediaFiles.length >= 3) { toast({ title: 'Max 3 files', variant: 'destructive' }); return; }
+        setMediaFiles(prev => [...prev, file]);
+        const url = URL.createObjectURL(blob);
+        setMediaPreviews(prev => [...prev, url]);
+        const thumb = await generateVideoThumbnail(file);
+        if (thumb && !thumbnailPreview) { setThumbnailBlob(thumb.blob); setThumbnailPreview(thumb.url); }
+      };
+      rec.start();
+      recorderRef.current = rec;
+      setIsRecording(true);
+      setRecordSeconds(0);
+      recordTimerRef.current = window.setInterval(() => {
+        setRecordSeconds(s => {
+          if (s + 1 >= 60) { stopRecording(); return 60; }
+          return s + 1;
+        });
+      }, 1000);
+    } catch (e) {
+      console.error(e);
+      toast({ title: 'Recording failed', variant: 'destructive' });
+    }
+  };
+
+  const stopRecording = () => {
+    if (recorderRef.current && recorderRef.current.state !== 'inactive') recorderRef.current.stop();
+    if (recordTimerRef.current) { window.clearInterval(recordTimerRef.current); recordTimerRef.current = null; }
+    setIsRecording(false);
+  };
+
+  const togglePickerPreview = (track: any) => {
+    if (!track.audio_url) return;
+    if (playingPickerId === track.id) {
+      previewAudioRef.current?.pause();
+      setPlayingPickerId(null);
+      return;
+    }
+    previewAudioRef.current?.pause();
+    const audio = new Audio(track.audio_url);
+    audio.volume = 0.6;
+    audio.play().catch(() => {});
+    audio.onended = () => setPlayingPickerId(null);
+    previewAudioRef.current = audio;
+    setPlayingPickerId(track.id);
+  };
+
   useEffect(() => {
     if (postToEdit) {
       setTitle(postToEdit.title || '');
