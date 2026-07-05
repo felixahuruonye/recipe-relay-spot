@@ -6,7 +6,7 @@ import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Dialog, DialogContent } from '@/components/ui/dialog';
-import { X, ArrowLeft, Music, Sparkles, Upload, Camera, RefreshCw, BookOpen } from 'lucide-react';
+import { X, ArrowLeft, Music, Sparkles, Upload, Camera, RefreshCw, BookOpen, Image as ImageIcon, Play, Pause, SwitchCamera } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { motion, AnimatePresence } from 'framer-motion';
 
@@ -47,6 +47,20 @@ const CreatePostWizard: React.FC<CreatePostWizardProps> = ({
   const [aiPickedTrack, setAiPickedTrack] = useState<any>(null);
   const [alsoPostToStoryline, setAlsoPostToStoryline] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const galleryInputRef = useRef<HTMLInputElement>(null);
+  const cameraVideoRef = useRef<HTMLVideoElement>(null);
+  const streamRef = useRef<MediaStream | null>(null);
+  const recorderRef = useRef<MediaRecorder | null>(null);
+  const recordChunksRef = useRef<Blob[]>([]);
+  const recordAudioRef = useRef<HTMLAudioElement | null>(null);
+  const previewAudioRef = useRef<HTMLAudioElement | null>(null);
+  const [cameraReady, setCameraReady] = useState(false);
+  const [cameraError, setCameraError] = useState<string | null>(null);
+  const [facingMode, setFacingMode] = useState<'user' | 'environment'>('environment');
+  const [isRecording, setIsRecording] = useState(false);
+  const [recordSeconds, setRecordSeconds] = useState(0);
+  const recordTimerRef = useRef<number | null>(null);
+  const [playingPickerId, setPlayingPickerId] = useState<string | null>(null);
 
   useEffect(() => {
     if (!isOpen) {
@@ -68,6 +82,150 @@ const CreatePostWizard: React.FC<CreatePostWizardProps> = ({
       }
     }
   }, [isOpen]);
+
+  // ---------- Live camera lifecycle ----------
+  const stopCamera = useCallback(() => {
+    streamRef.current?.getTracks().forEach(t => t.stop());
+    streamRef.current = null;
+    setCameraReady(false);
+  }, []);
+
+  const startCamera = useCallback(async (mode: 'user' | 'environment' = facingMode) => {
+    setCameraError(null);
+    stopCamera();
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({
+        video: { facingMode: { ideal: mode }, width: { ideal: 1080 }, height: { ideal: 1920 } },
+        audio: true,
+      });
+      streamRef.current = stream;
+      if (cameraVideoRef.current) {
+        cameraVideoRef.current.srcObject = stream;
+        await cameraVideoRef.current.play().catch(() => {});
+      }
+      setCameraReady(true);
+    } catch (e: any) {
+      setCameraError(e?.message || 'Camera not available');
+    }
+  }, [facingMode, stopCamera]);
+
+  useEffect(() => {
+    if (isOpen && step === 0) {
+      startCamera(facingMode);
+    } else {
+      stopCamera();
+    }
+    return () => { stopCamera(); };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isOpen, step, facingMode]);
+
+  // Preview-audio cleanup
+  useEffect(() => () => {
+    previewAudioRef.current?.pause();
+    recordAudioRef.current?.pause();
+    if (recordTimerRef.current) window.clearInterval(recordTimerRef.current);
+  }, []);
+
+  const pickRandomCommunityTrack = useCallback(async () => {
+    if (selectedMusicTrack) return selectedMusicTrack;
+    let pool = communityTracks;
+    if (!pool.length) {
+      const { data } = await supabase
+        .from('music_tracks').select('*').eq('status', 'active')
+        .order('usage_count', { ascending: false, nullsFirst: false }).limit(50);
+      pool = data || [];
+      if (pool.length) setCommunityTracks(pool);
+    }
+    const withAudio = pool.filter((t: any) => t.audio_url);
+    const picked = (withAudio.length ? withAudio : pool)[Math.floor(Math.random() * (withAudio.length || pool.length))];
+    if (picked) {
+      setSelectedMusicTrack(picked);
+      setAiPickedTrack(picked);
+      if (picked.duration_seconds) setMusicDuration(Math.min(picked.duration_seconds, 30));
+    }
+    return picked;
+  }, [communityTracks, selectedMusicTrack]);
+
+  const takePhoto = async () => {
+    const video = cameraVideoRef.current;
+    if (!video || !cameraReady) return;
+    const canvas = document.createElement('canvas');
+    canvas.width = video.videoWidth || 720;
+    canvas.height = video.videoHeight || 1280;
+    canvas.getContext('2d')?.drawImage(video, 0, 0, canvas.width, canvas.height);
+    canvas.toBlob(blob => {
+      if (!blob) return;
+      const file = new File([blob], `photo-${Date.now()}.jpg`, { type: 'image/jpeg' });
+      if (mediaFiles.length >= 3) { toast({ title: 'Max 3 files', variant: 'destructive' }); return; }
+      setMediaFiles(prev => [...prev, file]);
+      setMediaPreviews(prev => [...prev, URL.createObjectURL(blob)]);
+    }, 'image/jpeg', 0.9);
+  };
+
+  const startRecording = async () => {
+    if (!streamRef.current || isRecording) return;
+    // AI auto-pick a community sound to play during the recording
+    const track = await pickRandomCommunityTrack();
+    if (track?.audio_url) {
+      const audio = new Audio(track.audio_url);
+      audio.volume = 0.7;
+      audio.play().catch(() => {});
+      recordAudioRef.current = audio;
+    }
+    try {
+      recordChunksRef.current = [];
+      const mime = MediaRecorder.isTypeSupported('video/webm;codecs=vp9,opus') ? 'video/webm;codecs=vp9,opus'
+        : MediaRecorder.isTypeSupported('video/webm') ? 'video/webm' : '';
+      const rec = new MediaRecorder(streamRef.current, mime ? { mimeType: mime } : undefined);
+      rec.ondataavailable = e => { if (e.data.size > 0) recordChunksRef.current.push(e.data); };
+      rec.onstop = async () => {
+        recordAudioRef.current?.pause(); recordAudioRef.current = null;
+        const blob = new Blob(recordChunksRef.current, { type: mime || 'video/webm' });
+        const file = new File([blob], `clip-${Date.now()}.webm`, { type: blob.type });
+        if (mediaFiles.length >= 3) { toast({ title: 'Max 3 files', variant: 'destructive' }); return; }
+        setMediaFiles(prev => [...prev, file]);
+        const url = URL.createObjectURL(blob);
+        setMediaPreviews(prev => [...prev, url]);
+        const thumb = await generateVideoThumbnail(file);
+        if (thumb && !thumbnailPreview) { setThumbnailBlob(thumb.blob); setThumbnailPreview(thumb.url); }
+      };
+      rec.start();
+      recorderRef.current = rec;
+      setIsRecording(true);
+      setRecordSeconds(0);
+      recordTimerRef.current = window.setInterval(() => {
+        setRecordSeconds(s => {
+          if (s + 1 >= 60) { stopRecording(); return 60; }
+          return s + 1;
+        });
+      }, 1000);
+    } catch (e) {
+      console.error(e);
+      toast({ title: 'Recording failed', variant: 'destructive' });
+    }
+  };
+
+  const stopRecording = () => {
+    if (recorderRef.current && recorderRef.current.state !== 'inactive') recorderRef.current.stop();
+    if (recordTimerRef.current) { window.clearInterval(recordTimerRef.current); recordTimerRef.current = null; }
+    setIsRecording(false);
+  };
+
+  const togglePickerPreview = (track: any) => {
+    if (!track.audio_url) return;
+    if (playingPickerId === track.id) {
+      previewAudioRef.current?.pause();
+      setPlayingPickerId(null);
+      return;
+    }
+    previewAudioRef.current?.pause();
+    const audio = new Audio(track.audio_url);
+    audio.volume = 0.6;
+    audio.play().catch(() => {});
+    audio.onended = () => setPlayingPickerId(null);
+    previewAudioRef.current = audio;
+    setPlayingPickerId(track.id);
+  };
 
   useEffect(() => {
     if (postToEdit) {
@@ -325,80 +483,125 @@ const CreatePostWizard: React.FC<CreatePostWizardProps> = ({
   const canProceed = step === 0 ? hasMedia : step === 1 ? title.trim().length > 0 && !!category && body.trim().length >= 5 : true;
 
   const renderCapture = () => (
-    <div className="flex flex-col h-full bg-black">
-      <div className="flex items-center justify-between px-4 pt-4 pb-2">
-        <button onClick={() => onOpenChange?.(false)} className="w-9 h-9 rounded-full bg-white/10 flex items-center justify-center">
+    <div className="flex flex-col h-full bg-black relative overflow-hidden">
+      {/* Live camera preview */}
+      <video
+        ref={cameraVideoRef}
+        className="absolute inset-0 w-full h-full object-cover"
+        autoPlay
+        muted
+        playsInline
+      />
+      {/* Dark gradient overlays for control legibility */}
+      <div className="absolute inset-x-0 top-0 h-24 bg-gradient-to-b from-black/70 to-transparent pointer-events-none" />
+      <div className="absolute inset-x-0 bottom-0 h-64 bg-gradient-to-t from-black/80 to-transparent pointer-events-none" />
+
+      {/* Top bar */}
+      <div className="relative z-10 flex items-center justify-between px-4 pt-4 pb-2">
+        <button onClick={() => onOpenChange?.(false)} className="w-9 h-9 rounded-full bg-black/40 backdrop-blur flex items-center justify-center">
           <X className="w-5 h-5 text-white" />
         </button>
-        <span className="text-white font-bold text-base">New Post</span>
-        <div className="w-9" />
+        <span className="text-white font-bold text-base drop-shadow">New Post</span>
+        <button
+          onClick={() => setFacingMode(m => (m === 'user' ? 'environment' : 'user'))}
+          className="w-9 h-9 rounded-full bg-black/40 backdrop-blur flex items-center justify-center"
+          title="Switch camera"
+        >
+          <SwitchCamera className="w-5 h-5 text-white" />
+        </button>
       </div>
-      {hasMedia ? (
-        <div className="flex-1 relative">
-          {mediaFiles[0]?.type.startsWith('video/') || mediaPreviews[0]?.match(/\.(mp4|webm|ogg|mov)/i) ? (
-            <video src={mediaPreviews[0]} className="w-full h-full object-cover" muted playsInline />
-          ) : (
-            <img src={mediaPreviews[0]} className="w-full h-full object-cover" alt="preview" />
+
+      {cameraError && (
+        <div className="relative z-10 mx-4 mt-2 p-3 rounded-xl bg-red-500/20 border border-red-400/30 text-white text-xs">
+          {cameraError}. Use the gallery icon to upload instead.
+        </div>
+      )}
+
+      {/* Recording indicator */}
+      {isRecording && (
+        <div className="absolute top-16 left-1/2 -translate-x-1/2 z-10 flex items-center gap-2 px-3 py-1 rounded-full bg-red-600/90 backdrop-blur">
+          <span className="w-2 h-2 rounded-full bg-white animate-pulse" />
+          <span className="text-white text-xs font-bold">REC {String(Math.floor(recordSeconds/60)).padStart(2,'0')}:{String(recordSeconds%60).padStart(2,'0')}</span>
+          {selectedMusicTrack && (
+            <span className="text-white/80 text-[10px] truncate max-w-[120px]">🎵 {selectedMusicTrack.title}</span>
           )}
-          <button onClick={() => removeMedia(0)} className="absolute top-3 right-3 w-8 h-8 rounded-full bg-black/60 flex items-center justify-center">
-            <X className="w-4 h-4 text-white" />
-          </button>
-          {mediaPreviews.length > 1 && (
-            <div className="absolute bottom-3 left-3 flex gap-2">
-              {mediaPreviews.slice(1).map((p, i) => (
-                <div key={i} className="relative w-12 h-12 rounded-lg overflow-hidden border-2 border-white">
-                  {mediaFiles[i + 1]?.type.startsWith('video/') ? (
+        </div>
+      )}
+
+      <div className="flex-1" />
+
+      {/* Bottom controls */}
+      <div className="relative z-10 pb-4 px-4 flex flex-col gap-3">
+        {/* Recent gallery strip (current-session media) */}
+        {mediaPreviews.length > 0 && (
+          <div className="flex gap-2 overflow-x-auto pb-1">
+            {mediaPreviews.map((p, i) => {
+              const isVid = mediaFiles[i]?.type.startsWith('video/') || p.match(/\.(mp4|webm|ogg|mov)/i);
+              return (
+                <div key={i} className="relative w-16 h-16 rounded-lg overflow-hidden border-2 border-white/80 shrink-0">
+                  {isVid ? (
                     <video src={p} className="w-full h-full object-cover" muted />
                   ) : (
                     <img src={p} className="w-full h-full object-cover" alt="" />
                   )}
-                  <button onClick={() => removeMedia(i + 1)} className="absolute top-0 right-0 w-4 h-4 bg-red-500 rounded-full flex items-center justify-center">
+                  <button onClick={() => removeMedia(i)} className="absolute top-0 right-0 w-4 h-4 bg-red-500 rounded-bl-md flex items-center justify-center">
                     <X className="w-2.5 h-2.5 text-white" />
                   </button>
                 </div>
-              ))}
-              {mediaPreviews.length < 3 && (
-                <label className="w-12 h-12 rounded-lg border-2 border-dashed border-white/50 flex items-center justify-center cursor-pointer">
-                  <Upload className="w-4 h-4 text-white/70" />
-                  <input type="file" multiple accept="image/*,video/*" onChange={handleMediaChange} className="hidden" />
-                </label>
-              )}
-            </div>
-          )}
-          <div className="absolute bottom-4 right-4">
+              );
+            })}
+          </div>
+        )}
+
+        {/* Capture row: camera icon | red record | gallery icon */}
+        <div className="flex items-center justify-between px-4">
+          <button
+            onClick={takePhoto}
+            disabled={!cameraReady || isRecording}
+            className="w-12 h-12 rounded-full bg-white/15 backdrop-blur flex items-center justify-center disabled:opacity-40"
+            title="Take photo"
+          >
+            <Camera className="w-6 h-6 text-white" />
+          </button>
+
+          <button
+            onClick={isRecording ? stopRecording : startRecording}
+            disabled={!cameraReady && !isRecording}
+            className="w-20 h-20 rounded-full border-4 border-white flex items-center justify-center bg-transparent disabled:opacity-40"
+            title={isRecording ? 'Stop' : 'Record'}
+          >
+            {isRecording ? (
+              <span className="w-8 h-8 rounded-md bg-red-500" />
+            ) : (
+              <span className="w-14 h-14 rounded-full bg-red-500 shadow-[0_0_24px_rgba(239,68,68,0.6)]" />
+            )}
+          </button>
+
+          <button
+            onClick={() => galleryInputRef.current?.click()}
+            className="w-12 h-12 rounded-full bg-white/15 backdrop-blur flex items-center justify-center"
+            title="Open gallery"
+          >
+            <ImageIcon className="w-6 h-6 text-white" />
+          </button>
+          <input ref={galleryInputRef} type="file" multiple accept="image/*,video/*" onChange={handleMediaChange} className="hidden" />
+          <input ref={fileInputRef} type="file" accept="image/*,video/*" capture={facingMode === 'user' ? 'user' : 'environment'} onChange={handleMediaChange} className="hidden" />
+        </div>
+
+        {/* Next button */}
+        {hasMedia && (
+          <div className="flex justify-end">
             <Button onClick={() => setStep(1)} className="bg-primary text-white font-bold px-6 rounded-full">
               Next →
             </Button>
           </div>
-        </div>
-      ) : (
-        <div className="flex-1 flex flex-col items-center justify-center gap-6 px-6">
-          <label className="w-full cursor-pointer">
-            <div className="w-full border-2 border-dashed border-white/30 rounded-2xl p-10 flex flex-col items-center gap-4">
-              <div className="w-16 h-16 rounded-full bg-primary/20 flex items-center justify-center">
-                <Upload className="w-8 h-8 text-primary" />
-              </div>
-              <div className="text-center">
-                <p className="text-white font-bold text-base">Upload Video or Photo</p>
-                <p className="text-white/50 text-xs mt-1">Max 3 files · Images 20MB · Videos 500MB</p>
-              </div>
-            </div>
-            <input ref={fileInputRef} type="file" multiple accept="image/*,video/*" onChange={handleMediaChange} className="hidden" />
-          </label>
-          <div className="flex items-center gap-3 w-full">
-            <div className="flex-1 h-px bg-white/20" />
-            <span className="text-white/40 text-xs">or</span>
-            <div className="flex-1 h-px bg-white/20" />
-          </div>
-          <label className="cursor-pointer">
-            <div className="w-20 h-20 rounded-full border-4 border-white flex items-center justify-center bg-white/10">
-              <Camera className="w-9 h-9 text-white" />
-            </div>
-            <input type="file" accept="image/*,video/*" capture="environment" onChange={handleMediaChange} className="hidden" />
-          </label>
-          <p className="text-white/50 text-xs">Tap to open camera</p>
-        </div>
-      )}
+        )}
+        {!hasMedia && (
+          <p className="text-center text-white/60 text-[11px]">
+            Tap the red button to record · AI adds a community sound automatically
+          </p>
+        )}
+      </div>
     </div>
   );
 
@@ -496,25 +699,42 @@ const CreatePostWizard: React.FC<CreatePostWizardProps> = ({
                   <p className="text-center text-muted-foreground text-sm py-6">No sounds available</p>
                 ) : (
                   <div className="space-y-2">
-                    {communityTracks.map(track => (
-                      <button key={track.id} onClick={() => {
-                        setSelectedMusicTrack(track);
-                        if (track.duration_seconds) setMusicDuration(Math.min(track.duration_seconds, 30));
-                        setShowMusicPicker(false);
-                      }} className="w-full flex items-center gap-3 p-2 rounded-xl hover:bg-muted text-left">
-                        <div className="w-10 h-10 rounded-lg bg-primary/10 flex items-center justify-center shrink-0">
-                          {track.cover_url ? (
-                            <img src={track.cover_url} className="w-full h-full rounded-lg object-cover" alt="" />
-                          ) : (
-                            <Music className="w-5 h-5 text-primary" />
+                    {communityTracks.map(track => {
+                      const isPlaying = playingPickerId === track.id;
+                      return (
+                        <div key={track.id} className="w-full flex items-center gap-3 p-2 rounded-xl hover:bg-muted">
+                          <div className="w-10 h-10 rounded-lg bg-primary/10 flex items-center justify-center shrink-0 relative">
+                            {track.cover_url ? (
+                              <img src={track.cover_url} className="w-full h-full rounded-lg object-cover" alt="" />
+                            ) : (
+                              <Music className="w-5 h-5 text-primary" />
+                            )}
+                          </div>
+                          <button
+                            onClick={() => {
+                              setSelectedMusicTrack(track);
+                              if (track.duration_seconds) setMusicDuration(Math.min(track.duration_seconds, 30));
+                              previewAudioRef.current?.pause();
+                              setPlayingPickerId(null);
+                              setShowMusicPicker(false);
+                            }}
+                            className="flex-1 min-w-0 text-left"
+                          >
+                            <p className="text-sm font-semibold truncate">{track.title}</p>
+                            <p className="text-xs text-muted-foreground truncate">@{track.artist_name}</p>
+                          </button>
+                          {track.audio_url && (
+                            <button
+                              onClick={(e) => { e.stopPropagation(); togglePickerPreview(track); }}
+                              className="w-9 h-9 rounded-full bg-primary/15 hover:bg-primary/25 flex items-center justify-center shrink-0"
+                              title={isPlaying ? 'Stop preview' : 'Preview'}
+                            >
+                              {isPlaying ? <Pause className="w-4 h-4 text-primary" /> : <Play className="w-4 h-4 text-primary ml-0.5" />}
+                            </button>
                           )}
                         </div>
-                        <div className="flex-1 min-w-0">
-                          <p className="text-sm font-semibold truncate">{track.title}</p>
-                          <p className="text-xs text-muted-foreground truncate">@{track.artist_name}</p>
-                        </div>
-                      </button>
-                    ))}
+                      );
+                    })}
                   </div>
                 )}
               </motion.div>
