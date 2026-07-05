@@ -153,8 +153,8 @@ const CreatePostWizard: React.FC<CreatePostWizardProps> = ({
         .from('music_tracks')
         .select('*')
         .eq('status', 'active')
-        .eq('source', 'community')
-        .order('usage_count', { ascending: false })
+        .order('usage_count', { ascending: false, nullsFirst: false })
+        .order('created_at', { ascending: false })
         .limit(50);
       if (!tracks || tracks.length === 0) return;
       setCommunityTracks(tracks);
@@ -184,6 +184,20 @@ const CreatePostWizard: React.FC<CreatePostWizardProps> = ({
       return () => clearTimeout(timer);
     }
   }, [step]);
+
+  // Ensure community tracks are always loaded for the picker, even without title/body
+  useEffect(() => {
+    (async () => {
+      const { data } = await supabase
+        .from('music_tracks')
+        .select('*')
+        .eq('status', 'active')
+        .order('usage_count', { ascending: false, nullsFirst: false })
+        .order('created_at', { ascending: false })
+        .limit(50);
+      if (data && data.length) setCommunityTracks(prev => (prev.length ? prev : data));
+    })();
+  }, []);
 
   const uploadMedia = async (): Promise<string[]> => {
     if (!mediaFiles.length || !user) return mediaPreviews.filter(p => p.startsWith('http'));
