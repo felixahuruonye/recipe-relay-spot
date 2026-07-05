@@ -483,80 +483,125 @@ const CreatePostWizard: React.FC<CreatePostWizardProps> = ({
   const canProceed = step === 0 ? hasMedia : step === 1 ? title.trim().length > 0 && !!category && body.trim().length >= 5 : true;
 
   const renderCapture = () => (
-    <div className="flex flex-col h-full bg-black">
-      <div className="flex items-center justify-between px-4 pt-4 pb-2">
-        <button onClick={() => onOpenChange?.(false)} className="w-9 h-9 rounded-full bg-white/10 flex items-center justify-center">
+    <div className="flex flex-col h-full bg-black relative overflow-hidden">
+      {/* Live camera preview */}
+      <video
+        ref={cameraVideoRef}
+        className="absolute inset-0 w-full h-full object-cover"
+        autoPlay
+        muted
+        playsInline
+      />
+      {/* Dark gradient overlays for control legibility */}
+      <div className="absolute inset-x-0 top-0 h-24 bg-gradient-to-b from-black/70 to-transparent pointer-events-none" />
+      <div className="absolute inset-x-0 bottom-0 h-64 bg-gradient-to-t from-black/80 to-transparent pointer-events-none" />
+
+      {/* Top bar */}
+      <div className="relative z-10 flex items-center justify-between px-4 pt-4 pb-2">
+        <button onClick={() => onOpenChange?.(false)} className="w-9 h-9 rounded-full bg-black/40 backdrop-blur flex items-center justify-center">
           <X className="w-5 h-5 text-white" />
         </button>
-        <span className="text-white font-bold text-base">New Post</span>
-        <div className="w-9" />
+        <span className="text-white font-bold text-base drop-shadow">New Post</span>
+        <button
+          onClick={() => setFacingMode(m => (m === 'user' ? 'environment' : 'user'))}
+          className="w-9 h-9 rounded-full bg-black/40 backdrop-blur flex items-center justify-center"
+          title="Switch camera"
+        >
+          <SwitchCamera className="w-5 h-5 text-white" />
+        </button>
       </div>
-      {hasMedia ? (
-        <div className="flex-1 relative">
-          {mediaFiles[0]?.type.startsWith('video/') || mediaPreviews[0]?.match(/\.(mp4|webm|ogg|mov)/i) ? (
-            <video src={mediaPreviews[0]} className="w-full h-full object-cover" muted playsInline />
-          ) : (
-            <img src={mediaPreviews[0]} className="w-full h-full object-cover" alt="preview" />
+
+      {cameraError && (
+        <div className="relative z-10 mx-4 mt-2 p-3 rounded-xl bg-red-500/20 border border-red-400/30 text-white text-xs">
+          {cameraError}. Use the gallery icon to upload instead.
+        </div>
+      )}
+
+      {/* Recording indicator */}
+      {isRecording && (
+        <div className="absolute top-16 left-1/2 -translate-x-1/2 z-10 flex items-center gap-2 px-3 py-1 rounded-full bg-red-600/90 backdrop-blur">
+          <span className="w-2 h-2 rounded-full bg-white animate-pulse" />
+          <span className="text-white text-xs font-bold">REC {String(Math.floor(recordSeconds/60)).padStart(2,'0')}:{String(recordSeconds%60).padStart(2,'0')}</span>
+          {selectedMusicTrack && (
+            <span className="text-white/80 text-[10px] truncate max-w-[120px]">🎵 {selectedMusicTrack.title}</span>
           )}
-          <button onClick={() => removeMedia(0)} className="absolute top-3 right-3 w-8 h-8 rounded-full bg-black/60 flex items-center justify-center">
-            <X className="w-4 h-4 text-white" />
-          </button>
-          {mediaPreviews.length > 1 && (
-            <div className="absolute bottom-3 left-3 flex gap-2">
-              {mediaPreviews.slice(1).map((p, i) => (
-                <div key={i} className="relative w-12 h-12 rounded-lg overflow-hidden border-2 border-white">
-                  {mediaFiles[i + 1]?.type.startsWith('video/') ? (
+        </div>
+      )}
+
+      <div className="flex-1" />
+
+      {/* Bottom controls */}
+      <div className="relative z-10 pb-4 px-4 flex flex-col gap-3">
+        {/* Recent gallery strip (current-session media) */}
+        {mediaPreviews.length > 0 && (
+          <div className="flex gap-2 overflow-x-auto pb-1">
+            {mediaPreviews.map((p, i) => {
+              const isVid = mediaFiles[i]?.type.startsWith('video/') || p.match(/\.(mp4|webm|ogg|mov)/i);
+              return (
+                <div key={i} className="relative w-16 h-16 rounded-lg overflow-hidden border-2 border-white/80 shrink-0">
+                  {isVid ? (
                     <video src={p} className="w-full h-full object-cover" muted />
                   ) : (
                     <img src={p} className="w-full h-full object-cover" alt="" />
                   )}
-                  <button onClick={() => removeMedia(i + 1)} className="absolute top-0 right-0 w-4 h-4 bg-red-500 rounded-full flex items-center justify-center">
+                  <button onClick={() => removeMedia(i)} className="absolute top-0 right-0 w-4 h-4 bg-red-500 rounded-bl-md flex items-center justify-center">
                     <X className="w-2.5 h-2.5 text-white" />
                   </button>
                 </div>
-              ))}
-              {mediaPreviews.length < 3 && (
-                <label className="w-12 h-12 rounded-lg border-2 border-dashed border-white/50 flex items-center justify-center cursor-pointer">
-                  <Upload className="w-4 h-4 text-white/70" />
-                  <input type="file" multiple accept="image/*,video/*" onChange={handleMediaChange} className="hidden" />
-                </label>
-              )}
-            </div>
-          )}
-          <div className="absolute bottom-4 right-4">
+              );
+            })}
+          </div>
+        )}
+
+        {/* Capture row: camera icon | red record | gallery icon */}
+        <div className="flex items-center justify-between px-4">
+          <button
+            onClick={takePhoto}
+            disabled={!cameraReady || isRecording}
+            className="w-12 h-12 rounded-full bg-white/15 backdrop-blur flex items-center justify-center disabled:opacity-40"
+            title="Take photo"
+          >
+            <Camera className="w-6 h-6 text-white" />
+          </button>
+
+          <button
+            onClick={isRecording ? stopRecording : startRecording}
+            disabled={!cameraReady && !isRecording}
+            className="w-20 h-20 rounded-full border-4 border-white flex items-center justify-center bg-transparent disabled:opacity-40"
+            title={isRecording ? 'Stop' : 'Record'}
+          >
+            {isRecording ? (
+              <span className="w-8 h-8 rounded-md bg-red-500" />
+            ) : (
+              <span className="w-14 h-14 rounded-full bg-red-500 shadow-[0_0_24px_rgba(239,68,68,0.6)]" />
+            )}
+          </button>
+
+          <button
+            onClick={() => galleryInputRef.current?.click()}
+            className="w-12 h-12 rounded-full bg-white/15 backdrop-blur flex items-center justify-center"
+            title="Open gallery"
+          >
+            <ImageIcon className="w-6 h-6 text-white" />
+          </button>
+          <input ref={galleryInputRef} type="file" multiple accept="image/*,video/*" onChange={handleMediaChange} className="hidden" />
+          <input ref={fileInputRef} type="file" accept="image/*,video/*" capture={facingMode === 'user' ? 'user' : 'environment'} onChange={handleMediaChange} className="hidden" />
+        </div>
+
+        {/* Next button */}
+        {hasMedia && (
+          <div className="flex justify-end">
             <Button onClick={() => setStep(1)} className="bg-primary text-white font-bold px-6 rounded-full">
               Next →
             </Button>
           </div>
-        </div>
-      ) : (
-        <div className="flex-1 flex flex-col items-center justify-center gap-6 px-6">
-          <label className="w-full cursor-pointer">
-            <div className="w-full border-2 border-dashed border-white/30 rounded-2xl p-10 flex flex-col items-center gap-4">
-              <div className="w-16 h-16 rounded-full bg-primary/20 flex items-center justify-center">
-                <Upload className="w-8 h-8 text-primary" />
-              </div>
-              <div className="text-center">
-                <p className="text-white font-bold text-base">Upload Video or Photo</p>
-                <p className="text-white/50 text-xs mt-1">Max 3 files · Images 20MB · Videos 500MB</p>
-              </div>
-            </div>
-            <input ref={fileInputRef} type="file" multiple accept="image/*,video/*" onChange={handleMediaChange} className="hidden" />
-          </label>
-          <div className="flex items-center gap-3 w-full">
-            <div className="flex-1 h-px bg-white/20" />
-            <span className="text-white/40 text-xs">or</span>
-            <div className="flex-1 h-px bg-white/20" />
-          </div>
-          <label className="cursor-pointer">
-            <div className="w-20 h-20 rounded-full border-4 border-white flex items-center justify-center bg-white/10">
-              <Camera className="w-9 h-9 text-white" />
-            </div>
-            <input type="file" accept="image/*,video/*" capture="environment" onChange={handleMediaChange} className="hidden" />
-          </label>
-          <p className="text-white/50 text-xs">Tap to open camera</p>
-        </div>
-      )}
+        )}
+        {!hasMedia && (
+          <p className="text-center text-white/60 text-[11px]">
+            Tap the red button to record · AI adds a community sound automatically
+          </p>
+        )}
+      </div>
     </div>
   );
 
