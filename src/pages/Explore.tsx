@@ -66,6 +66,7 @@ const Explore = () => {
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
   const [searchResults, setSearchResults] = useState<TrendingPost[]>([]);
+  const [searchUsers, setSearchUsers] = useState<TopCreator[]>([]);
   const [searchType, setSearchType] = useState<'tag' | 'category' | 'text' | null>(null);
 
   // Read ?q= and ?type= from URL (deep-link from clicking tags/category in feed)
@@ -83,6 +84,18 @@ const Explore = () => {
       else query = query.or(`title.ilike.%${q}%,body.ilike.%${q}%`);
       const { data } = await query.order('view_count', { ascending: false }).limit(50);
       setSearchResults((data as any) || []);
+
+      // Also search users by username / full_name so the searcher can jump to profiles
+      if (type !== 'tag' && type !== 'category') {
+        const { data: users } = await supabase
+          .from('user_profiles')
+          .select('id, username, avatar_url, vip, post_count, follower_count, full_name')
+          .or(`username.ilike.%${q}%,full_name.ilike.%${q}%`)
+          .order('follower_count', { ascending: false })
+          .limit(20);
+        setSearchUsers((users as any) || []);
+      }
+
       // Track popularity
       supabase.rpc('track_search', { search_keyword: q }).then(() => {});
     })();
