@@ -40,6 +40,7 @@ const MusicBrowser: React.FC<MusicBrowserProps> = ({ selectedTrackId, onSelect }
       .from('music_tracks')
       .select('*')
       .eq('status', 'active')
+      .neq('source', 'lenory_free') // exclude Spotify/YouTube-sourced "Freebeat"/Lenory Free tracks
       .order('usage_count', { ascending: false, nullsFirst: false })
       .order('last_used_at', { ascending: false, nullsFirst: false })
       .order('created_at', { ascending: false })

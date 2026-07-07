@@ -45,6 +45,7 @@ const CreatePostWizard: React.FC<CreatePostWizardProps> = ({
   const [showMusicPicker, setShowMusicPicker] = useState(false);
   const [communityTracks, setCommunityTracks] = useState<any[]>([]);
   const [aiPickedTrack, setAiPickedTrack] = useState<any>(null);
+  const [isUserChosenTrack, setIsUserChosenTrack] = useState(false);
   const [alsoPostToStoryline, setAlsoPostToStoryline] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const galleryInputRef = useRef<HTMLInputElement>(null);
@@ -61,6 +62,25 @@ const CreatePostWizard: React.FC<CreatePostWizardProps> = ({
   const [recordSeconds, setRecordSeconds] = useState(0);
   const recordTimerRef = useRef<number | null>(null);
   const [playingPickerId, setPlayingPickerId] = useState<string | null>(null);
+  // --- TikTok-style camera controls ---
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const rafRef = useRef<number | null>(null);
+  const [zoom, setZoom] = useState(1); // 1x - 3x
+  const [filterPreset, setFilterPreset] = useState<'none' | 'warm' | 'cool' | 'bw' | 'vivid'>('none');
+  const [beautify, setBeautify] = useState(false);
+  const [showFilterPanel, setShowFilterPanel] = useState(false);
+  const [timerOption, setTimerOption] = useState<0 | 3 | 10>(0);
+  const [countdown, setCountdown] = useState<number | null>(null);
+
+  const getFilterCSS = useCallback(() => {
+    let f = '';
+    if (filterPreset === 'warm') f += 'sepia(0.15) saturate(1.3) contrast(1.05) ';
+    else if (filterPreset === 'cool') f += 'saturate(1.1) hue-rotate(-8deg) brightness(1.03) ';
+    else if (filterPreset === 'bw') f += 'grayscale(1) contrast(1.1) ';
+    else if (filterPreset === 'vivid') f += 'saturate(1.5) contrast(1.15) ';
+    if (beautify) f += 'brightness(1.06) contrast(0.96) blur(0.4px) ';
+    return f.trim() || 'none';
+  }, [filterPreset, beautify]);
 
   useEffect(() => {
     if (!isOpen) {
@@ -79,6 +99,7 @@ const CreatePostWizard: React.FC<CreatePostWizardProps> = ({
         setMusicDuration(15);
         setAlsoPostToStoryline(false);
         setAiPickedTrack(null);
+        setIsUserChosenTrack(false);
       }
     }
   }, [isOpen]);
@@ -90,14 +111,46 @@ const CreatePostWizard: React.FC<CreatePostWizardProps> = ({
     setCameraReady(false);
   }, []);
 
+  // Some Android browsers don't strictly honor {facingMode: {ideal: 'environment'}}
+  // and silently fall back to whatever camera is first in the device list (often
+  // the front camera). Try an exact constraint first, then fall back to explicitly
+  // picking the device labeled as the back/rear camera.
+  const findBackCameraDeviceId = async (): Promise<string | undefined> => {
+    try {
+      const devices = await navigator.mediaDevices.enumerateDevices();
+      const videoInputs = devices.filter(d => d.kind === 'videoinput');
+      const back = videoInputs.find(d => /back|rear|environment/i.test(d.label));
+      if (back) return back.deviceId;
+      // Heuristic: on many Android devices the back camera is listed last
+      if (videoInputs.length > 1) return videoInputs[videoInputs.length - 1].deviceId;
+    } catch { /* enumerateDevices needs a prior permission grant on some browsers */ }
+    return undefined;
+  };
+
   const startCamera = useCallback(async (mode: 'user' | 'environment' = facingMode) => {
     setCameraError(null);
     stopCamera();
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({
-        video: { facingMode: { ideal: mode }, width: { ideal: 1080 }, height: { ideal: 1920 } },
-        audio: true,
-      });
+      let stream: MediaStream;
+      if (mode === 'environment') {
+        try {
+          stream = await navigator.mediaDevices.getUserMedia({
+            video: { facingMode: { exact: 'environment' } },
+            audio: true,
+          });
+        } catch {
+          const deviceId = await findBackCameraDeviceId();
+          stream = await navigator.mediaDevices.getUserMedia({
+            video: deviceId ? { deviceId: { exact: deviceId } } : { facingMode: { ideal: 'environment' } },
+            audio: true,
+          });
+        }
+      } else {
+        stream = await navigator.mediaDevices.getUserMedia({
+          video: { facingMode: { ideal: 'user' } },
+          audio: true,
+        });
+      }
       streamRef.current = stream;
       if (cameraVideoRef.current) {
         cameraVideoRef.current.srcObject = stream;
@@ -119,6 +172,36 @@ const CreatePostWizard: React.FC<CreatePostWizardProps> = ({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isOpen, step, facingMode]);
 
+  // Continuously draw the live camera feed onto a canvas, applying zoom (as a
+  // center-crop) and the chosen filter/beautify look. This canvas is what gets
+  // shown to the user AND what gets captured for both photos and recordings,
+  // so what you see is exactly what gets saved.
+  const drawFrame = useCallback(() => {
+    const video = cameraVideoRef.current;
+    const canvas = canvasRef.current;
+    if (video && canvas && video.videoWidth) {
+      const ctx = canvas.getContext('2d');
+      if (ctx) {
+        if (canvas.width !== video.videoWidth) canvas.width = video.videoWidth;
+        if (canvas.height !== video.videoHeight) canvas.height = video.videoHeight;
+        ctx.filter = getFilterCSS();
+        const cropW = canvas.width / zoom;
+        const cropH = canvas.height / zoom;
+        const sx = (canvas.width - cropW) / 2;
+        const sy = (canvas.height - cropH) / 2;
+        ctx.drawImage(video, sx, sy, cropW, cropH, 0, 0, canvas.width, canvas.height);
+      }
+    }
+    rafRef.current = requestAnimationFrame(drawFrame);
+  }, [zoom, getFilterCSS]);
+
+  useEffect(() => {
+    if (cameraReady) {
+      rafRef.current = requestAnimationFrame(drawFrame);
+    }
+    return () => { if (rafRef.current) cancelAnimationFrame(rafRef.current); };
+  }, [cameraReady, drawFrame]);
+
   // Preview-audio cleanup
   useEffect(() => () => {
     previewAudioRef.current?.pause();
@@ -127,32 +210,41 @@ const CreatePostWizard: React.FC<CreatePostWizardProps> = ({
   }, []);
 
   const pickRandomCommunityTrack = useCallback(async () => {
-    if (selectedMusicTrack) return selectedMusicTrack;
+    // Respect a track the user deliberately picked themselves (via the music
+    // picker or Vibe Sync) — never override their explicit choice.
+    if (isUserChosenTrack && selectedMusicTrack) return selectedMusicTrack;
+
+    // Otherwise, reshuffle a *new* random track every single time this runs
+    // (i.e. every time the user presses record) — not just once per session.
     let pool = communityTracks;
     if (!pool.length) {
       const { data } = await supabase
         .from('music_tracks').select('*').eq('status', 'active')
+        .neq('source', 'lenory_free')
         .order('usage_count', { ascending: false, nullsFirst: false }).limit(50);
       pool = data || [];
       if (pool.length) setCommunityTracks(pool);
     }
+    if (!pool.length) return null;
     const withAudio = pool.filter((t: any) => t.audio_url);
-    const picked = (withAudio.length ? withAudio : pool)[Math.floor(Math.random() * (withAudio.length || pool.length))];
+    const candidates = withAudio.length ? withAudio : pool;
+    // Avoid picking the exact same track twice in a row when there's more than one option
+    let picked = candidates[Math.floor(Math.random() * candidates.length)];
+    if (candidates.length > 1 && selectedMusicTrack && picked.id === selectedMusicTrack.id) {
+      const others = candidates.filter((t: any) => t.id !== selectedMusicTrack.id);
+      picked = others[Math.floor(Math.random() * others.length)];
+    }
     if (picked) {
       setSelectedMusicTrack(picked);
       setAiPickedTrack(picked);
       if (picked.duration_seconds) setMusicDuration(Math.min(picked.duration_seconds, 30));
     }
     return picked;
-  }, [communityTracks, selectedMusicTrack]);
+  }, [communityTracks, selectedMusicTrack, isUserChosenTrack]);
 
   const takePhoto = async () => {
-    const video = cameraVideoRef.current;
-    if (!video || !cameraReady) return;
-    const canvas = document.createElement('canvas');
-    canvas.width = video.videoWidth || 720;
-    canvas.height = video.videoHeight || 1280;
-    canvas.getContext('2d')?.drawImage(video, 0, 0, canvas.width, canvas.height);
+    const canvas = canvasRef.current;
+    if (!canvas || !cameraReady) return;
     canvas.toBlob(blob => {
       if (!blob) return;
       const file = new File([blob], `photo-${Date.now()}.jpg`, { type: 'image/jpeg' });
@@ -162,9 +254,9 @@ const CreatePostWizard: React.FC<CreatePostWizardProps> = ({
     }, 'image/jpeg', 0.9);
   };
 
-  const startRecording = async () => {
-    if (!streamRef.current || isRecording) return;
-    // AI auto-pick a community sound to play during the recording
+  const beginRecording = async () => {
+    if (!streamRef.current || !canvasRef.current || isRecording) return;
+    // AI auto-pick a community sound to play during the recording (reshuffles every time - see pickRandomCommunityTrack)
     const track = await pickRandomCommunityTrack();
     if (track?.audio_url) {
       const audio = new Audio(track.audio_url);
@@ -174,9 +266,14 @@ const CreatePostWizard: React.FC<CreatePostWizardProps> = ({
     }
     try {
       recordChunksRef.current = [];
+      // Record from the canvas (which already has zoom/filter/beautify baked in),
+      // combined with the mic audio track from the original camera stream.
+      const canvasStream = canvasRef.current.captureStream(30);
+      streamRef.current.getAudioTracks().forEach(t => canvasStream.addTrack(t));
+
       const mime = MediaRecorder.isTypeSupported('video/webm;codecs=vp9,opus') ? 'video/webm;codecs=vp9,opus'
         : MediaRecorder.isTypeSupported('video/webm') ? 'video/webm' : '';
-      const rec = new MediaRecorder(streamRef.current, mime ? { mimeType: mime } : undefined);
+      const rec = new MediaRecorder(canvasStream, mime ? { mimeType: mime } : undefined);
       rec.ondataavailable = e => { if (e.data.size > 0) recordChunksRef.current.push(e.data); };
       rec.onstop = async () => {
         recordAudioRef.current?.pause(); recordAudioRef.current = null;
@@ -202,6 +299,26 @@ const CreatePostWizard: React.FC<CreatePostWizardProps> = ({
     } catch (e) {
       console.error(e);
       toast({ title: 'Recording failed', variant: 'destructive' });
+    }
+  };
+
+  const startRecording = async () => {
+    if (!streamRef.current || isRecording || countdown !== null) return;
+    if (timerOption > 0) {
+      let remaining = timerOption;
+      setCountdown(remaining);
+      const tick = window.setInterval(() => {
+        remaining -= 1;
+        if (remaining <= 0) {
+          window.clearInterval(tick);
+          setCountdown(null);
+          beginRecording();
+        } else {
+          setCountdown(remaining);
+        }
+      }, 1000);
+    } else {
+      beginRecording();
     }
   };
 
@@ -311,6 +428,7 @@ const CreatePostWizard: React.FC<CreatePostWizardProps> = ({
         .from('music_tracks')
         .select('*')
         .eq('status', 'active')
+        .neq('source', 'lenory_free')
         .order('usage_count', { ascending: false, nullsFirst: false })
         .order('created_at', { ascending: false })
         .limit(50);
@@ -327,6 +445,7 @@ const CreatePostWizard: React.FC<CreatePostWizardProps> = ({
       if (picked) {
         setAiPickedTrack(picked);
         setSelectedMusicTrack(picked);
+        setIsUserChosenTrack(true);
         if (picked.duration_seconds) setMusicDuration(Math.min(picked.duration_seconds, 30));
       }
     } catch (e) {
@@ -350,6 +469,7 @@ const CreatePostWizard: React.FC<CreatePostWizardProps> = ({
         .from('music_tracks')
         .select('*')
         .eq('status', 'active')
+        .neq('source', 'lenory_free')
         .order('usage_count', { ascending: false, nullsFirst: false })
         .order('created_at', { ascending: false })
         .limit(50);
@@ -482,15 +602,21 @@ const CreatePostWizard: React.FC<CreatePostWizardProps> = ({
   const hasMedia = mediaPreviews.length > 0;
   const canProceed = step === 0 ? hasMedia : step === 1 ? title.trim().length > 0 && !!category && body.trim().length >= 5 : true;
 
+  const filterOptions: { key: typeof filterPreset; label: string }[] = [
+    { key: 'none', label: 'Normal' },
+    { key: 'warm', label: 'Warm' },
+    { key: 'cool', label: 'Cool' },
+    { key: 'bw', label: 'B&W' },
+    { key: 'vivid', label: 'Vivid' },
+  ];
+
   const renderCapture = () => (
     <div className="flex flex-col h-full bg-black relative overflow-hidden">
-      {/* Live camera preview */}
-      <video
-        ref={cameraVideoRef}
+      {/* Hidden raw camera source - the canvas below is the actual visible/captured feed */}
+      <video ref={cameraVideoRef} className="hidden" autoPlay muted playsInline />
+      <canvas
+        ref={canvasRef}
         className="absolute inset-0 w-full h-full object-cover"
-        autoPlay
-        muted
-        playsInline
       />
       {/* Dark gradient overlays for control legibility */}
       <div className="absolute inset-x-0 top-0 h-24 bg-gradient-to-b from-black/70 to-transparent pointer-events-none" />
@@ -502,18 +628,19 @@ const CreatePostWizard: React.FC<CreatePostWizardProps> = ({
           <X className="w-5 h-5 text-white" />
         </button>
         <span className="text-white font-bold text-base drop-shadow">New Post</span>
-        <button
-          onClick={() => setFacingMode(m => (m === 'user' ? 'environment' : 'user'))}
-          className="w-9 h-9 rounded-full bg-black/40 backdrop-blur flex items-center justify-center"
-          title="Switch camera"
-        >
-          <SwitchCamera className="w-5 h-5 text-white" />
-        </button>
+        <div className="w-9" />
       </div>
 
       {cameraError && (
         <div className="relative z-10 mx-4 mt-2 p-3 rounded-xl bg-red-500/20 border border-red-400/30 text-white text-xs">
           {cameraError}. Use the gallery icon to upload instead.
+        </div>
+      )}
+
+      {/* Countdown overlay */}
+      {countdown !== null && (
+        <div className="absolute inset-0 z-20 flex items-center justify-center bg-black/30">
+          <span className="text-white text-8xl font-bold drop-shadow-lg">{countdown}</span>
         </div>
       )}
 
@@ -525,6 +652,92 @@ const CreatePostWizard: React.FC<CreatePostWizardProps> = ({
           {selectedMusicTrack && (
             <span className="text-white/80 text-[10px] truncate max-w-[120px]">🎵 {selectedMusicTrack.title}</span>
           )}
+        </div>
+      )}
+
+      {/* TikTok-style right-side control rail */}
+      {!isRecording && countdown === null && (
+        <div className="absolute right-3 top-24 z-10 flex flex-col items-center gap-5">
+          <button
+            onClick={() => setFacingMode(m => (m === 'user' ? 'environment' : 'user'))}
+            className="flex flex-col items-center gap-1"
+            title="Flip camera"
+          >
+            <div className="w-11 h-11 rounded-full bg-black/40 backdrop-blur flex items-center justify-center">
+              <SwitchCamera className="w-5 h-5 text-white" />
+            </div>
+            <span className="text-white text-[10px] drop-shadow">Flip</span>
+          </button>
+
+          <button
+            onClick={() => setTimerOption(t => (t === 0 ? 3 : t === 3 ? 10 : 0))}
+            className="flex flex-col items-center gap-1"
+            title="Timer"
+          >
+            <div className={`w-11 h-11 rounded-full backdrop-blur flex items-center justify-center ${timerOption > 0 ? 'bg-primary/80' : 'bg-black/40'}`}>
+              <span className="text-white text-xs font-bold">{timerOption === 0 ? '⏱' : `${timerOption}s`}</span>
+            </div>
+            <span className="text-white text-[10px] drop-shadow">Timer</span>
+          </button>
+
+          <button
+            onClick={() => setShowFilterPanel(v => !v)}
+            className="flex flex-col items-center gap-1"
+            title="Filters"
+          >
+            <div className={`w-11 h-11 rounded-full backdrop-blur flex items-center justify-center ${filterPreset !== 'none' ? 'bg-primary/80' : 'bg-black/40'}`}>
+              <Sparkles className="w-5 h-5 text-white" />
+            </div>
+            <span className="text-white text-[10px] drop-shadow">Filters</span>
+          </button>
+
+          <button
+            onClick={() => setBeautify(v => !v)}
+            className="flex flex-col items-center gap-1"
+            title="Beautify"
+          >
+            <div className={`w-11 h-11 rounded-full backdrop-blur flex items-center justify-center ${beautify ? 'bg-primary/80' : 'bg-black/40'}`}>
+              <span className="text-white text-base">✨</span>
+            </div>
+            <span className="text-white text-[10px] drop-shadow">Beautify</span>
+          </button>
+        </div>
+      )}
+
+      {/* Filter picker panel */}
+      <AnimatePresence>
+        {showFilterPanel && (
+          <motion.div
+            initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: 20 }}
+            className="absolute right-16 top-24 z-10 bg-black/60 backdrop-blur rounded-xl p-2 flex flex-col gap-1"
+          >
+            {filterOptions.map(f => (
+              <button
+                key={f.key}
+                onClick={() => { setFilterPreset(f.key); setShowFilterPanel(false); }}
+                className={`px-3 py-1.5 rounded-lg text-xs font-medium text-left ${filterPreset === f.key ? 'bg-primary text-white' : 'text-white/80 hover:bg-white/10'}`}
+              >
+                {f.label}
+              </button>
+            ))}
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Vertical zoom slider (1x - 3x) */}
+      {!isRecording && countdown === null && (
+        <div className="absolute left-3 top-1/2 -translate-y-1/2 z-10 h-40 flex flex-col items-center gap-2">
+          <span className="text-white text-[10px] font-bold drop-shadow">{zoom.toFixed(1)}x</span>
+          <input
+            type="range"
+            min={1}
+            max={3}
+            step={0.1}
+            value={zoom}
+            onChange={e => setZoom(parseFloat(e.target.value))}
+            className="h-32 w-6 accent-primary"
+            style={{ writingMode: 'vertical-lr' as any, direction: 'rtl' }}
+          />
         </div>
       )}
 
@@ -566,7 +779,7 @@ const CreatePostWizard: React.FC<CreatePostWizardProps> = ({
 
           <button
             onClick={isRecording ? stopRecording : startRecording}
-            disabled={!cameraReady && !isRecording}
+            disabled={(!cameraReady && !isRecording) || countdown !== null}
             className="w-20 h-20 rounded-full border-4 border-white flex items-center justify-center bg-transparent disabled:opacity-40"
             title={isRecording ? 'Stop' : 'Record'}
           >
@@ -669,7 +882,7 @@ const CreatePostWizard: React.FC<CreatePostWizardProps> = ({
                     <span className="text-[9px] bg-green-500/20 text-green-600 px-1 rounded">✨ AI · More views</span>
                   )}
                 </div>
-                <button onClick={() => { setSelectedMusicTrack(null); setAiPickedTrack(null); }}
+                <button onClick={() => { setSelectedMusicTrack(null); setAiPickedTrack(null); setIsUserChosenTrack(false); }}
                   className="w-7 h-7 rounded-full bg-muted flex items-center justify-center shrink-0">
                   <X className="w-3.5 h-3.5" />
                 </button>
@@ -713,6 +926,8 @@ const CreatePostWizard: React.FC<CreatePostWizardProps> = ({
                           <button
                             onClick={() => {
                               setSelectedMusicTrack(track);
+                              setAiPickedTrack(null);
+                              setIsUserChosenTrack(true);
                               if (track.duration_seconds) setMusicDuration(Math.min(track.duration_seconds, 30));
                               previewAudioRef.current?.pause();
                               setPlayingPickerId(null);
