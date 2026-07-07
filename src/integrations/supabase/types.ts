@@ -4703,8 +4703,10 @@ export type Database = {
           last_seen: string | null
           market_wallet_ngn: number
           monetization_level: number
+          onboarding_completed: boolean
           post_count: number | null
           post_count_free: number | null
+          referred_by: string | null
           saved_searches: Json | null
           silver_star_balance: number
           star_balance: number | null
@@ -4747,8 +4749,10 @@ export type Database = {
           last_seen?: string | null
           market_wallet_ngn?: number
           monetization_level?: number
+          onboarding_completed?: boolean
           post_count?: number | null
           post_count_free?: number | null
+          referred_by?: string | null
           saved_searches?: Json | null
           silver_star_balance?: number
           star_balance?: number | null
@@ -4791,8 +4795,10 @@ export type Database = {
           last_seen?: string | null
           market_wallet_ngn?: number
           monetization_level?: number
+          onboarding_completed?: boolean
           post_count?: number | null
           post_count_free?: number | null
+          referred_by?: string | null
           saved_searches?: Json | null
           silver_star_balance?: number
           star_balance?: number | null
@@ -4813,7 +4819,15 @@ export type Database = {
           voice_credits?: number | null
           wallet_balance?: number | null
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "user_profiles_referred_by_fkey"
+            columns: ["referred_by"]
+            isOneToOne: false
+            referencedRelation: "user_profiles"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       user_progress: {
         Row: {
@@ -5498,6 +5512,7 @@ export type Database = {
       }
       archive_old_posts: { Args: never; Returns: undefined }
       auto_archive_old_posts: { Args: never; Returns: undefined }
+      complete_onboarding: { Args: never; Returns: undefined }
       deduct_stars_for_service: {
         Args: { p_amount: number; p_description: string; p_user_id: string }
         Returns: boolean
@@ -5510,6 +5525,14 @@ export type Database = {
       get_admin_setting_num: {
         Args: { p_default: number; p_key: string }
         Returns: number
+      }
+      get_public_profile_preview: {
+        Args: { p_id_prefix: string }
+        Returns: {
+          avatar_url: string
+          bio: string
+          username: string
+        }[]
       }
       get_user_device_info: {
         Args: { user_agent_string: string }
@@ -5554,6 +5577,24 @@ export type Database = {
       }
       record_post_first_view: { Args: { p_post_id: string }; Returns: Json }
       record_public_post_view: { Args: { p_post_id: string }; Returns: Json }
+      resolve_founder_account: {
+        Args: never
+        Returns: {
+          avatar_url: string
+          bio: string
+          id: string
+          username: string
+        }[]
+      }
+      resolve_referrer: {
+        Args: { p_id_prefix: string }
+        Returns: {
+          avatar_url: string
+          bio: string
+          id: string
+          username: string
+        }[]
+      }
       spend_stars: {
         Args: { p_amount: number; p_meta?: Json; p_type: string }
         Returns: Json

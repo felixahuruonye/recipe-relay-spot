@@ -15,7 +15,7 @@ export default defineConfig(({ mode }) => ({
     mode === "development" && componentTagger(),
     VitePWA({
       registerType: "autoUpdate",
-      includeAssets: ["lernory-logo.png"],
+      includeAssets: ["lenory-logo.png"],
       workbox: {
         navigateFallbackDenylist: [/^\/~oauth/],
         globPatterns: ["**/*.{js,css,html,ico,png,svg,jpg,jpeg,webp}"],
@@ -25,8 +25,8 @@ export default defineConfig(({ mode }) => ({
         skipWaiting: true,
       },
       manifest: {
-        name: "Lernory Social",
-        short_name: "Lernory",
+        name: "Lenory Social",
+        short_name: "Lenory",
         description: "Connect, Learn, Share, and Earn with the best social platform",
         theme_color: "#1a3a5c",
         background_color: "#0a1929",
@@ -36,7 +36,7 @@ export default defineConfig(({ mode }) => ({
         start_url: "/",
         icons: [
           {
-            src: "/lernory-logo.png",
+            src: "/lenory-logo.png",
             sizes: "512x512",
             type: "image/png",
             purpose: "any maskable",

@@ -70,7 +70,7 @@ const Welcome = () => {
   };
 
   const openHelp = () => {
-    window.open('https://lenory.com/help', '_blank');
+    navigate('/settings');
   };
 
   if (stage === 'loading') {
@@ -106,7 +106,7 @@ const Welcome = () => {
     <div className="min-h-screen flex flex-col items-center justify-center bg-background p-6">
       <div className="w-full max-w-md rounded-2xl border bg-card p-6 space-y-5 shadow-lg">
         <div className="flex flex-col items-center text-center gap-3">
-          <img src="/lernory-logo.png" alt="Lenory Social" className="w-16 h-16 rounded-xl" />
+          <img src="/lenory-logo.png" alt="Lenory Social" className="w-20 h-20 rounded-2xl shadow-lg" />
           <h1 className="text-xl font-bold">Welcome to Lenory Social, {myName}! 🎉</h1>
           <p className="text-sm text-muted-foreground">
             Connect, learn, share, and earn — here's a quick rundown before you dive in.

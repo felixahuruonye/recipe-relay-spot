@@ -7,7 +7,7 @@ const SUPABASE_ANON_KEY =
 // Known social-media / link-preview crawler user agents. If the request is
 // NOT from one of these, we just redirect straight into the real app - only
 // crawlers need the special HTML-with-OG-tags response.
-const CRAWLER_UA = /facebookexternalhit|Facebot|Twitterbot|WhatsApp|TelegramBot|Slackbot|LinkedInBot|Discordbot|SkypeUriPreview|redditbot|Pinterest|Googlebot|Applebot|vkShare|Viber/i;
+const CRAWLER_UA = /facebookexternalhit|Facebot|Twitterbot|WhatsApp|TelegramBot|Slackbot|LinkedInBot|Discordbot|SkypeUriPreview|redditbot|Pinterest|Googlebot|Applebot|vkShare|Viber|Snapchat|Instagram|TikTok|iMessage|Bingbot/i;
 
 function escapeHtml(s: string) {
   return s
@@ -16,19 +16,19 @@ function escapeHtml(s: string) {
 }
 
 function isVideoUrl(url?: string) {
-  return !!url && (/\.(mp4|webm|ogg|mov)(\?|$)/i.test(url) || url.includes('video'));
+  return !!url && (/\.(mp4|webm|ogg|mov|m4v)(\?|$)/i.test(url) || /\/video\//i.test(url));
 }
 
 export default async function handler(req: Request) {
   const { searchParams, origin } = new URL(req.url);
   const postId = searchParams.get('id') || '';
-  const appUrl = `${origin}/feed?post=${encodeURIComponent(postId)}`;
+  const appUrl = `${origin}/?post=${encodeURIComponent(postId)}`;
   const userAgent = req.headers.get('user-agent') || '';
 
   let post: any = null;
   try {
     const res = await fetch(
-      `${SUPABASE_URL}/rest/v1/posts?id=eq.${encodeURIComponent(postId)}&select=title,body,media_urls&limit=1`,
+      `${SUPABASE_URL}/rest/v1/posts?id=eq.${encodeURIComponent(postId)}&select=title,body,media_urls,thumbnail_url,media_type,user_id&limit=1`,
       { headers: { apikey: SUPABASE_ANON_KEY, Authorization: `Bearer ${SUPABASE_ANON_KEY}` } }
     );
     const rows = await res.json();
@@ -43,29 +43,50 @@ export default async function handler(req: Request) {
   }
 
   const title = post?.title ? `${post.title} · Lenory Social` : 'Lenory Social';
-  const description = (post?.body || 'Check out this post on Lenory Social!').slice(0, 160);
-  const firstMedia = post?.media_urls?.[0];
-  const isVideo = isVideoUrl(firstMedia);
-  // Crawlers generally want a static image for og:image even for video posts
-  // (og:video is supported by some platforms but og:image is the safe universal
-  // fallback), so for videos we fall back to the app logo if no better option exists.
-  const imageUrl = !isVideo && firstMedia ? firstMedia : `${origin}/og-image.png`;
+  const description = (post?.body || 'Check out this post on Lenory Social!').slice(0, 200);
+  const firstMedia: string | undefined = post?.media_urls?.[0];
+  const isVideo = post?.media_type === 'video' || isVideoUrl(firstMedia);
+
+  // For videos, prefer the stored thumbnail_url; then fall back to the app logo.
+  // For images, use the image itself. Never point og:image at a raw video.
+  let imageUrl: string;
+  if (isVideo) {
+    imageUrl = post?.thumbnail_url || `${origin}/lenory-logo.png`;
+  } else if (firstMedia) {
+    imageUrl = firstMedia;
+  } else {
+    imageUrl = `${origin}/lenory-logo.png`;
+  }
 
   const html = `<!DOCTYPE html><html><head>
 <meta charset="utf-8" />
 <title>${escapeHtml(title)}</title>
+<meta name="description" content="${escapeHtml(description)}" />
 <meta property="og:type" content="${isVideo ? 'video.other' : 'article'}" />
+<meta property="og:site_name" content="Lenory Social" />
 <meta property="og:title" content="${escapeHtml(title)}" />
 <meta property="og:description" content="${escapeHtml(description)}" />
 <meta property="og:image" content="${escapeHtml(imageUrl)}" />
+<meta property="og:image:secure_url" content="${escapeHtml(imageUrl)}" />
+<meta property="og:image:width" content="1200" />
+<meta property="og:image:height" content="630" />
 <meta property="og:url" content="${escapeHtml(appUrl)}" />
 <meta name="twitter:card" content="${isVideo ? 'player' : 'summary_large_image'}" />
 <meta name="twitter:title" content="${escapeHtml(title)}" />
 <meta name="twitter:description" content="${escapeHtml(description)}" />
 <meta name="twitter:image" content="${escapeHtml(imageUrl)}" />
-${isVideo && firstMedia ? `<meta property="og:video" content="${escapeHtml(firstMedia)}" />` : ''}
+${isVideo && firstMedia ? `<meta property="og:video" content="${escapeHtml(firstMedia)}" />
+<meta property="og:video:secure_url" content="${escapeHtml(firstMedia)}" />
+<meta property="og:video:type" content="video/mp4" />
+<meta property="og:video:width" content="720" />
+<meta property="og:video:height" content="1280" />` : ''}
 <meta http-equiv="refresh" content="0; url=${escapeHtml(appUrl)}" />
 </head><body>Redirecting to Lenory Social&hellip;</body></html>`;
 
-  return new Response(html, { headers: { 'content-type': 'text/html; charset=utf-8' } });
+  return new Response(html, {
+    headers: {
+      'content-type': 'text/html; charset=utf-8',
+      'cache-control': 'public, max-age=300, s-maxage=600',
+    },
+  });
 }

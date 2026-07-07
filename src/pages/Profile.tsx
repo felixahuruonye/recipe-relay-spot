@@ -93,7 +93,7 @@ const Profile = () => {
       updateMetaTags({
         title: `${data.username} on Lenory`,
         description: data.bio || `Check out ${data.username}'s profile on Lenory Social`,
-        image: data.avatar_url || `${window.location.origin}/lernory-logo.png`,
+        image: data.avatar_url || `${window.location.origin}/lenory-logo.png`,
         url: `${window.location.origin}/profile/${data.id}`,
         type: 'profile',
       });

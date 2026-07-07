@@ -59,7 +59,7 @@ export function resetMetaTags() {
   updateMetaTags({
     title: 'Lenory Social',
     description: 'Connect, Learn, Share, and Earn with the best social platform. Join Lenory Social today!',
-    image: `${window.location.origin}/lernory-logo.png`,
+    image: `${window.location.origin}/lenory-logo.png`,
     url: window.location.origin,
   });
 }

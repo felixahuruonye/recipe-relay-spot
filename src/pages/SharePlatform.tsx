@@ -18,13 +18,11 @@ const SharePlatform = () => {
   const [profile, setProfile] = useState<any>(null);
 
   const platformUrl = window.location.origin;
-  // NOTE: previously used /r/:code (a Vercel Edge Function for rich crawler
-  // previews showing the profile picture), but that rewrite isn't being
-  // honored on the live deployment and was 404ing for real users. Reverted
-  // to the root route with a query param, a real React Router route
-  // confirmed to work - this guarantees the referral link actually opens
-  // the app and captures the ref code. Rich previews are parked for later.
-  const referralUrl = user ? `${platformUrl}/?ref=${user.id.slice(0, 8)}` : platformUrl;
+  // Route referral links through /api/share-profile so social crawlers get
+  // real og:image (referrer's avatar) + description; real users are
+  // 302-redirected by the edge function to /?ref=CODE where the app captures
+  // the ref code into localStorage for the signup flow.
+  const referralUrl = user ? `${platformUrl}/api/share-profile?code=${user.id.slice(0, 8)}` : platformUrl;
 
   useEffect(() => {
     if (user) {

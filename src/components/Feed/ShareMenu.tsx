@@ -29,13 +29,11 @@ export const ShareMenu = ({ postId, postTitle, postImage, postDescription, postM
 
   const baseUrl = window.location.origin;
   const postUrl = `${baseUrl}/?post=${postId}`;
-  // NOTE: previously used /p/:id (a Vercel Edge Function for rich crawler
-  // previews), but that rewrite isn't being honored on the live deployment
-  // and was 404ing for real users. Reverted to the root route with a query
-  // param, which is a real React Router route confirmed to work - this
-  // guarantees the link actually opens the post. Rich link previews for
-  // WhatsApp/Facebook etc. are parked as a separate follow-up.
-  const shareLinkUrl = postUrl;
+  // Share via the /api/share-post edge function so social crawlers
+  // (WhatsApp, Facebook, Twitter, Telegram, etc.) receive HTML with
+  // per-post og:image / og:video tags. Real users are 302-redirected
+  // by the edge function straight to the app's post view.
+  const shareLinkUrl = `${baseUrl}/api/share-post?id=${encodeURIComponent(postId)}`;
 
   // Create a share message with thumbnail info
   const shareText = `🔥 ${postTitle}\n\n${postDescription?.slice(0, 100) || ''}\n\n📱 Lenory Social`;
@@ -236,7 +234,17 @@ export const ShareMenu = ({ postId, postTitle, postImage, postDescription, postM
         {postImage && (
           <div className="border rounded-lg p-3 bg-muted/50">
             <div className="flex gap-3">
-              <img src={postImage} alt="" className="w-16 h-16 object-cover rounded" />
+              {isVideoMedia(postImage) ? (
+                <video
+                  src={postImage}
+                  className="w-16 h-16 object-cover rounded bg-black"
+                  muted
+                  playsInline
+                  preload="metadata"
+                />
+              ) : (
+                <img src={postImage} alt="" className="w-16 h-16 object-cover rounded" />
+              )}
               <div className="flex-1 min-w-0">
                 <p className="font-medium text-sm line-clamp-2">{postTitle}</p>
                 <p className="text-xs text-muted-foreground">Lenory Social</p>
