@@ -18,10 +18,13 @@ const SharePlatform = () => {
   const [profile, setProfile] = useState<any>(null);
 
   const platformUrl = window.location.origin;
-  // /r/:code is a dedicated share link: social-media crawlers get a real OG
-  // preview (profile picture + bio via the api/share-profile Edge Function),
-  // while real users get redirected straight into the app with ?ref= intact.
-  const referralUrl = user ? `${platformUrl}/r/${user.id.slice(0, 8)}` : platformUrl;
+  // NOTE: previously used /r/:code (a Vercel Edge Function for rich crawler
+  // previews showing the profile picture), but that rewrite isn't being
+  // honored on the live deployment and was 404ing for real users. Reverted
+  // to the root route with a query param, a real React Router route
+  // confirmed to work - this guarantees the referral link actually opens
+  // the app and captures the ref code. Rich previews are parked for later.
+  const referralUrl = user ? `${platformUrl}/?ref=${user.id.slice(0, 8)}` : platformUrl;
 
   useEffect(() => {
     if (user) {

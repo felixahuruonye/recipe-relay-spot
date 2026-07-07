@@ -28,11 +28,14 @@ export const ShareMenu = ({ postId, postTitle, postImage, postDescription, postM
   const { toast } = useToast();
 
   const baseUrl = window.location.origin;
-  const postUrl = `${baseUrl}/feed?post=${postId}`;
-  // /p/:id is a dedicated share link: social-media crawlers get real OG preview
-  // tags (via the api/share-post Edge Function), while real users get redirected
-  // straight into the app.
-  const shareLinkUrl = `${baseUrl}/p/${postId}`;
+  const postUrl = `${baseUrl}/?post=${postId}`;
+  // NOTE: previously used /p/:id (a Vercel Edge Function for rich crawler
+  // previews), but that rewrite isn't being honored on the live deployment
+  // and was 404ing for real users. Reverted to the root route with a query
+  // param, which is a real React Router route confirmed to work - this
+  // guarantees the link actually opens the post. Rich link previews for
+  // WhatsApp/Facebook etc. are parked as a separate follow-up.
+  const shareLinkUrl = postUrl;
 
   // Create a share message with thumbnail info
   const shareText = `🔥 ${postTitle}\n\n${postDescription?.slice(0, 100) || ''}\n\n📱 Lenory Social`;
