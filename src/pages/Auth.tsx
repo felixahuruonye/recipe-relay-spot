@@ -8,6 +8,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useToast } from '@/hooks/use-toast';
 import { Download } from 'lucide-react';
+import { REFERRAL_STORAGE_KEY } from '@/App';
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter, DialogClose,
 } from '@/components/ui/dialog';
@@ -55,7 +56,8 @@ const Auth = () => {
   const handleSignUp = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsLoading(true);
-    const { error } = await signUp(email, password, { username });
+    const ref = localStorage.getItem(REFERRAL_STORAGE_KEY) || undefined;
+    const { error } = await signUp(email, password, { username, ref });
     if (!error) toast({ title: "Account created!", description: "Please check your email for verification." });
     setIsLoading(false);
   };

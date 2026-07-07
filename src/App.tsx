@@ -1,11 +1,12 @@
-import React from "react";
+import React, { useEffect, useState } from "react";
 import { Toaster } from "@/components/ui/toaster";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
+import { BrowserRouter, Routes, Route, Navigate, useLocation, useNavigate } from "react-router-dom";
 import { AuthProvider, useAuth } from "./contexts/AuthContext";
 import { ThemeProvider } from "./contexts/ThemeContext";
+import { supabase } from "@/integrations/supabase/client";
 import AppLayout from "./components/Layout/AppLayout";
 import Auth from "./pages/Auth";
 import Chat from "./pages/Chat";
@@ -28,6 +29,48 @@ import MusicianDashboard from "./pages/MusicianDashboard";
 import Storyline from "./pages/Storyline";
 import WalletPage from "./pages/WalletPage";
 import ChatHub from "./pages/ChatHub";
+import Welcome from "./pages/Welcome";
+
+export const REFERRAL_STORAGE_KEY = 'lenory_ref_code';
+
+// Captures ?ref=CODE from the URL (e.g. from the /r/:code referral link)
+// into localStorage, so it survives all the way through to signup even if
+// the user browses around a bit first before creating an account.
+const ReferralCapture = () => {
+  const location = useLocation();
+  useEffect(() => {
+    const ref = new URLSearchParams(location.search).get('ref');
+    if (ref) localStorage.setItem(REFERRAL_STORAGE_KEY, ref);
+  }, [location.search]);
+  return null;
+};
+
+// Sends a freshly-logged-in user who hasn't completed onboarding to the
+// welcome/follow-gate flow, from anywhere in the app.
+const OnboardingGate = () => {
+  const { user, loading } = useAuth();
+  const location = useLocation();
+  const navigate = useNavigate();
+  const [checked, setChecked] = useState(false);
+
+  useEffect(() => {
+    if (loading || !user) return;
+    let cancelled = false;
+    supabase.from('user_profiles').select('onboarding_completed').eq('id', user.id).maybeSingle()
+      .then(({ data }) => {
+        if (cancelled) return;
+        setChecked(true);
+        const onWelcome = location.pathname === '/welcome';
+        if (data && data.onboarding_completed === false && !onWelcome) {
+          navigate('/welcome', { replace: true });
+        }
+      });
+    return () => { cancelled = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user, loading]);
+
+  return null;
+};
 
 const queryClient = new QueryClient();
 
@@ -49,6 +92,13 @@ const ProtectedRoute = ({ children }: { children: React.ReactNode }) => {
   return <AppLayout>{children}</AppLayout>;
 };
 
+// /feed used to just redirect to "/" and silently drop any ?post=id, breaking
+// direct post links (e.g. from the share preview). This preserves the query.
+const FeedRedirect = () => {
+  const location = useLocation();
+  return <Navigate to={`/${location.search}`} replace />;
+};
+
 const App = () => (
   <ThemeProvider>
     <QueryClientProvider client={queryClient}>
@@ -57,8 +107,11 @@ const App = () => (
         <Sonner />
         <AuthProvider>
           <BrowserRouter>
+            <ReferralCapture />
+            <OnboardingGate />
             <Routes>
             <Route path="/auth" element={<Auth />} />
+            <Route path="/welcome" element={<Welcome />} />
             {/* Public TikTok-style feed - no login required */}
             <Route path="/" element={<TikTokFeed />} />
             <Route path="/index" element={<TikTokFeed />} />
@@ -135,8 +188,8 @@ const App = () => (
                 <WalletPage />
               </ProtectedRoute>
             } />
-            {/* Redirect old /feed to home */}
-            <Route path="/feed" element={<Navigate to="/" replace />} />
+            {/* Redirect old /feed to home - preserving any ?post= query param */}
+            <Route path="/feed" element={<FeedRedirect />} />
             {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
             <Route path="*" element={<NotFound />} />
             </Routes>
