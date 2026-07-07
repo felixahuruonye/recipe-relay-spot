@@ -203,6 +203,40 @@ const Explore = () => {
       </div>
 
 
+      {searchQuery && searchUsers.length > 0 && (
+        <Card className="border-primary/40">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-base flex items-center justify-between">
+              <span>People matching <span className="text-primary">{searchQuery}</span></span>
+              <Badge variant="secondary">{searchUsers.length} users</Badge>
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+              {searchUsers.map((u) => (
+                <button
+                  key={u.id}
+                  onClick={() => navigate(`/profile/${u.id}`)}
+                  className="flex items-center gap-3 p-2 rounded-lg hover:bg-accent transition-colors text-left"
+                >
+                  <Avatar className="h-10 w-10">
+                    <AvatarImage src={u.avatar_url || ''} />
+                    <AvatarFallback>{u.username?.[0]?.toUpperCase()}</AvatarFallback>
+                  </Avatar>
+                  <div className="min-w-0 flex-1">
+                    <p className="text-sm font-medium truncate flex items-center gap-1">
+                      @{u.username}
+                      {u.vip && <Badge variant="secondary" className="text-[9px] py-0 px-1">VIP</Badge>}
+                    </p>
+                    <p className="text-[10px] text-muted-foreground">{u.follower_count || 0} followers</p>
+                  </div>
+                </button>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
       {searchQuery && (
         <Card className="border-primary/40">
           <CardHeader className="pb-2">
