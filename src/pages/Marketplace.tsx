@@ -237,7 +237,7 @@ const Marketplace = () => {
   const buyProduct = (product: Product) => {
     const url = paymentUrls[product.id];
     if (url) { window.open(url, '_blank'); return; }
-    window.open(`https://paystack.com/pay/lernory-product`, '_blank');
+    window.open(`https://paystack.com/pay/lenory-product`, '_blank');
   };
 
   const copyLink = (p: Product) => {
