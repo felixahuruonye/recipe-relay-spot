@@ -47,22 +47,32 @@ export default async function handler(req: Request) {
     ? `Join @${profile.username} on Lenory Social`
     : 'Join Lenory Social';
   const description = profile?.bio || 'Earn while you browse, share content, and connect with amazing people.';
-  const imageUrl = profile?.avatar_url || `${origin}/og-image.png`;
+  const imageUrl = profile?.avatar_url || `${origin}/lenory-logo.png`;
 
   const html = `<!DOCTYPE html><html><head>
 <meta charset="utf-8" />
 <title>${escapeHtml(title)}</title>
+<meta name="description" content="${escapeHtml(description)}" />
 <meta property="og:type" content="profile" />
+<meta property="og:site_name" content="Lenory Social" />
 <meta property="og:title" content="${escapeHtml(title)}" />
 <meta property="og:description" content="${escapeHtml(description)}" />
 <meta property="og:image" content="${escapeHtml(imageUrl)}" />
+<meta property="og:image:secure_url" content="${escapeHtml(imageUrl)}" />
+<meta property="og:image:width" content="600" />
+<meta property="og:image:height" content="600" />
 <meta property="og:url" content="${escapeHtml(appUrl)}" />
-<meta name="twitter:card" content="summary" />
+<meta name="twitter:card" content="summary_large_image" />
 <meta name="twitter:title" content="${escapeHtml(title)}" />
 <meta name="twitter:description" content="${escapeHtml(description)}" />
 <meta name="twitter:image" content="${escapeHtml(imageUrl)}" />
 <meta http-equiv="refresh" content="0; url=${escapeHtml(appUrl)}" />
 </head><body>Redirecting to Lenory Social&hellip;</body></html>`;
 
-  return new Response(html, { headers: { 'content-type': 'text/html; charset=utf-8' } });
+  return new Response(html, {
+    headers: {
+      'content-type': 'text/html; charset=utf-8',
+      'cache-control': 'public, max-age=300, s-maxage=600',
+    },
+  });
 }
