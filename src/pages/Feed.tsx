@@ -358,7 +358,7 @@ transition={{ duration: 0.2 }}
 <MessageCircle className="w-5 h-5 text-muted-foreground hover:text-primary transition-colors" /> 
 <span className="text-sm font-semibold">{commentsCount}</span> 
 </button> 
-<ShareMenu postId={post.id} postTitle={post.title} postImage={hasMedia ? post.media_urls[0] : undefined} postDescription={post.body} /> </div> 
+<ShareMenu postId={post.id} postTitle={post.title} postImage={hasMedia ? post.media_urls[0] : undefined} postDescription={post.body} postMediaType={isVideo ? 'video' : (hasMedia ? 'image' : undefined)} /> </div> 
 <div className="flex items-center gap-3"> 
 <div className="flex items-center gap-1 text-muted-foreground"> 
 <Eye className="w-4 h-4" /> 

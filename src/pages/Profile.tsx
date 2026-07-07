@@ -450,7 +450,7 @@ const Profile = () => {
                           <PostViewers postId={post.id} viewCount={post.view_count || 0} />
                         </div>
 
-                        <ShareMenu postId={post.id} postTitle={post.title} postImage={post.media_urls?.[0]} postDescription={post.body} />
+                        <ShareMenu postId={post.id} postTitle={post.title} postImage={post.media_urls?.[0]} postDescription={post.body} postMediaType={post.media_urls?.[0] && (post.media_urls[0].match(/\.(mp4|webm|ogg|mov)$/i) || post.media_urls[0].includes('video')) ? 'video' : (post.media_urls?.[0] ? 'image' : undefined)} />
                       </div>
 
                       {expandedComments[post.id] && (

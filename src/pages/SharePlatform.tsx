@@ -18,7 +18,10 @@ const SharePlatform = () => {
   const [profile, setProfile] = useState<any>(null);
 
   const platformUrl = window.location.origin;
-  const referralUrl = user ? `${platformUrl}/?ref=${user.id.slice(0, 8)}` : platformUrl;
+  // /r/:code is a dedicated share link: social-media crawlers get a real OG
+  // preview (profile picture + bio via the api/share-profile Edge Function),
+  // while real users get redirected straight into the app with ?ref= intact.
+  const referralUrl = user ? `${platformUrl}/r/${user.id.slice(0, 8)}` : platformUrl;
 
   useEffect(() => {
     if (user) {
