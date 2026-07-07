@@ -4,7 +4,7 @@ const SUPABASE_URL = 'https://almrajoumwliddtmppsm.supabase.co';
 const SUPABASE_ANON_KEY =
   'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFsbXJham91bXdsaWRkdG1wcHNtIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDYyOTM2ODYsImV4cCI6MjA2MTg2OTY4Nn0.eGCVCJQvAZoX8LfJnvSUbkpMQjagxUI-u99TFELjxT4';
 
-const CRAWLER_UA = /facebookexternalhit|Facebot|Twitterbot|WhatsApp|TelegramBot|Slackbot|LinkedInBot|Discordbot|SkypeUriPreview|redditbot|Pinterest|Googlebot|Applebot|vkShare|Viber/i;
+const CRAWLER_UA = /facebookexternalhit|Facebot|Twitterbot|WhatsApp|TelegramBot|Slackbot|LinkedInBot|Discordbot|SkypeUriPreview|redditbot|Pinterest|Googlebot|Applebot|vkShare|Viber|Snapchat|Instagram|TikTok|iMessage|Bingbot/i;
 
 function escapeHtml(s: string) {
   return s
