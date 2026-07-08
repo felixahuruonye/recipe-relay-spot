@@ -30,6 +30,15 @@ import Storyline from "./pages/Storyline";
 import WalletPage from "./pages/WalletPage";
 import ChatHub from "./pages/ChatHub";
 import Welcome from "./pages/Welcome";
+import GlobalSettings from "./pages/ChatSettings/GlobalSettings";
+import MessageRequests from "./pages/ChatSettings/MessageRequests";
+import GlobalPrivacy from "./pages/ChatSettings/GlobalPrivacy";
+import MessageDelivery from "./pages/ChatSettings/MessageDelivery";
+import DeliveryTarget from "./pages/ChatSettings/DeliveryTarget";
+import BlockedAccounts from "./pages/ChatSettings/BlockedAccounts";
+import ChatProfile from "./pages/ChatSettings/ChatProfile";
+import ChatPrivacy from "./pages/ChatSettings/ChatPrivacy";
+import DisappearingMessages from "./pages/ChatSettings/DisappearingMessages";
 
 export const REFERRAL_STORAGE_KEY = 'lenory_ref_code';
 
@@ -190,6 +199,17 @@ const App = () => (
             } />
             {/* Redirect old /feed to home - preserving any ?post= query param */}
             <Route path="/feed" element={<FeedRedirect />} />
+            {/* Chat settings — Module B (global) */}
+            <Route path="/chat/settings" element={<ProtectedRoute><GlobalSettings /></ProtectedRoute>} />
+            <Route path="/chat/settings/requests" element={<ProtectedRoute><MessageRequests /></ProtectedRoute>} />
+            <Route path="/chat/settings/privacy" element={<ProtectedRoute><GlobalPrivacy /></ProtectedRoute>} />
+            <Route path="/chat/settings/delivery" element={<ProtectedRoute><MessageDelivery /></ProtectedRoute>} />
+            <Route path="/chat/settings/delivery/:target" element={<ProtectedRoute><DeliveryTarget /></ProtectedRoute>} />
+            <Route path="/chat/settings/blocked" element={<ProtectedRoute><BlockedAccounts /></ProtectedRoute>} />
+            {/* Chat settings — Module A (per chat) */}
+            <Route path="/chat/:partnerId/settings" element={<ProtectedRoute><ChatProfile /></ProtectedRoute>} />
+            <Route path="/chat/:partnerId/settings/privacy" element={<ProtectedRoute><ChatPrivacy /></ProtectedRoute>} />
+            <Route path="/chat/:partnerId/settings/disappearing" element={<ProtectedRoute><DisappearingMessages /></ProtectedRoute>} />
             {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
             <Route path="*" element={<NotFound />} />
             </Routes>

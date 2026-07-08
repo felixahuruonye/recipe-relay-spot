@@ -16,6 +16,7 @@ import { StarPackagesTab } from '@/components/Admin/StarPackagesTab';
 import { PostsTab } from '@/components/Admin/PostsTab';
 import { StoriesTab } from '@/components/Admin/StoriesTab';
 import { MarketplaceTab } from '@/components/Admin/MarketplaceTab';
+import { MarketplaceApprovalsTab } from '@/components/Admin/MarketplaceApprovalsTab';
 import { UserMessagesTab } from '@/components/Admin/UserMessagesTab';
 import { DeleteUsersTab } from '@/components/Admin/DeleteUsersTab';
 import { DeliveriesTab } from '@/components/Admin/DeliveriesTab';
@@ -168,6 +169,7 @@ const AdminPanel = () => {
               <TabsTrigger value="posts">Posts</TabsTrigger>
               <TabsTrigger value="stories">Stories</TabsTrigger>
               <TabsTrigger value="marketplace">Marketplace</TabsTrigger>
+              <TabsTrigger value="approvals">Approvals</TabsTrigger>
               <TabsTrigger value="reports">Reports</TabsTrigger>
               <TabsTrigger value="vip">VIP</TabsTrigger>
               <TabsTrigger value="stars">Stars</TabsTrigger>
@@ -189,6 +191,7 @@ const AdminPanel = () => {
           <TabsContent value="posts"><PostsTab /></TabsContent>
           <TabsContent value="stories"><StoriesTab /></TabsContent>
           <TabsContent value="marketplace"><MarketplaceTab /></TabsContent>
+          <TabsContent value="approvals"><MarketplaceApprovalsTab /></TabsContent>
           <TabsContent value="reports"><ReportsTab /></TabsContent>
           <TabsContent value="vip"><VIPManager /></TabsContent>
           <TabsContent value="stars"><StarPackagesTab /></TabsContent>
