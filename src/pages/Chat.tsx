@@ -12,7 +12,8 @@ import { Input } from '@/components/ui/input';
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from '@/components/ui/sheet';
 import { ScrollArea } from '@/components/ui/scroll-area';
 
-import { MessageCircle, Users } from 'lucide-react';
+import { MessageCircle, Users, Settings } from 'lucide-react';
+import { useNavigate as useNavigateRoute } from 'react-router-dom';
 
 type ProfileMini = {
   id: string;
