@@ -354,6 +354,30 @@ export type Database = {
           },
         ]
       }
+      api_usage_events: {
+        Row: {
+          created_at: string
+          endpoint: string | null
+          id: string
+          provider: string
+          user_id: string | null
+        }
+        Insert: {
+          created_at?: string
+          endpoint?: string | null
+          id?: string
+          provider: string
+          user_id?: string | null
+        }
+        Update: {
+          created_at?: string
+          endpoint?: string | null
+          id?: string
+          provider?: string
+          user_id?: string | null
+        }
+        Relationships: []
+      }
       balance_history: {
         Row: {
           amount: number
@@ -4571,6 +4595,44 @@ export type Database = {
           user_id?: string | null
         }
         Relationships: []
+      }
+      user_credits: {
+        Row: {
+          balance: number
+          daily_given: number
+          last_daily_reset: string
+          last_monthly_reset: string
+          monthly_used: number
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          balance?: number
+          daily_given?: number
+          last_daily_reset?: string
+          last_monthly_reset?: string
+          monthly_used?: number
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          balance?: number
+          daily_given?: number
+          last_daily_reset?: string
+          last_monthly_reset?: string
+          monthly_used?: number
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "user_credits_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: true
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       user_feedback: {
         Row: {
