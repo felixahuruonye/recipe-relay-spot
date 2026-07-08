@@ -548,7 +548,9 @@ const Marketplace = () => {
                     <h3 className="font-semibold">{p.title}</h3>
                     <div className="flex justify-between items-center">
                       <span className="font-bold">₦{p.price_ngn.toLocaleString()}</span>
-                      <Badge variant={p.status === 'active' ? 'default' : 'secondary'}>{p.status}</Badge>
+                      <Badge variant={p.approval_status === 'approved' ? 'default' : p.approval_status === 'rejected' ? 'destructive' : 'secondary'}>
+                        {p.approval_status === 'pending' ? 'Pending review' : p.approval_status === 'rejected' ? 'Rejected' : p.status}
+                      </Badge>
                     </div>
                     <div className="flex gap-1">
                       <Button variant="outline" size="sm" className="flex-1" onClick={() => { setEditingProduct(p); setShowEditDialog(true); }}><Edit2 className="w-3 h-3 mr-1" /> Edit</Button>
