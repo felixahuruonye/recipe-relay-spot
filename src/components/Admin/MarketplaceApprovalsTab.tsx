@@ -37,7 +37,7 @@ export const MarketplaceApprovalsTab: React.FC = () => {
       .order('created_at', { ascending: false });
     if (error) toast({ title: 'Load failed', description: error.message, variant: 'destructive' });
     setItems((data as any) || []);
-    const ids = Array.from(new Set(((data as any) || []).map((p: any) => p.seller_user_id)));
+    const ids = Array.from(new Set(((data as any) || []).map((p: any) => p.seller_user_id))) as string[];
     if (ids.length) {
       const { data: profs } = await supabase.from('user_profiles').select('id,username,avatar_url').in('id', ids);
       const map: any = {};
