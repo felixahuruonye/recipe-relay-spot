@@ -5,7 +5,8 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Badge } from '@/components/ui/badge';
-import { Send, ArrowLeft, Check, CheckCheck, Trash2 } from 'lucide-react';
+import { Send, ArrowLeft, Check, CheckCheck, Trash2, Info } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
 import { useToast } from '@/hooks/use-toast';
 import { VoiceRecorder } from './VoiceRecorder';
 import { FileUploader } from './FileUploader';
@@ -31,6 +32,7 @@ interface PrivateMessage {
 export const PrivateChat: React.FC<PrivateChatProps> = ({ 
   recipientId, recipientName, recipientAvatar, onBack 
 }) => {
+  const navigate = useNavigate();
   const { user } = useAuth();
   const [messages, setMessages] = useState<PrivateMessage[]>([]);
   const [newMessage, setNewMessage] = useState('');
@@ -191,6 +193,9 @@ export const PrivateChat: React.FC<PrivateChatProps> = ({
             )}
           </div>
         </div>
+        <Button variant="ghost" size="icon" aria-label="Chat settings" onClick={() => navigate(`/chat/${recipientId}/settings`)}>
+          <Info className="h-5 w-5" />
+        </Button>
       </div>
 
       {/* Messages */}

@@ -9,6 +9,7 @@ import { Dialog, DialogContent } from '@/components/ui/dialog';
 import { X, ArrowLeft, Music, Sparkles, Upload, Camera, RefreshCw, BookOpen, Image as ImageIcon, Play, Pause, SwitchCamera } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { motion, AnimatePresence } from 'framer-motion';
+import { pauseAllBackgroundMedia } from '@/lib/mediaBus';
 
 interface CreatePostWizardProps {
   onPostCreated?: () => void;
@@ -83,6 +84,11 @@ const CreatePostWizard: React.FC<CreatePostWizardProps> = ({
   }, [filterPreset, beautify]);
 
   useEffect(() => {
+    if (isOpen) {
+      // Pause any playing feed videos, storyline audio, or sound-picker previews
+      // so they don't compete with the Create Post camera/recorder.
+      pauseAllBackgroundMedia();
+    }
     if (!isOpen) {
       setStep(0);
       if (!postToEdit) {

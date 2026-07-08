@@ -29,6 +29,7 @@ interface Product {
   created_at: string;
   seller_user_id: string;
   status: string;
+  approval_status?: string;
   user_profiles?: { username: string; avatar_url: string; vip: boolean };
 }
 
@@ -137,7 +138,7 @@ const Marketplace = () => {
   };
 
   const fetchProducts = async () => {
-    const { data } = await supabase.from('products').select('*').eq('status', 'active').order('featured', { ascending: false }).order('created_at', { ascending: false });
+    const { data } = await supabase.from('products').select('*').eq('status', 'active').eq('approval_status', 'approved').order('featured', { ascending: false }).order('created_at', { ascending: false });
     const userIds = [...new Set(data?.map(p => p.seller_user_id) || [])];
     const { data: profiles } = await supabase.from('user_profiles').select('id, username, avatar_url, vip').in('id', userIds.length ? userIds : ['none']);
     const profileMap = new Map(profiles?.map(p => [p.id, p]));
@@ -209,10 +210,10 @@ const Marketplace = () => {
       seller_user_id: user.id, title: newProduct.title.trim(), description: newProduct.description.trim(),
       price_ngn: parseFloat(newProduct.price), stock: parseInt(newProduct.stock) || 1,
       delivery_options: newProduct.delivery_options.trim(), seller_contact: newProduct.seller_contact.trim(),
-      images: imageUrls, status: 'active'
+      images: imageUrls, status: 'active', approval_status: 'pending'
     });
     if (error) { toast({ title: 'Error', description: error.message, variant: 'destructive' }); return; }
-    toast({ title: 'Product listed!' });
+    toast({ title: 'Submitted for review', description: 'An admin will approve your listing shortly.' });
     setNewProduct({ title: '', description: '', price: '', stock: '', delivery_options: '', seller_contact: '' });
     setProductImages([]);
     setShowCreateDialog(false);
@@ -547,7 +548,9 @@ const Marketplace = () => {
                     <h3 className="font-semibold">{p.title}</h3>
                     <div className="flex justify-between items-center">
                       <span className="font-bold">₦{p.price_ngn.toLocaleString()}</span>
-                      <Badge variant={p.status === 'active' ? 'default' : 'secondary'}>{p.status}</Badge>
+                      <Badge variant={p.approval_status === 'approved' ? 'default' : p.approval_status === 'rejected' ? 'destructive' : 'secondary'}>
+                        {p.approval_status === 'pending' ? 'Pending review' : p.approval_status === 'rejected' ? 'Rejected' : p.status}
+                      </Badge>
                     </div>
                     <div className="flex gap-1">
                       <Button variant="outline" size="sm" className="flex-1" onClick={() => { setEditingProduct(p); setShowEditDialog(true); }}><Edit2 className="w-3 h-3 mr-1" /> Edit</Button>
