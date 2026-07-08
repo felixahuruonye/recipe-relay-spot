@@ -9,6 +9,7 @@ import { Dialog, DialogContent } from '@/components/ui/dialog';
 import { X, ArrowLeft, Music, Sparkles, Upload, Camera, RefreshCw, BookOpen, Image as ImageIcon, Play, Pause, SwitchCamera } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { motion, AnimatePresence } from 'framer-motion';
+import { pauseAllBackgroundMedia } from '@/lib/mediaBus';
 
 interface CreatePostWizardProps {
   onPostCreated?: () => void;
