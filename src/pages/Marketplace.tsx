@@ -137,7 +137,7 @@ const Marketplace = () => {
   };
 
   const fetchProducts = async () => {
-    const { data } = await supabase.from('products').select('*').eq('status', 'active').order('featured', { ascending: false }).order('created_at', { ascending: false });
+    const { data } = await supabase.from('products').select('*').eq('status', 'active').eq('approval_status', 'approved').order('featured', { ascending: false }).order('created_at', { ascending: false });
     const userIds = [...new Set(data?.map(p => p.seller_user_id) || [])];
     const { data: profiles } = await supabase.from('user_profiles').select('id, username, avatar_url, vip').in('id', userIds.length ? userIds : ['none']);
     const profileMap = new Map(profiles?.map(p => [p.id, p]));
@@ -209,10 +209,10 @@ const Marketplace = () => {
       seller_user_id: user.id, title: newProduct.title.trim(), description: newProduct.description.trim(),
       price_ngn: parseFloat(newProduct.price), stock: parseInt(newProduct.stock) || 1,
       delivery_options: newProduct.delivery_options.trim(), seller_contact: newProduct.seller_contact.trim(),
-      images: imageUrls, status: 'active'
+      images: imageUrls, status: 'active', approval_status: 'pending'
     });
     if (error) { toast({ title: 'Error', description: error.message, variant: 'destructive' }); return; }
-    toast({ title: 'Product listed!' });
+    toast({ title: 'Submitted for review', description: 'An admin will approve your listing shortly.' });
     setNewProduct({ title: '', description: '', price: '', stock: '', delivery_options: '', seller_contact: '' });
     setProductImages([]);
     setShowCreateDialog(false);
