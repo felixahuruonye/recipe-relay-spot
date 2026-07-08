@@ -31,6 +31,15 @@ type Conversation = {
   unread: number;
 };
 
+const ChatSettingsButton: React.FC = () => {
+  const navigate = useNavigateRoute();
+  return (
+    <Button variant="ghost" size="icon" aria-label="Messaging settings" onClick={() => navigate('/chat/settings')}>
+      <Settings className="w-5 h-5" />
+    </Button>
+  );
+};
+
 const Chat = () => {
   const { user } = useAuth();
   const location = useLocation();
@@ -302,6 +311,7 @@ const Chat = () => {
                 </ScrollArea>
               </SheetContent>
             </Sheet>
+            <ChatSettingsButton />
           </div>
         </div>
 
