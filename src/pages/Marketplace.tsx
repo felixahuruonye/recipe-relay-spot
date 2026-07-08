@@ -29,6 +29,7 @@ interface Product {
   created_at: string;
   seller_user_id: string;
   status: string;
+  approval_status?: string;
   user_profiles?: { username: string; avatar_url: string; vip: boolean };
 }
 
