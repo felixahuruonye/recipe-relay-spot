@@ -84,6 +84,11 @@ const CreatePostWizard: React.FC<CreatePostWizardProps> = ({
   }, [filterPreset, beautify]);
 
   useEffect(() => {
+    if (isOpen) {
+      // Pause any playing feed videos, storyline audio, or sound-picker previews
+      // so they don't compete with the Create Post camera/recorder.
+      pauseAllBackgroundMedia();
+    }
     if (!isOpen) {
       setStep(0);
       if (!postToEdit) {
