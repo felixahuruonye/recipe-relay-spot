@@ -417,6 +417,30 @@ export type Database = {
         }
         Relationships: []
       }
+      blocked_users: {
+        Row: {
+          blocked_id: string
+          blocker_id: string
+          created_at: string
+          id: string
+          reason: string | null
+        }
+        Insert: {
+          blocked_id: string
+          blocker_id: string
+          created_at?: string
+          id?: string
+          reason?: string | null
+        }
+        Update: {
+          blocked_id?: string
+          blocker_id?: string
+          created_at?: string
+          id?: string
+          reason?: string | null
+        }
+        Relationships: []
+      }
       cbt_analytics: {
         Row: {
           attempt_count: number | null
@@ -824,6 +848,51 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      chat_preferences: {
+        Row: {
+          created_at: string
+          disappearing_duration: string
+          id: string
+          is_archived: boolean
+          is_restricted: boolean
+          muted_until: string | null
+          partner_id: string
+          read_receipts_enabled: boolean
+          theme_key: string
+          typing_indicator_enabled: boolean
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          disappearing_duration?: string
+          id?: string
+          is_archived?: boolean
+          is_restricted?: boolean
+          muted_until?: string | null
+          partner_id: string
+          read_receipts_enabled?: boolean
+          theme_key?: string
+          typing_indicator_enabled?: boolean
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          disappearing_duration?: string
+          id?: string
+          is_archived?: boolean
+          is_restricted?: boolean
+          muted_until?: string | null
+          partner_id?: string
+          read_receipts_enabled?: boolean
+          theme_key?: string
+          typing_indicator_enabled?: boolean
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
       }
       chat_responses: {
         Row: {
@@ -2219,6 +2288,33 @@ export type Database = {
           },
         ]
       }
+      message_delivery_prefs: {
+        Row: {
+          friends_of_friends: string
+          group_members: string
+          others: string
+          page_followers: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          friends_of_friends?: string
+          group_members?: string
+          others?: string
+          page_followers?: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          friends_of_friends?: string
+          group_members?: string
+          others?: string
+          page_followers?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       messages: {
         Row: {
           body: string
@@ -3011,6 +3107,9 @@ export type Database = {
       }
       products: {
         Row: {
+          approval_status: string
+          approved_at: string | null
+          approved_by: string | null
           created_at: string
           delivery_options: string | null
           description: string
@@ -3018,6 +3117,7 @@ export type Database = {
           id: string
           images: string[] | null
           price_ngn: number
+          rejection_reason: string | null
           seller_contact: string | null
           seller_user_id: string
           status: string
@@ -3025,6 +3125,9 @@ export type Database = {
           title: string
         }
         Insert: {
+          approval_status?: string
+          approved_at?: string | null
+          approved_by?: string | null
           created_at?: string
           delivery_options?: string | null
           description: string
@@ -3032,6 +3135,7 @@ export type Database = {
           id?: string
           images?: string[] | null
           price_ngn: number
+          rejection_reason?: string | null
           seller_contact?: string | null
           seller_user_id: string
           status?: string
@@ -3039,6 +3143,9 @@ export type Database = {
           title: string
         }
         Update: {
+          approval_status?: string
+          approved_at?: string | null
+          approved_by?: string | null
           created_at?: string
           delivery_options?: string | null
           description?: string
@@ -3046,6 +3153,7 @@ export type Database = {
           id?: string
           images?: string[] | null
           price_ngn?: number
+          rejection_reason?: string | null
           seller_contact?: string | null
           seller_user_id?: string
           status?: string
@@ -4694,6 +4802,30 @@ export type Database = {
         }
         Relationships: []
       }
+      user_messaging_settings: {
+        Row: {
+          active_status_visible: boolean
+          global_read_receipts: boolean
+          notifications_enabled: boolean
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          active_status_visible?: boolean
+          global_read_receipts?: boolean
+          notifications_enabled?: boolean
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          active_status_visible?: boolean
+          global_read_receipts?: boolean
+          notifications_enabled?: boolean
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       user_notifications: {
         Row: {
           action_data: Json | null
@@ -5542,7 +5674,12 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      admin_approve_product: { Args: { p_id: string }; Returns: undefined }
       admin_delete_user: { Args: { p_target_user_id: string }; Returns: Json }
+      admin_reject_product: {
+        Args: { p_id: string; p_reason?: string }
+        Returns: undefined
+      }
       admin_send_broadcast: {
         Args: { p_message: string; p_title: string; p_type?: string }
         Returns: Json
