@@ -5,18 +5,14 @@ import { useAuth } from '@/contexts/AuthContext';
 import { SettingsHeader } from '@/components/ChatSettings/SettingsRow';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { Label } from '@/components/ui/label';
-
-const OPTIONS = [
-  { v: 'off', l: 'Off' },
-  { v: 'seen', l: "Once they're seen" },
-  { v: '24h', l: '24 hours' },
-  { v: '7d', l: '7 days' },
-];
+import { useToast } from '@/hooks/use-toast';
+import { DISAPPEARING_OPTIONS, disappearingLabel } from '@/lib/chatTheme';
 
 export default function DisappearingMessages() {
   const nav = useNavigate();
   const { partnerId } = useParams<{ partnerId: string }>();
   const { user } = useAuth();
+  const { toast } = useToast();
   const [val, setVal] = useState('off');
 
   useEffect(() => {
@@ -26,16 +22,29 @@ export default function DisappearingMessages() {
   }, [user?.id, partnerId]);
 
   const change = async (v: string) => {
+    const prev = val;
     setVal(v);
     if (!user || !partnerId) return;
-    await supabase.from('chat_preferences').upsert({ user_id: user.id, partner_id: partnerId, disappearing_duration: v, updated_at: new Date().toISOString() }, { onConflict: 'user_id,partner_id' });
+    const { error } = await supabase.rpc('set_shared_chat_pref' as any, { p_partner_id: partnerId, p_theme: null, p_disappearing: v });
+    if (error) {
+      setVal(prev);
+      return toast({ title: 'Failed', description: error.message, variant: 'destructive' });
+    }
+    // system message visible to both sides
+    await supabase.from('private_messages').insert({
+      from_user_id: user.id,
+      to_user_id: partnerId,
+      message: v === 'off' ? 'Disappearing messages were turned off' : `Disappearing messages set to ${disappearingLabel(v)}`,
+      is_system: true,
+    } as any);
+    toast({ title: 'Updated', description: `Disappearing messages: ${disappearingLabel(v)} (both sides)` });
   };
 
   return (
     <div className="min-h-[100dvh] bg-background">
       <SettingsHeader title="Disappearing messages" onBack={() => nav(`/chat/${partnerId}/settings`)} />
       <RadioGroup value={val} onValueChange={change} className="p-4 space-y-3">
-        {OPTIONS.map(o => (
+        {DISAPPEARING_OPTIONS.map(o => (
           <label key={o.v} className="flex items-center gap-3 p-3 rounded-lg border cursor-pointer hover:bg-accent">
             <RadioGroupItem value={o.v} id={o.v} />
             <Label htmlFor={o.v} className="flex-1 cursor-pointer">{o.l}</Label>
@@ -43,7 +52,7 @@ export default function DisappearingMessages() {
         ))}
       </RadioGroup>
       <p className="px-4 text-xs text-muted-foreground">
-        Messages will disappear based on the option you pick. Both sides need to enable this for full effect.{' '}
+        New messages in this chat disappear after the selected time. This setting applies to both people in the chat.{' '}
         <button className="text-primary underline" onClick={() => nav('/settings')}>Learn more</button>
       </p>
     </div>
