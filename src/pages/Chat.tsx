@@ -52,6 +52,20 @@ const Chat = () => {
 
   const [selectedPartnerId, setSelectedPartnerId] = useState<string | null>(null);
   const [search, setSearch] = useState('');
+  const [blockedIds, setBlockedIds] = useState<Set<string>>(new Set());
+
+  useEffect(() => {
+    if (!user) return;
+    supabase
+      .from('blocked_users')
+      .select('blocker_id,blocked_id')
+      .or(`blocker_id.eq.${user.id},blocked_id.eq.${user.id}`)
+      .then(({ data }) => {
+        const ids = new Set<string>();
+        (data || []).forEach((r: any) => ids.add(r.blocker_id === user.id ? r.blocked_id : r.blocker_id));
+        setBlockedIds(ids);
+      });
+  }, [user?.id]);
 
   const initializedFromNav = useRef(false);
 
@@ -340,7 +354,7 @@ const Chat = () => {
                   onClick={() => selectPartner(c.partnerId)}
                 >
                   <Avatar className="h-10 w-10">
-                    <AvatarImage src={p?.avatar_url || ''} />
+                    {!blockedIds.has(c.partnerId) && <AvatarImage src={p?.avatar_url || ''} />}
                     <AvatarFallback>{p?.username?.[0]?.toUpperCase() || 'U'}</AvatarFallback>
                   </Avatar>
 
