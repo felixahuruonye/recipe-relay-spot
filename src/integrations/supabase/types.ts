@@ -945,7 +945,9 @@ export type Database = {
           muted_until: string | null
           partner_id: string
           read_receipts_enabled: boolean
+          restricted_until: string | null
           theme_key: string
+          theme_updated_by: string | null
           typing_indicator_enabled: boolean
           updated_at: string
           user_id: string
@@ -959,7 +961,9 @@ export type Database = {
           muted_until?: string | null
           partner_id: string
           read_receipts_enabled?: boolean
+          restricted_until?: string | null
           theme_key?: string
+          theme_updated_by?: string | null
           typing_indicator_enabled?: boolean
           updated_at?: string
           user_id: string
@@ -973,10 +977,51 @@ export type Database = {
           muted_until?: string | null
           partner_id?: string
           read_receipts_enabled?: boolean
+          restricted_until?: string | null
           theme_key?: string
+          theme_updated_by?: string | null
           typing_indicator_enabled?: boolean
           updated_at?: string
           user_id?: string
+        }
+        Relationships: []
+      }
+      chat_reports: {
+        Row: {
+          admin_notes: string | null
+          created_at: string
+          details: string | null
+          id: string
+          reason: string
+          reported_id: string
+          reporter_id: string
+          status: string
+          transcript: Json
+          updated_at: string
+        }
+        Insert: {
+          admin_notes?: string | null
+          created_at?: string
+          details?: string | null
+          id?: string
+          reason: string
+          reported_id: string
+          reporter_id: string
+          status?: string
+          transcript?: Json
+          updated_at?: string
+        }
+        Update: {
+          admin_notes?: string | null
+          created_at?: string
+          details?: string | null
+          id?: string
+          reason?: string
+          reported_id?: string
+          reporter_id?: string
+          status?: string
+          transcript?: Json
+          updated_at?: string
         }
         Relationships: []
       }
@@ -3617,9 +3662,11 @@ export type Database = {
       private_messages: {
         Row: {
           created_at: string
+          expires_at: string | null
           from_user_id: string
           id: string
           is_deleted: boolean | null
+          is_system: boolean
           media_url: string | null
           message: string
           read_at: string | null
@@ -3627,9 +3674,11 @@ export type Database = {
         }
         Insert: {
           created_at?: string
+          expires_at?: string | null
           from_user_id: string
           id?: string
           is_deleted?: boolean | null
+          is_system?: boolean
           media_url?: string | null
           message: string
           read_at?: string | null
@@ -3637,9 +3686,11 @@ export type Database = {
         }
         Update: {
           created_at?: string
+          expires_at?: string | null
           from_user_id?: string
           id?: string
           is_deleted?: boolean | null
+          is_system?: boolean
           media_url?: string | null
           message?: string
           read_at?: string | null
@@ -6531,6 +6582,7 @@ export type Database = {
         Args: { amount_param: number; user_id_param: string }
         Returns: undefined
       }
+      is_chat_blocked: { Args: { _a: string; _b: string }; Returns: boolean }
       join_group_with_fee: {
         Args: { p_entry_fee: number; p_group_id: string; p_user_id: string }
         Returns: Json
@@ -6553,12 +6605,17 @@ export type Database = {
         Args: { p_story_id: string; p_viewer_id: string }
         Returns: Json
       }
+      purge_expired_private_messages: { Args: never; Returns: undefined }
       record_authenticated_post_view: {
         Args: { p_post_id: string; p_viewer_id: string }
         Returns: Json
       }
       record_post_first_view: { Args: { p_post_id: string }; Returns: Json }
       record_public_post_view: { Args: { p_post_id: string }; Returns: Json }
+      report_chat: {
+        Args: { p_details?: string; p_partner_id: string; p_reason: string }
+        Returns: Json
+      }
       resolve_founder_account: {
         Args: never
         Returns: {
@@ -6576,6 +6633,18 @@ export type Database = {
           id: string
           username: string
         }[]
+      }
+      restrict_chat: {
+        Args: { p_days?: number; p_partner_id: string }
+        Returns: Json
+      }
+      set_shared_chat_pref: {
+        Args: {
+          p_disappearing?: string
+          p_partner_id: string
+          p_theme?: string
+        }
+        Returns: Json
       }
       spend_stars: {
         Args: { p_amount: number; p_meta?: Json; p_type: string }
