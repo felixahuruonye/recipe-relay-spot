@@ -724,10 +724,13 @@ const TikTokPost: React.FC<{
   onSendStar: () => void;
   isLoggedIn: boolean;
   hasSeenBefore?: boolean;
+  // TEMP: preview-only hook to see the reward box design. Remove once
+  // real reward triggers are decided.
+  onRewardPreview?: () => void;
 }> = ({
   post, postUser, musicTrack: mTrack, isActive, isLiked, likesCount, commentsCount, viewCount,
   isFollowing, isOwnPost, isMuted, autoScroll, onToggleMute, onLike, onFollow,
-  onComment, onShare, onSendToFriend, onSoundDrilldown, onProfile, onRequireLogin, onVideoEnd, onViewQualified, onImageTimerEnd, onSendStar, isLoggedIn, hasSeenBefore
+  onComment, onShare, onSendToFriend, onSoundDrilldown, onProfile, onRequireLogin, onVideoEnd, onViewQualified, onImageTimerEnd, onSendStar, isLoggedIn, hasSeenBefore, onRewardPreview
 }) => {
   const navigate = useNavigate();
   const videoRef = useRef<HTMLVideoElement>(null);
@@ -812,6 +815,8 @@ const TikTokPost: React.FC<{
     if (!isLiked) handleAction(onLike, 'Login to like');
     setShowDoubleHeart(true);
     setTimeout(() => setShowDoubleHeart(false), 650);
+    // TEMP: preview the reward box design right after the heart burst.
+    if (onRewardPreview) setTimeout(() => onRewardPreview(), 500);
   };
 
   const handleMediaTap = () => {
@@ -1734,6 +1739,7 @@ const TikTokFeed: React.FC = () => {
                     autoScroll={autoScroll}
                     onToggleMute={() => setIsMuted(!isMuted)}
                     onLike={() => handleLike(post.id)}
+                    onRewardPreview={() => setRewardBox({ amount: 50, currency: 'NGN', reasonLabel: 'Watch reward' })}
                     onFollow={() => handleFollow(post.user_id)}
                     onComment={() => { setActiveCommentPostId(post.id); setShowComments(true); }}
                     onShare={() => { setActiveSharePost(post); setShowShareMenu(true); }}
