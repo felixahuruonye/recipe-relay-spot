@@ -18,6 +18,8 @@ import { LoginModal } from './LoginModal';
 import { CommentSection } from './CommentSection';
 import { ensureUserProfile } from '@/lib/ensureUserProfile';
 import { motion, AnimatePresence } from 'framer-motion';
+import { Skeleton } from '@/components/ui/skeleton';
+import { RewardBoxPopup, type RewardBoxData } from './RewardBoxPopup';
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from '@/components/ui/sheet';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Input } from '@/components/ui/input';
@@ -26,7 +28,6 @@ import { ProductCard } from './ProductCard';
 import { TrendingStoriesCard } from './TrendingStoriesCard';
 import CreatePostWizard from '@/components/Posts/CreatePostWizard';
 import YouTubeAudio from '@/components/Music/YouTubeAudio';
-import { LenoryLoader } from '@/components/Loading/LenoryLoader';
 import { MediaThumb, isVideoUrl } from './MediaThumb';
 import { SearchOverlayV2 } from '@/components/Search/SearchOverlayV2';
 
@@ -95,6 +96,22 @@ const seedFromString = (s: string) => {
     h = Math.imul(h, 16777619);
   }
   return h >>> 0;
+};
+
+// Ranks posts once (freshness + engagement + light personalization). The
+// result is stored as an ordered id list and re-used until the next
+// deliberate refresh, so live stat ticks never reorder cards under the user.
+const rankPostIds = (allPosts: Post[], userKey: string): string[] => {
+  const seed = seedFromString(`${userKey}-${new Date().toDateString()}`);
+  return [...allPosts]
+    .map((p) => {
+      const ageHrs = Math.max(1, (Date.now() - new Date(p.created_at).getTime()) / 3600000);
+      const engagement = (p.view_count ?? 0) + (p.likes_count || 0) * 4 + (p.comments_count || 0) * 6;
+      const personal = ((seedFromString(p.id) ^ seed) % 1000) / 1000;
+      return { id: p.id, score: engagement / Math.pow(ageHrs, 0.7) + personal * 8 + (p.boosted ? 20 : 0) };
+    })
+    .sort((a, b) => b.score - a.score)
+    .map((x) => x.id);
 };
 
 // ── Star Notification Card ──
@@ -1056,6 +1073,13 @@ const TikTokFeed: React.FC = () => {
   const [showStarFloat, setShowStarFloat] = useState(false);
   const [lastEarnAmount, setLastEarnAmount] = useState(0);
   const [showSuggestedUsers, setShowSuggestedUsers] = useState(false);
+  // Stable slide order + a queue for posts that arrived via realtime but
+  // haven't been merged in yet. Keeping order separate from `posts` means a
+  // like/view ticking up somewhere in the feed never reshuffles what's on
+  // screen - only an explicit tap on the "New posts" pill does.
+  const [orderedPostIds, setOrderedPostIds] = useState<string[]>([]);
+  const [newPostsAvailable, setNewPostsAvailable] = useState(0);
+  const [rewardBox, setRewardBox] = useState<RewardBoxData | null>(null);
   const processingRef = useRef<Set<string>>(new Set());
   const feedRef = useRef<HTMLDivElement>(null);
   const swipeStartRef = useRef<{ x: number; y: number; t: number } | null>(null);
@@ -1066,15 +1090,14 @@ const TikTokFeed: React.FC = () => {
 
   const feedSlides = useMemo<FeedSlide[]>(() => {
     const seed = seedFromString(`${user?.id || 'guest'}-${new Date().toDateString()}`);
-    const orderedPosts = [...posts]
-      .map((p) => {
-        const ageHrs = Math.max(1, (Date.now() - new Date(p.created_at).getTime()) / 3600000);
-        const engagement = (p.view_count ?? 0) + (p.likes_count || 0) * 4 + (p.comments_count || 0) * 6;
-        const personal = ((seedFromString(p.id) ^ seed) % 1000) / 1000;
-        return { post: p, score: engagement / Math.pow(ageHrs, 0.7) + personal * 8 + (p.boosted ? 20 : 0) };
-      })
-      .sort((a, b) => b.score - a.score)
-      .map((x) => x.post);
+    // Order is decided once (in fetchPosts / mergeNewPosts) and frozen in
+    // orderedPostIds. We just look each post up by id here, so a live field
+    // update (likes_count, view_count ticking up from realtime) changes what
+    // a card *shows* without moving the card itself.
+    const postMap = new Map(posts.map((p) => [p.id, p]));
+    const orderedPosts = orderedPostIds
+      .map((id) => postMap.get(id))
+      .filter((p): p is Post => Boolean(p));
 
     const productSeed = seed % Math.max(products.length, 1);
     const productOrder = products.length ? [...products.slice(productSeed), ...products.slice(0, productSeed)] : [];
@@ -1116,7 +1139,30 @@ const TikTokFeed: React.FC = () => {
   useEffect(() => {
     const channel = supabase
       .channel('live-home-feed-posts')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'posts' }, () => fetchPosts())
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'posts' }, (payload: any) => {
+        // Don't splice a brand-new post into the visible feed - that would
+        // shift whatever the person is currently mid-watch on. Just surface
+        // a small "New posts" pill; fetchPosts() (which recomputes order)
+        // only runs when they deliberately tap it.
+        const row = payload.new;
+        if (row?.status === 'approved' && !row?.disabled) {
+          setNewPostsAvailable((n) => n + 1);
+        }
+      })
+      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'posts' }, (payload: any) => {
+        // Patch just this post's fields in place. Order (orderedPostIds) is
+        // untouched, so a like/view count ticking up elsewhere in the feed
+        // never reshuffles what's on screen.
+        const updated = payload.new;
+        if (!updated?.id) return;
+        setPosts((prev) => prev.map((p) => (p.id === updated.id ? { ...p, ...updated } : p)));
+      })
+      .on('postgres_changes', { event: 'DELETE', schema: 'public', table: 'posts' }, (payload: any) => {
+        const removedId = payload.old?.id;
+        if (!removedId) return;
+        setPosts((prev) => prev.filter((p) => p.id !== removedId));
+        setOrderedPostIds((prev) => prev.filter((id) => id !== removedId));
+      })
       .subscribe();
     return () => { supabase.removeChannel(channel); };
   }, []);
@@ -1146,7 +1192,18 @@ const TikTokFeed: React.FC = () => {
     if (!user) return;
     const channel = supabase
       .channel(`feed-money-notifications-${user.id}`)
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'wallet_history', filter: `user_id=eq.${user.id}` }, () => loadMyProfile())
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'wallet_history', filter: `user_id=eq.${user.id}` }, (payload: any) => {
+        loadMyProfile();
+        const row = payload.new;
+        if (payload.eventType === 'INSERT' && row?.type?.includes('earn') && Number(row.amount) > 0) {
+          const label = String(row.type).replace(/_/g, ' ').replace('earn', '').trim() || 'reward';
+          setRewardBox({
+            amount: Number(row.amount),
+            currency: row.currency || 'NGN',
+            reasonLabel: label.charAt(0).toUpperCase() + label.slice(1),
+          });
+        }
+      })
       .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'user_profiles', filter: `id=eq.${user.id}` }, (payload: any) => {
         setMyProfile((prev: any) => prev ? { ...prev, ...payload.new } : payload.new);
       })
@@ -1371,12 +1428,15 @@ const TikTokFeed: React.FC = () => {
         }
 
         setPosts(allPosts as Post[]);
+        setOrderedPostIds(rankPostIds(allPosts as Post[], user?.id || 'guest'));
         setUsers(usersMap);
         setPostLikes(likesMap);
         setPostCommentCounts(commentCountMap);
         setPostViewCounts(viewCountMap);
+        setNewPostsAvailable(0);
       } else {
         setPosts([]);
+        setOrderedPostIds([]);
         setUsers({});
         setPostLikes({});
         setPostCommentCounts({});
@@ -1588,13 +1648,50 @@ const TikTokFeed: React.FC = () => {
   ];
 
   if (loading) {
-    return <LenoryLoader label="Loading feed..." />;
+    // Instant content-shaped skeleton instead of a full-screen branded splash.
+    // TikTok never blocks the whole screen while data loads - it shows the
+    // shape of the content immediately, which reads as "fast" even when the
+    // network hasn't finished. Keeping the same shell (black bg, max-w-[480px])
+    // means there's no layout jump once real posts arrive.
+    return (
+      <div className="h-[100dvh] bg-black flex justify-center">
+        <div className="relative w-full max-w-[480px] h-full overflow-hidden">
+          <Skeleton className="absolute inset-0 rounded-none bg-neutral-900" />
+          <div className="absolute inset-0 flex flex-col justify-end p-4 pb-24 gap-3">
+            <Skeleton className="h-4 w-24 rounded-full bg-neutral-700" />
+            <Skeleton className="h-5 w-3/4 rounded-md bg-neutral-700" />
+            <Skeleton className="h-4 w-1/2 rounded-md bg-neutral-700" />
+          </div>
+          <div className="absolute right-3 bottom-32 flex flex-col items-center gap-6">
+            {[0, 1, 2].map((i) => (
+              <Skeleton key={i} className="w-10 h-10 rounded-full bg-neutral-700" />
+            ))}
+          </div>
+        </div>
+      </div>
+    );
   }
 
   return (
     <>
       <div ref={shellRef} className="h-[100dvh] bg-black flex justify-center">
         <div className="relative w-full max-w-[480px] h-full">
+          <RewardBoxPopup data={rewardBox} onClose={() => setRewardBox(null)} />
+          <AnimatePresence>
+            {newPostsAvailable > 0 && (
+              <motion.button
+                initial={{ y: -60, opacity: 0 }}
+                animate={{ y: 0, opacity: 1 }}
+                exit={{ y: -60, opacity: 0 }}
+                transition={{ type: 'spring', stiffness: 400, damping: 30 }}
+                onClick={() => { fetchPosts(); if (feedRef.current) feedRef.current.scrollTo({ top: 0, behavior: 'smooth' }); }}
+                className="absolute top-4 left-1/2 -translate-x-1/2 z-40 bg-white text-black text-xs font-bold px-4 py-2 rounded-full shadow-lg flex items-center gap-1.5"
+              >
+                <span className="w-1.5 h-1.5 rounded-full bg-red-500 animate-pulse" />
+                {newPostsAvailable} new {newPostsAvailable === 1 ? 'post' : 'posts'}
+              </motion.button>
+            )}
+          </AnimatePresence>
           <div
             ref={feedRef}
             className="h-full overflow-y-scroll snap-y snap-mandatory scrollbar-hide"
