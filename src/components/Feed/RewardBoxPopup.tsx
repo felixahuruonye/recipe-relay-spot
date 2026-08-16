@@ -344,13 +344,19 @@ export const RewardBoxPopup = ({ data, onClose }: RewardBoxPopupProps) => {
             )}
           </AnimatePresence>
 
-          {/* The gift box: bouncy pop-in, then lid pops open + base shatters away */}
+          {/* The container: gift box (default) or treasure chest. Bouncy pop-in,
+              then the lid flies off + the base shatters away. */}
           <AnimatePresence>
             {phase !== 'reveal' && (
               <div className="relative flex flex-col items-center">
                 <motion.div
-                  className="w-24 h-8 rounded-t-2xl z-10"
-                  style={{ background: 'linear-gradient(145deg, #fbbf24, #f472b6)' }}
+                  className={isChest ? 'w-28 h-9 rounded-t-full z-10 border-b-2 border-amber-900/60' : 'w-24 h-8 rounded-t-2xl z-10'}
+                  style={{
+                    background: isChest
+                      ? 'linear-gradient(145deg, #b45309, #7c2d12 60%, #92400e)'
+                      : 'linear-gradient(145deg, #fbbf24, #f472b6)',
+                    transformOrigin: 'bottom center',
+                  }}
                   initial={{ scale: 0, y: 8 }}
                   animate={phase === 'popup' ? { scale: 1, y: 0 } : { y: -70, rotate: -35, opacity: 0 }}
                   transition={
@@ -360,8 +366,12 @@ export const RewardBoxPopup = ({ data, onClose }: RewardBoxPopupProps) => {
                   }
                 />
                 <motion.div
-                  className="w-24 h-16 rounded-b-2xl -mt-1 flex items-center justify-center shadow-2xl overflow-hidden"
-                  style={{ background: 'linear-gradient(145deg, #f59e0b, #ec4899, #8b5cf6)' }}
+                  className={`${isChest ? 'w-28 h-16 rounded-b-lg' : 'w-24 h-16 rounded-b-2xl'} -mt-1 flex items-center justify-center shadow-2xl overflow-hidden relative`}
+                  style={{
+                    background: isChest
+                      ? 'linear-gradient(145deg, #92400e, #78350f 55%, #451a03)'
+                      : 'linear-gradient(145deg, #f59e0b, #ec4899, #8b5cf6)',
+                  }}
                   initial={{ scale: 0 }}
                   animate={phase === 'popup' ? { scale: 1 } : { scale: 1.4, opacity: 0 }}
                   transition={
@@ -370,9 +380,38 @@ export const RewardBoxPopup = ({ data, onClose }: RewardBoxPopupProps) => {
                       : { duration: 0.4, ease: 'easeOut' }
                   }
                 >
-                  <div className="w-3 h-full bg-white/30 absolute" />
-                  <div className="h-3 w-full bg-white/30 absolute" />
+                  {isChest ? (
+                    <>
+                      <div className="absolute inset-x-0 top-1/3 h-1.5 bg-amber-300/40" />
+                      <div className="absolute inset-y-0 left-1/2 -translate-x-1/2 w-2 bg-amber-300/40" />
+                      <div className="w-5 h-5 rounded-sm bg-yellow-300 shadow-[0_0_12px_rgba(250,204,21,0.9)] z-10" />
+                    </>
+                  ) : (
+                    <>
+                      <div className="w-3 h-full bg-white/30 absolute" />
+                      <div className="h-3 w-full bg-white/30 absolute" />
+                    </>
+                  )}
                 </motion.div>
+
+                {/* Spinning 3D coin rising out of the container as it opens */}
+                <AnimatePresence>
+                  {phase === 'explode' && (
+                    <motion.div
+                      className="absolute left-1/2 -translate-x-1/2 top-2 w-12 h-12 rounded-full flex items-center justify-center text-amber-900 font-black text-lg"
+                      style={{
+                        background: 'linear-gradient(145deg, #fef3c7, #facc15 45%, #b45309)',
+                        boxShadow: '0 0 24px 6px rgba(250,204,21,0.65), inset 0 -3px 6px rgba(120,53,15,0.6)',
+                        transformStyle: 'preserve-3d',
+                      }}
+                      initial={{ y: 10, scale: 0.3, opacity: 0, rotateY: 0 }}
+                      animate={{ y: -80, scale: 1, opacity: [0, 1, 1, 0], rotateY: 1080 }}
+                      transition={{ duration: 0.9, ease: 'easeOut' }}
+                    >
+                      ★
+                    </motion.div>
+                  )}
+                </AnimatePresence>
               </div>
             )}
           </AnimatePresence>
