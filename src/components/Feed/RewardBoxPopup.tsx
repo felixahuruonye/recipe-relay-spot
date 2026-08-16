@@ -8,6 +8,11 @@ export interface RewardBoxData {
   currency: string;
   reasonLabel: string; // e.g. "Watch & Earn"
   newBalance?: number; // omitted from the copy if not known
+  // Optional: a real static asset that exactly matches these numbers
+  // (e.g. a demo mockup). When set, phase 3 shows this image directly
+  // instead of the procedurally-drawn text, since it only fits the
+  // specific baked-in amount/balance it was made for.
+  imageSrc?: string;
 }
 
 interface RewardBoxPopupProps {
@@ -161,7 +166,7 @@ const useRewardAudio = () => {
 // Canvas particle system (canvas-confetti), capped to stay under ~180
 // concurrent particles at any point so this doesn't lag low-end phones.
 // ---------------------------------------------------------------------------
-const runParticleSequence = (canvas: HTMLCanvasElement) => {
+const runParticleSequence = (canvas: HTMLCanvasElement, skipPhase3: boolean) => {
   const myConfetti = confetti.create(canvas, { resize: true, useWorker: true });
   const timers: ReturnType<typeof setTimeout>[] = [];
   const at = (ms: number, fn: () => void) => timers.push(setTimeout(fn, ms));
@@ -208,55 +213,57 @@ const runParticleSequence = (canvas: HTMLCanvasElement) => {
     });
   });
 
-  // Phase 3 (1800ms - 3500ms): full-screen gold + blue detonations
-  [1900, 2300, 2800, 3200].forEach((delay, i) => {
-    at(delay, () => {
-      myConfetti({
-        particleCount: 28,
-        spread: 130,
-        startVelocity: 50,
-        gravity: 0.7,
-        ticks: 120,
-        origin: { x: 0.2 + Math.random() * 0.6, y: 0.15 + Math.random() * 0.35 },
-        colors: i % 2 === 0 ? GOLD : ['#60a5fa', '#3b82f6', '#93c5fd', '#ffffff'],
+  if (!skipPhase3) {
+    // Phase 3 (1800ms - 3500ms): full-screen gold + blue detonations
+    [1900, 2300, 2800, 3200].forEach((delay, i) => {
+      at(delay, () => {
+        myConfetti({
+          particleCount: 28,
+          spread: 130,
+          startVelocity: 50,
+          gravity: 0.7,
+          ticks: 120,
+          origin: { x: 0.2 + Math.random() * 0.6, y: 0.15 + Math.random() * 0.35 },
+          colors: i % 2 === 0 ? GOLD : ['#60a5fa', '#3b82f6', '#93c5fd', '#ffffff'],
+        });
       });
     });
-  });
 
-  // Coin rain: emoji-shaped coins falling with rotation, staggered through
-  // phase 3, capped so total concurrent particles stay bounded.
-  for (let i = 0; i < 7; i++) {
-    at(1900 + i * 210, () => {
-      myConfetti({
-        particleCount: 4,
-        angle: 270,
-        spread: 65,
-        startVelocity: 12,
-        gravity: 0.9,
-        drift: (Math.random() - 0.5) * 0.4,
-        ticks: 220,
-        scalar: 1.6,
-        origin: { x: Math.random(), y: -0.05 },
-        shapes: [confetti.shapeFromText({ text: '🪙' })],
+    // Coin rain: emoji-shaped coins falling with rotation, staggered through
+    // phase 3, capped so total concurrent particles stay bounded.
+    for (let i = 0; i < 7; i++) {
+      at(1900 + i * 210, () => {
+        myConfetti({
+          particleCount: 4,
+          angle: 270,
+          spread: 65,
+          startVelocity: 12,
+          gravity: 0.9,
+          drift: (Math.random() - 0.5) * 0.4,
+          ticks: 220,
+          scalar: 1.6,
+          origin: { x: Math.random(), y: -0.05 },
+          shapes: [confetti.shapeFromText({ text: '🪙' })],
+        });
       });
-    });
-  }
+    }
 
-  // Continuous glitter/sparkle passing across the earnings text
-  for (let i = 0; i < 5; i++) {
-    at(2000 + i * 300, () => {
-      myConfetti({
-        particleCount: 6,
-        spread: 360,
-        startVelocity: 8,
-        gravity: 0,
-        ticks: 90,
-        scalar: 0.5,
-        origin: { x: 0.3 + Math.random() * 0.4, y: 0.42 + Math.random() * 0.1 },
-        colors: ['#ffffff', '#fde68a'],
-        shapes: ['star'],
+    // Continuous glitter/sparkle passing across the earnings text
+    for (let i = 0; i < 5; i++) {
+      at(2000 + i * 300, () => {
+        myConfetti({
+          particleCount: 6,
+          spread: 360,
+          startVelocity: 8,
+          gravity: 0,
+          ticks: 90,
+          scalar: 0.5,
+          origin: { x: 0.3 + Math.random() * 0.4, y: 0.42 + Math.random() * 0.1 },
+          colors: ['#ffffff', '#fde68a'],
+          shapes: ['star'],
+        });
       });
-    });
+    }
   }
 
   return () => timers.forEach(clearTimeout);
@@ -287,7 +294,7 @@ export const RewardBoxPopup = ({ data, onClose }: RewardBoxPopupProps) => {
     const closeTimer = setTimeout(() => onClose(), 5000);
 
     let cancelParticles: (() => void) | null = null;
-    if (canvasRef.current) cancelParticles = runParticleSequence(canvasRef.current);
+    if (canvasRef.current) cancelParticles = runParticleSequence(canvasRef.current, Boolean(data.imageSrc));
 
     return () => {
       clearTimeout(explodeTimer);
@@ -379,9 +386,20 @@ export const RewardBoxPopup = ({ data, onClose }: RewardBoxPopupProps) => {
             )}
           </AnimatePresence>
 
-          {/* Phase 3: reward text - metallic gradient with shimmer sweep */}
+          {/* Phase 3: real reference art when this exact amount has one, otherwise procedural shimmer text */}
           <AnimatePresence>
-            {phase === 'reveal' && (
+            {phase === 'reveal' && data.imageSrc && (
+              <motion.img
+                src={data.imageSrc}
+                alt="Reward claimed"
+                initial={{ scale: 1.08, opacity: 0 }}
+                animate={{ scale: 1, opacity: 1 }}
+                exit={{ opacity: 0 }}
+                transition={{ duration: 0.35, ease: 'easeOut' }}
+                className="absolute inset-0 w-full h-full object-cover"
+              />
+            )}
+            {phase === 'reveal' && !data.imageSrc && (
               <motion.div
                 initial={{ scale: 0.3, opacity: 0, y: 10 }}
                 animate={{ scale: 1, opacity: 1, y: 0 }}
