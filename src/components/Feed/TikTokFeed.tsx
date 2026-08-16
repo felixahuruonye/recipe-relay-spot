@@ -1221,6 +1221,8 @@ const TikTokFeed: React.FC = () => {
             currency: row.currency || 'NGN',
             reasonLabel,
             newBalance: priorBalance > 0 ? priorBalance + amount : undefined,
+            variant: 'chest',
+            username: myProfile?.username || 'YOU',
           });
         }
       })
@@ -1754,7 +1756,7 @@ const TikTokFeed: React.FC = () => {
                     autoScroll={autoScroll}
                     onToggleMute={() => setIsMuted(!isMuted)}
                     onLike={() => handleLike(post.id)}
-                    onRewardPreview={() => setRewardBox({ amount: 500, currency: 'NGN', reasonLabel: 'Watch & Earn', newBalance: 1000 })}
+                    onRewardPreview={() => setRewardBox({ amount: 500, currency: 'NGN', reasonLabel: 'Watch & Earn', newBalance: 1000, variant: 'gift', username: myProfile?.username || 'YOU' })}
                     onFollow={() => handleFollow(post.user_id)}
                     onComment={() => { setActiveCommentPostId(post.id); setShowComments(true); }}
                     onShare={() => { setActiveSharePost(post); setShowShareMenu(true); }}
