@@ -1876,6 +1876,7 @@ export type Database = {
           id: string
           image_url: string
           prompt: string
+          provider: string | null
           related_topic: string | null
           tags: string[] | null
           user_id: string
@@ -1885,6 +1886,7 @@ export type Database = {
           id?: string
           image_url: string
           prompt: string
+          provider?: string | null
           related_topic?: string | null
           tags?: string[] | null
           user_id: string
@@ -1894,6 +1896,7 @@ export type Database = {
           id?: string
           image_url?: string
           prompt?: string
+          provider?: string | null
           related_topic?: string | null
           tags?: string[] | null
           user_id?: string
@@ -3698,6 +3701,30 @@ export type Database = {
         }
         Relationships: []
       }
+      processed_payment_references: {
+        Row: {
+          amount: number
+          created_at: string
+          purpose: string
+          reference: string
+          user_id: string
+        }
+        Insert: {
+          amount: number
+          created_at?: string
+          purpose: string
+          reference: string
+          user_id: string
+        }
+        Update: {
+          amount?: number
+          created_at?: string
+          purpose?: string
+          reference?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       product_reviews: {
         Row: {
           created_at: string
@@ -5240,6 +5267,27 @@ export type Database = {
           title?: string
           updated_at?: string | null
           uses_count?: number | null
+        }
+        Relationships: []
+      }
+      tier_config: {
+        Row: {
+          daily_add: number
+          max_balance: number
+          tier: string
+          updated_at: string
+        }
+        Insert: {
+          daily_add: number
+          max_balance: number
+          tier: string
+          updated_at?: string
+        }
+        Update: {
+          daily_add?: number
+          max_balance?: number
+          tier?: string
+          updated_at?: string
         }
         Relationships: []
       }
