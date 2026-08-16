@@ -27,6 +27,9 @@ interface RewardBoxPopupProps {
 // ---------------------------------------------------------------------------
 const useRewardAudio = () => {
   const ctxRef = useRef<AudioContext | null>(null);
+  const audioElRef = useRef<HTMLAudioElement | null>(null);
+  const sourceNodeRef = useRef<MediaElementAudioSourceNode | null>(null);
+  const fireworksGainRef = useRef<GainNode | null>(null);
 
   const getCtx = () => {
     if (!ctxRef.current) {
@@ -35,6 +38,26 @@ const useRewardAudio = () => {
     }
     if (ctxRef.current.state === 'suspended') ctxRef.current.resume();
     return ctxRef.current;
+  };
+
+  // Real recorded fireworks audio (twinfishaudio-fireworks-225207.mp3), routed
+  // through a GainNode so it can fade in/out and sit under the synthesized
+  // pop + coin chimes rather than clashing with them. The source file is ~3
+  // minutes long; we only ever play the first few seconds of it.
+  const getFireworksNodes = (ctx: AudioContext) => {
+    if (!audioElRef.current) {
+      const el = new Audio('/sounds/fireworks.mp3');
+      el.preload = 'auto';
+      el.crossOrigin = 'anonymous';
+      audioElRef.current = el;
+      const source = ctx.createMediaElementSource(el);
+      const gain = ctx.createGain();
+      gain.gain.value = 0;
+      source.connect(gain).connect(ctx.destination);
+      sourceNodeRef.current = source;
+      fireworksGainRef.current = gain;
+    }
+    return { el: audioElRef.current!, gain: fireworksGainRef.current! };
   };
 
   // a) deep sub-bass pop - box opening
@@ -62,57 +85,6 @@ const useRewardAudio = () => {
     click.stop(at + 0.05);
   };
 
-  // b1) rising whistle - rocket launching
-  const whistle = (ctx: AudioContext, at: number, duration: number, pan: number) => {
-    const osc = ctx.createOscillator();
-    const gain = ctx.createGain();
-    const panner = ctx.createStereoPanner();
-    osc.type = 'sine';
-    osc.frequency.setValueAtTime(500, at);
-    osc.frequency.exponentialRampToValueAtTime(2200, at + duration);
-    gain.gain.setValueAtTime(0.0001, at);
-    gain.gain.exponentialRampToValueAtTime(0.22, at + duration * 0.6);
-    gain.gain.exponentialRampToValueAtTime(0.0001, at + duration);
-    panner.pan.value = pan;
-    osc.connect(gain).connect(panner).connect(ctx.destination);
-    osc.start(at);
-    osc.stop(at + duration + 0.05);
-  };
-
-  // b2) heavy stereo thunder/crackle - firework detonation
-  const thunder = (ctx: AudioContext, at: number, pan: number) => {
-    const rumble = ctx.createOscillator();
-    const rumbleGain = ctx.createGain();
-    rumble.type = 'sine';
-    rumble.frequency.setValueAtTime(90, at);
-    rumble.frequency.exponentialRampToValueAtTime(28, at + 0.5);
-    rumbleGain.gain.setValueAtTime(0.0001, at);
-    rumbleGain.gain.exponentialRampToValueAtTime(0.8, at + 0.02);
-    rumbleGain.gain.exponentialRampToValueAtTime(0.0001, at + 0.55);
-    const rumblePan = ctx.createStereoPanner();
-    rumblePan.pan.value = pan;
-    rumble.connect(rumbleGain).connect(rumblePan).connect(ctx.destination);
-    rumble.start(at);
-    rumble.stop(at + 0.6);
-
-    const bufferSize = Math.floor(ctx.sampleRate * 0.45);
-    const buffer = ctx.createBuffer(1, bufferSize, ctx.sampleRate);
-    const chan = buffer.getChannelData(0);
-    for (let i = 0; i < bufferSize; i++) chan[i] = (Math.random() * 2 - 1) * (1 - i / bufferSize) ** 1.5;
-    const noise = ctx.createBufferSource();
-    noise.buffer = buffer;
-    const filter = ctx.createBiquadFilter();
-    filter.type = 'bandpass';
-    filter.frequency.value = 2200 + Math.random() * 800;
-    const noiseGain = ctx.createGain();
-    noiseGain.gain.setValueAtTime(0.55, at);
-    noiseGain.gain.exponentialRampToValueAtTime(0.001, at + 0.4);
-    const noisePan = ctx.createStereoPanner();
-    noisePan.pan.value = pan;
-    noise.connect(filter).connect(noiseGain).connect(noisePan).connect(ctx.destination);
-    noise.start(at);
-  };
-
   // c) multi-pitch coin chime
   const coinChime = (ctx: AudioContext, at: number) => {
     const basePitches = [1568, 1760, 2093, 2349];
@@ -135,19 +107,36 @@ const useRewardAudio = () => {
     try {
       const ctx = getCtx();
       const now = ctx.currentTime;
+      const { el, gain } = getFireworksNodes(ctx);
 
-      // Phase 2 (1.0s - 1.8s): pop, then 2 rocket launches + detonations
+      // Box-open pop at the moment the lid flies off (phase 2 start)
       pop(ctx, now + 1.0);
-      whistle(ctx, now + 1.05, 0.3, -0.4);
-      thunder(ctx, now + 1.4, -0.4);
-      whistle(ctx, now + 1.25, 0.3, 0.5);
-      thunder(ctx, now + 1.62, 0.5);
 
-      // Phase 3 (1.8s - 3.5s): bigger detonations across the screen
-      thunder(ctx, now + 1.9, -0.2);
-      thunder(ctx, now + 2.3, 0.35);
-      thunder(ctx, now + 2.8, -0.15);
-      thunder(ctx, now + 3.2, 0.2);
+      // Real fireworks recording carries phase 2's rocket/detonation sound
+      // and phase 3's full-screen bursts. Delaying el.play() itself (rather
+      // than pre-scheduling silence) means the file's true beginning lines
+      // up with the pop, instead of skipping its own opening seconds.
+      setTimeout(() => {
+        try {
+          el.currentTime = 0;
+          const t = ctx.currentTime;
+          gain.gain.cancelScheduledValues(t);
+          gain.gain.setValueAtTime(0, t);
+          gain.gain.linearRampToValueAtTime(0.8, t + 0.15);
+          el.play().catch(() => {});
+        } catch { /* noop */ }
+      }, 1000);
+
+      setTimeout(() => {
+        try {
+          const t = ctx.currentTime;
+          gain.gain.cancelScheduledValues(t);
+          gain.gain.setValueAtTime(gain.gain.value, t);
+          gain.gain.linearRampToValueAtTime(0, t + 0.5);
+        } catch { /* noop */ }
+      }, 4100);
+
+      setTimeout(() => { try { el.pause(); } catch { /* noop */ } }, 4700);
 
       // coin chimes as coins land, spaced through phase 3
       for (let i = 0; i < 7; i++) {

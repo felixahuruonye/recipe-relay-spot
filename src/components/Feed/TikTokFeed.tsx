@@ -1754,7 +1754,7 @@ const TikTokFeed: React.FC = () => {
                     autoScroll={autoScroll}
                     onToggleMute={() => setIsMuted(!isMuted)}
                     onLike={() => handleLike(post.id)}
-                    onRewardPreview={() => setRewardBox({ amount: 500, currency: 'NGN', reasonLabel: 'Watch & Earn', newBalance: 1000, imageSrc: '/rewards/watch-earn-reveal.jpg' })}
+                    onRewardPreview={() => setRewardBox({ amount: 500, currency: 'NGN', reasonLabel: 'Watch & Earn', newBalance: 1000 })}
                     onFollow={() => handleFollow(post.user_id)}
                     onComment={() => { setActiveCommentPostId(post.id); setShowComments(true); }}
                     onShare={() => { setActiveSharePost(post); setShowShareMenu(true); }}
