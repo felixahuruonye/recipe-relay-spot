@@ -264,6 +264,7 @@ export const RewardBoxPopup = ({ data, onClose }: RewardBoxPopupProps) => {
   const [phase, setPhase] = useState<'popup' | 'explode' | 'reveal'>('popup');
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const playAudio = useRewardAudio();
+  const isChest = data?.variant === 'chest';
 
   const floatingParticles = useMemo(
     () =>
