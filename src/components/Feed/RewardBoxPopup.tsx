@@ -452,7 +452,12 @@ export const RewardBoxPopup = ({ data, onClose }: RewardBoxPopupProps) => {
                   <Star className="w-8 h-8 text-yellow-400 fill-yellow-400 drop-shadow shrink-0" />
                   +{data.amount.toLocaleString()} {data.currency} EARNED!
                 </motion.div>
-                <p className="mt-2 text-white/90 font-semibold text-base">
+                {data.username && (
+                  <p className="mt-2 text-yellow-200 font-black tracking-wide text-lg uppercase drop-shadow">
+                    @{data.username}
+                  </p>
+                )}
+                <p className="mt-1 text-white/90 font-semibold text-base">
                   from "{data.reasonLabel}" activity
                 </p>
                 {typeof data.newBalance === 'number' && (
