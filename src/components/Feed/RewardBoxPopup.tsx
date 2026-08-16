@@ -13,6 +13,8 @@ export interface RewardBoxData {
   // instead of the procedurally-drawn text, since it only fits the
   // specific baked-in amount/balance it was made for.
   imageSrc?: string;
+  variant?: 'gift' | 'chest';
+  username?: string;
 }
 
 interface RewardBoxPopupProps {
