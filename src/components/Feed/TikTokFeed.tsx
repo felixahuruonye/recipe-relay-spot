@@ -1201,11 +1201,26 @@ const TikTokFeed: React.FC = () => {
         loadMyProfile();
         const row = payload.new;
         if (payload.eventType === 'INSERT' && row?.type?.includes('earn') && Number(row.amount) > 0) {
-          const label = String(row.type).replace(/_/g, ' ').replace('earn', '').trim() || 'reward';
+          const typeStr = String(row.type);
+          const labelMap: Record<string, string> = {
+            view: 'Watch & Earn',
+            viewer: 'Watch & Earn',
+            story: 'Story & Earn',
+            post: 'Post & Earn',
+            upload: 'Upload & Earn',
+            uploader: 'Upload & Earn',
+            musician: 'Music & Earn',
+            platform: 'Platform Reward',
+          };
+          const key = Object.keys(labelMap).find((k) => typeStr.startsWith(k));
+          const reasonLabel = key ? labelMap[key] : 'Watch & Earn';
+          const amount = Number(row.amount);
+          const priorBalance = Number(myProfile?.wallet_balance ?? 0);
           setRewardBox({
-            amount: Number(row.amount),
+            amount,
             currency: row.currency || 'NGN',
-            reasonLabel: label.charAt(0).toUpperCase() + label.slice(1),
+            reasonLabel,
+            newBalance: priorBalance > 0 ? priorBalance + amount : undefined,
           });
         }
       })
@@ -1739,7 +1754,7 @@ const TikTokFeed: React.FC = () => {
                     autoScroll={autoScroll}
                     onToggleMute={() => setIsMuted(!isMuted)}
                     onLike={() => handleLike(post.id)}
-                    onRewardPreview={() => setRewardBox({ amount: 50, currency: 'NGN', reasonLabel: 'Watch reward' })}
+                    onRewardPreview={() => setRewardBox({ amount: 500, currency: 'NGN', reasonLabel: 'Watch & Earn', newBalance: 1000 })}
                     onFollow={() => handleFollow(post.user_id)}
                     onComment={() => { setActiveCommentPostId(post.id); setShowComments(true); }}
                     onShare={() => { setActiveSharePost(post); setShowShareMenu(true); }}
