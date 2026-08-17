@@ -8,3 +8,6 @@ verify_jwt = false
 
 [functions.music-search]
 verify_jwt = false
+
+[functions.offer-postback]
+verify_jwt = false
