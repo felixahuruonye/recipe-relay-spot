@@ -3171,6 +3171,116 @@ export type Database = {
           },
         ]
       }
+      offer_task_completions: {
+        Row: {
+          completed_at: string | null
+          created_at: string
+          id: string
+          naira_credited: number
+          provider: string
+          stars_credited: number
+          status: string
+          task_id: string | null
+          task_title: string | null
+          transaction_id: string | null
+          user_id: string
+          username: string | null
+        }
+        Insert: {
+          completed_at?: string | null
+          created_at?: string
+          id?: string
+          naira_credited?: number
+          provider?: string
+          stars_credited?: number
+          status?: string
+          task_id?: string | null
+          task_title?: string | null
+          transaction_id?: string | null
+          user_id: string
+          username?: string | null
+        }
+        Update: {
+          completed_at?: string | null
+          created_at?: string
+          id?: string
+          naira_credited?: number
+          provider?: string
+          stars_credited?: number
+          status?: string
+          task_id?: string | null
+          task_title?: string | null
+          transaction_id?: string | null
+          user_id?: string
+          username?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "offer_task_completions_task_id_fkey"
+            columns: ["task_id"]
+            isOneToOne: false
+            referencedRelation: "offer_tasks"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      offer_tasks: {
+        Row: {
+          active: boolean
+          category: string
+          created_at: string
+          created_by: string | null
+          description: string | null
+          est_minutes: number
+          featured: boolean
+          id: string
+          image_url: string | null
+          instructions: string | null
+          payout_naira: number
+          payout_stars: number
+          provider: string
+          title: string
+          updated_at: string
+          url: string | null
+        }
+        Insert: {
+          active?: boolean
+          category?: string
+          created_at?: string
+          created_by?: string | null
+          description?: string | null
+          est_minutes?: number
+          featured?: boolean
+          id?: string
+          image_url?: string | null
+          instructions?: string | null
+          payout_naira?: number
+          payout_stars?: number
+          provider?: string
+          title: string
+          updated_at?: string
+          url?: string | null
+        }
+        Update: {
+          active?: boolean
+          category?: string
+          created_at?: string
+          created_by?: string | null
+          description?: string | null
+          est_minutes?: number
+          featured?: boolean
+          id?: string
+          image_url?: string | null
+          instructions?: string | null
+          payout_naira?: number
+          payout_stars?: number
+          provider?: string
+          title?: string
+          updated_at?: string
+          url?: string | null
+        }
+        Relationships: []
+      }
       orders: {
         Row: {
           amount_ngn: number
@@ -6593,7 +6703,20 @@ export type Database = {
       }
       archive_old_posts: { Args: never; Returns: undefined }
       auto_archive_old_posts: { Args: never; Returns: undefined }
+      claim_platform_task: { Args: { p_task_id: string }; Returns: Json }
       complete_onboarding: { Args: never; Returns: undefined }
+      credit_offer_completion: {
+        Args: {
+          p_naira: number
+          p_provider: string
+          p_stars: number
+          p_task_id: string
+          p_task_title: string
+          p_transaction_id: string
+          p_user_id: string
+        }
+        Returns: Json
+      }
       deduct_stars_for_service: {
         Args: { p_amount: number; p_description: string; p_user_id: string }
         Returns: boolean
@@ -6698,6 +6821,7 @@ export type Database = {
         Args: { p_amount: number; p_meta?: Json; p_type: string }
         Returns: Json
       }
+      start_offer_task: { Args: { p_task_id: string }; Returns: Json }
       sync_post_view_count: { Args: { p_post_id: string }; Returns: undefined }
       tip_post: { Args: { p_post_id: string; p_stars: number }; Returns: Json }
       track_search: { Args: { search_keyword: string }; Returns: undefined }
