@@ -98,24 +98,26 @@ const Navigation = () => {
 
         {tabs.slice(2).map(({ icon: Icon, label, path, badge }) => {
           const isActive = location.pathname === path;
+          const isEarn = path === '/tasks';
           return (
             <button
               key={path}
               onClick={() => navigate(path)}
-              className={`flex flex-col items-center justify-center flex-1 py-2 transition-colors relative ${isActive ? 'text-white' : 'text-white/50 hover:text-white'}`}
+              className={`flex flex-col items-center justify-center flex-1 py-2 transition-colors relative ${isActive ? 'text-white' : isEarn ? 'text-yellow-400' : 'text-white/50 hover:text-white'}`}
             >
               <div className="relative">
-                <Icon size={20} />
+                <Icon size={20} className={isEarn ? 'animate-pulse drop-shadow-[0_0_8px_rgba(250,204,21,0.9)]' : undefined} />
                 {(badge ?? 0) > 0 && (
                   <span className="absolute -top-1.5 -right-2 bg-destructive text-destructive-foreground text-[10px] font-bold rounded-full min-w-[16px] h-4 flex items-center justify-center px-1">
                     {(badge ?? 0) > 99 ? '99+' : badge}
                   </span>
                 )}
               </div>
-              <span className="text-[11px] mt-0.5">{label}</span>
+              <span className={`text-[11px] mt-0.5 ${isEarn && !isActive ? 'text-yellow-400' : ''}`}>{label}</span>
             </button>
           );
         })}
+
 
         <Sheet open={profileOpen} onOpenChange={setProfileOpen}>
           <SheetTrigger asChild>
