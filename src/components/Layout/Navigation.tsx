@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
-import { Home, MessageCircle, ShoppingBag, User, Bell, Settings, Mail, Share2, Wallet, Plus } from 'lucide-react';
+import { Home, MessageCircle, ShoppingBag, User, Bell, Settings, Mail, Share2, Wallet, Plus, Gift } from 'lucide-react';
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from '@/components/ui/sheet';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -48,12 +48,15 @@ const Navigation = () => {
   const tabs = [
     { icon: Home, label: 'Watch', path: '/', badge: 0 },
     { icon: MessageCircle, label: 'Chat', path: '/chat', badge: chatCount },
-    { icon: Wallet, label: 'Wallet', path: '/wallet', badge: 0 },
+    { icon: Gift, label: 'Earn', path: '/tasks', badge: 0 },
     { icon: ShoppingBag, label: 'Market', path: '/marketplace', badge: 0 },
   ];
 
+
   const profileMenu = [
     { icon: User, label: 'Profile', path: '/profile', desc: 'Your page & posts' },
+    { icon: Wallet, label: 'Wallet', path: '/wallet', desc: 'Balance, Stars & withdrawals' },
+
     { icon: Bell, label: 'Activities', path: '/notifications', desc: 'Notifications', badge: notifCount },
     { icon: Mail, label: 'Contact Support', path: '/contact-admin', desc: 'Reach the Lenory team' },
     { icon: Share2, label: 'Share Lenory', path: '/share', desc: 'Invite your friends' },
@@ -97,24 +100,26 @@ const Navigation = () => {
 
         {tabs.slice(2).map(({ icon: Icon, label, path, badge }) => {
           const isActive = location.pathname === path;
+          const isEarn = path === '/tasks';
           return (
             <button
               key={path}
               onClick={() => navigate(path)}
-              className={`flex flex-col items-center justify-center flex-1 py-2 transition-colors relative ${isActive ? 'text-white' : 'text-white/50 hover:text-white'}`}
+              className={`flex flex-col items-center justify-center flex-1 py-2 transition-colors relative ${isActive ? 'text-white' : isEarn ? 'text-yellow-400' : 'text-white/50 hover:text-white'}`}
             >
               <div className="relative">
-                <Icon size={20} />
+                <Icon size={20} className={isEarn ? 'animate-pulse drop-shadow-[0_0_8px_rgba(250,204,21,0.9)]' : undefined} />
                 {(badge ?? 0) > 0 && (
                   <span className="absolute -top-1.5 -right-2 bg-destructive text-destructive-foreground text-[10px] font-bold rounded-full min-w-[16px] h-4 flex items-center justify-center px-1">
                     {(badge ?? 0) > 99 ? '99+' : badge}
                   </span>
                 )}
               </div>
-              <span className="text-[11px] mt-0.5">{label}</span>
+              <span className={`text-[11px] mt-0.5 ${isEarn && !isActive ? 'text-yellow-400' : ''}`}>{label}</span>
             </button>
           );
         })}
+
 
         <Sheet open={profileOpen} onOpenChange={setProfileOpen}>
           <SheetTrigger asChild>

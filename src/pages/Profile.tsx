@@ -279,22 +279,30 @@ const Profile = () => {
 
               {isOwnProfile && (
                 <div className="flex flex-col space-y-3 pt-2">
-                  <div className="flex items-center justify-center md:justify-start space-x-4">
-                    <div className="flex items-center space-x-2">
-                      <span className="text-sm font-medium">₦{profile.wallet_balance}</span>
-                      <span className="text-xs text-muted-foreground">Wallet</span>
+                  <button
+                    onClick={() => navigate('/wallet')}
+                    className="w-full rounded-2xl border border-primary/30 bg-gradient-to-r from-primary/15 to-accent/15 p-4 text-left transition-transform active:scale-[0.98]"
+                  >
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <p className="text-[11px] uppercase tracking-wide text-muted-foreground">Wallet balance</p>
+                        <p className="text-2xl font-bold">₦{profile.wallet_balance}</p>
+                      </div>
+                      <div className="text-right">
+                        <p className="text-[11px] uppercase tracking-wide text-muted-foreground">Stars</p>
+                        <p className="flex items-center justify-end gap-1 text-lg font-bold">
+                          <Star className="w-4 h-4 text-yellow-500" />{profile.star_balance}
+                        </p>
+                      </div>
                     </div>
-                    <div className="flex items-center space-x-2">
-                      <Star className="w-4 h-4 text-yellow-500" />
-                      <span className="text-sm font-medium">{profile.star_balance}</span>
-                      <span className="text-xs text-muted-foreground">Stars</span>
-                    </div>
-                  </div>
+                    <p className="mt-2 text-[11px] text-muted-foreground">Tap to open wallet, buy Stars & withdraw</p>
+                  </button>
                   <div className="w-full max-w-xs mx-auto md:mx-0">
                     <WithdrawalForm isVip={!!profile.vip} onUpgrade={() => navigate('/vip-subscription')} />
                   </div>
                 </div>
               )}
+
             </div>
             
             <div className="flex flex-col space-y-2">
