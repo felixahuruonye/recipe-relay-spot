@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
-import { Home, MessageCircle, ShoppingBag, User, Bell, Settings, Mail, Share2, Wallet, Plus } from 'lucide-react';
+import { Home, MessageCircle, ShoppingBag, User, Bell, Settings, Mail, Share2, Wallet, Plus, Gift } from 'lucide-react';
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from '@/components/ui/sheet';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
