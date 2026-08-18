@@ -55,6 +55,8 @@ const Navigation = () => {
 
   const profileMenu = [
     { icon: User, label: 'Profile', path: '/profile', desc: 'Your page & posts' },
+    { icon: Wallet, label: 'Wallet', path: '/wallet', desc: 'Balance, Stars & withdrawals' },
+
     { icon: Bell, label: 'Activities', path: '/notifications', desc: 'Notifications', badge: notifCount },
     { icon: Mail, label: 'Contact Support', path: '/contact-admin', desc: 'Reach the Lenory team' },
     { icon: Share2, label: 'Share Lenory', path: '/share', desc: 'Invite your friends' },
