@@ -197,6 +197,12 @@ const App = () => (
                 <WalletPage />
               </ProtectedRoute>
             } />
+            <Route path="/tasks" element={
+              <ProtectedRoute>
+                <Offers />
+              </ProtectedRoute>
+            } />
+
             {/* Redirect old /feed to home - preserving any ?post= query param */}
             <Route path="/feed" element={<FeedRedirect />} />
             {/* Chat settings — Module B (global) */}
