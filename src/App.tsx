@@ -28,6 +28,8 @@ import TikTokFeed from "./components/Feed/TikTokFeed";
 import MusicianDashboard from "./pages/MusicianDashboard";
 import Storyline from "./pages/Storyline";
 import WalletPage from "./pages/WalletPage";
+import Offers from "./pages/Offers";
+
 import ChatHub from "./pages/ChatHub";
 import Welcome from "./pages/Welcome";
 import GlobalSettings from "./pages/ChatSettings/GlobalSettings";
