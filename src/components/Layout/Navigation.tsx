@@ -48,9 +48,10 @@ const Navigation = () => {
   const tabs = [
     { icon: Home, label: 'Watch', path: '/', badge: 0 },
     { icon: MessageCircle, label: 'Chat', path: '/chat', badge: chatCount },
-    { icon: Wallet, label: 'Wallet', path: '/wallet', badge: 0 },
+    { icon: Gift, label: 'Earn', path: '/tasks', badge: 0 },
     { icon: ShoppingBag, label: 'Market', path: '/marketplace', badge: 0 },
   ];
+
 
   const profileMenu = [
     { icon: User, label: 'Profile', path: '/profile', desc: 'Your page & posts' },
