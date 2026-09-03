@@ -347,18 +347,12 @@ const Profile = () => {
       </Card>
 
       {/* VIP Section */}
-      {/* Creator Dashboard & VIP Buttons */}
+      {/* Creator Dashboard Button */}
       {isOwnProfile && (
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-          <Button onClick={() => navigate('/creator-dashboard')} className="w-full bg-gradient-to-r from-blue-500 to-cyan-500 hover:from-blue-600 hover:to-cyan-600 h-12 text-white font-semibold">
-            <BarChart3 className="w-5 h-5 mr-2" />
-            Creator Dashboard
-          </Button>
-          <Button onClick={handleVipUpgrade} className="w-full bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-600 hover:to-orange-600 h-12 text-white font-semibold">
-            <Crown className="w-5 h-5 mr-2" />
-            Upgrade to VIP
-          </Button>
-        </div>
+        <Button onClick={() => navigate('/creator-dashboard')} className="w-full bg-gradient-to-r from-blue-500 to-cyan-500 hover:from-blue-600 hover:to-cyan-600 h-12 text-white font-semibold">
+          <BarChart3 className="w-5 h-5 mr-2" />
+          Creator Dashboard
+        </Button>
       )}
 
       {/* Tabs for Posts */}

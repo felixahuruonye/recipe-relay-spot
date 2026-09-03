@@ -3,19 +3,12 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { WalletBalance } from '@/components/Wallet/WalletBalance';
 import StarMarketplace from '@/pages/StarMarketplace';
 import { Wallet as WalletIcon, Star, CreditCard } from 'lucide-react';
-import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { WatchAdToEarn } from '@/components/Ads/WatchAdToEarn';
 import { WithdrawalForm } from '@/components/Profile/WithdrawalForm';
 import { useAuth } from '@/contexts/AuthContext';
 
 const WalletPage: React.FC = () => {
   const { user } = useAuth();
-
-  const handleRequestPayment = () => {
-    // TODO: Implement payment request logic
-    alert('Payment request feature coming soon!');
-  };
 
   return (
     <div className="min-h-[100dvh] bg-background pb-24">
@@ -29,13 +22,6 @@ const WalletPage: React.FC = () => {
         </div>
         <TabsContent value="wallet" className="p-4 space-y-4">
           <WalletBalance />
-          <Button 
-            onClick={handleRequestPayment}
-            className="w-full bg-gradient-to-r from-purple-500 to-pink-500 hover:from-purple-600 hover:to-pink-600 h-12 text-white font-semibold"
-          >
-            <CreditCard className="w-5 h-5 mr-2" />
-            Request Payment
-          </Button>
           <div className="flex justify-center">
             <WatchAdToEarn className="w-full max-w-sm" />
           </div>
