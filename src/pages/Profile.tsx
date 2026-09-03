@@ -7,7 +7,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Crown, Star, ShoppingBag, Settings, LogOut, Edit, Heart, MessageCircle, UserPlus, Send, Eye } from 'lucide-react';
+import { Crown, Star, ShoppingBag, Settings, LogOut, Edit, Heart, MessageCircle, UserPlus, Send, Eye, Lock, Repeat2, Bookmark, Play, Brain } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { useParams, useNavigate } from 'react-router-dom';
 import { VideoPlayer } from '@/components/Feed/VideoPlayer';
@@ -18,7 +18,6 @@ import { EditProfile } from '@/components/Profile/EditProfile';
 import { WithdrawalForm } from '@/components/Profile/WithdrawalForm';
 import { FollowersList } from '@/components/Profile/FollowersList';
 import { PostViewers } from '@/components/Profile/PostViewers';
-import { CreatorMonetizationCard } from '@/components/Profile/CreatorMonetizationCard';
 
 interface UserProfile {
   id: string;
@@ -392,157 +391,115 @@ const Profile = () => {
       )}
 
       {/* Tabs for Posts */}
-      {isOwnProfile && profile && <CreatorMonetizationCard userId={profile.id} />}
-
-      {/* Tabs for Posts */}
       <Tabs defaultValue="posts" className="space-y-4">
-        <TabsList className="grid w-full grid-cols-2">
+        <TabsList className={`grid w-full ${isOwnProfile ? 'grid-cols-2' : 'grid-cols-1'}`}>
           <TabsTrigger value="posts">{isOwnProfile ? 'My Posts' : 'Posts'}</TabsTrigger>
-          {isOwnProfile && <TabsTrigger value="settings">Settings</TabsTrigger>}
+          {isOwnProfile && <TabsTrigger value="ai"><Brain className="w-4 h-4 mr-2" />Connect Lenory AI</TabsTrigger>}
         </TabsList>
 
-        <TabsContent value="posts">
-          <div className="space-y-4">
-            {userPosts.length > 0 ? (
-              userPosts.map((post: any) => {
-                const currentUserLiked = isPostLiked(post.id);
-                const likesCount = postLikes[post.id]?.length || 0;
+        <TabsContent value="posts" className="space-y-4">
+          {/* Filter Buttons */}
+          <div className="flex gap-2 overflow-x-auto pb-2">
+            <Button variant="outline" size="sm" className="gap-1 flex-shrink-0">
+              <Lock className="w-4 h-4" />
+              <span className="hidden sm:inline">Privacy</span>
+            </Button>
+            <Button variant="outline" size="sm" className="gap-1 flex-shrink-0">
+              <Repeat2 className="w-4 h-4" />
+              <span className="hidden sm:inline">Reposts</span>
+            </Button>
+            <Button variant="outline" size="sm" className="gap-1 flex-shrink-0">
+              <Bookmark className="w-4 h-4" />
+              <span className="hidden sm:inline">Bookmarks</span>
+            </Button>
+            <Button variant="outline" size="sm" className="gap-1 flex-shrink-0">
+              <Heart className="w-4 h-4" />
+              <span className="hidden sm:inline">Reactions</span>
+            </Button>
+          </div>
+
+          {/* Posts Grid */}
+          {userPosts.length > 0 ? (
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+              {userPosts.map((post: any) => {
+                const firstMediaUrl = post.media_urls?.[0];
+                const isVideo = firstMediaUrl?.match(/\.(mp4|webm|ogg|mov)$/i) || firstMediaUrl?.includes('video');
 
                 return (
-                  <Card key={post.id} className="overflow-hidden">
-                    <CardHeader>
-                      <div className="flex items-center justify-between">
-                        <div>
-                          <h3 className="font-semibold mb-2">{post.title}</h3>
-                          <Badge variant="outline" className="text-xs">{post.category}</Badge>
+                  <div
+                    key={post.id}
+                    className="group relative rounded-lg overflow-hidden bg-muted aspect-square cursor-pointer"
+                  >
+                    {/* Thumbnail */}
+                    {firstMediaUrl ? (
+                      isVideo ? (
+                        <div className="w-full h-full bg-black flex items-center justify-center">
+                          <video
+                            src={firstMediaUrl}
+                            className="w-full h-full object-cover"
+                          />
                         </div>
-                        <PostMenu postId={post.id} postOwnerId={post.user_id} onPostDeleted={fetchUserPosts} />
+                      ) : (
+                        <img
+                          src={firstMediaUrl}
+                          alt={post.title}
+                          className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-200"
+                        />
+                      )
+                    ) : (
+                      <div className="w-full h-full flex items-center justify-center bg-gradient-to-br from-primary/20 to-primary/5">
+                        <p className="text-center text-muted-foreground text-xs px-4">{post.title}</p>
                       </div>
-                    </CardHeader>
-                    
-                    <CardContent className="space-y-4">
-                      <p className="text-sm whitespace-pre-line">{post.body}</p>
-                      
-                      {post.media_urls && post.media_urls.length > 0 && (
-                        <div className="space-y-2">
-                          {post.media_urls.map((url: string, index: number) => {
-                            const isVideo = url.match(/\.(mp4|webm|ogg)$/i) || url.includes('video');
-                            return isVideo ? (
-                              <VideoPlayer key={index} src={url} />
-                            ) : (
-                              <img key={index} src={url} alt={`Post media ${index + 1}`} className="w-full rounded-lg max-h-96 object-cover" />
-                            );
-                          })}
-                        </div>
-                      )}
+                    )}
 
-                      <div className="flex items-center justify-between pt-4 border-t">
-                        <div className="flex items-center space-x-4">
-                          <button
-                            onClick={() => handleLike(post.id)}
-                            className={`flex items-center space-x-2 ${currentUserLiked ? 'text-red-500' : 'text-muted-foreground'} hover:text-red-500 transition-colors`}
-                          >
-                            <Heart className={`h-5 w-5 ${currentUserLiked ? 'fill-current' : ''}`} />
-                            <span className="text-sm font-medium">{likesCount}</span>
-                          </button>
-
-                          <button
-                            onClick={() => setExpandedComments(prev => ({ ...prev, [post.id]: !prev[post.id] }))}
-                            className="flex items-center space-x-2 text-muted-foreground hover:text-foreground transition-colors"
-                          >
-                            <MessageCircle className="h-5 w-5" />
-                            <span className="text-sm">{post.comments_count || 0}</span>
-                          </button>
-
-                          {/* Eye icon for post viewers */}
-                          <PostViewers postId={post.id} viewCount={post.view_count || 0} />
-                        </div>
-
-                        <ShareMenu postId={post.id} postTitle={post.title} postImage={post.media_urls?.[0]} postDescription={post.body} postMediaType={post.media_urls?.[0] && (post.media_urls[0].match(/\.(mp4|webm|ogg|mov)$/i) || post.media_urls[0].includes('video')) ? 'video' : (post.media_urls?.[0] ? 'image' : undefined)} />
+                    {/* Overlay - Show on hover */}
+                    <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity duration-200 flex items-center justify-center">
+                      <div className="flex flex-col items-center gap-2">
+                        <Play className="w-12 h-12 text-white fill-white" />
+                        <p className="text-white text-sm font-medium">{post.view_count || 0} views</p>
                       </div>
+                    </div>
 
-                      {expandedComments[post.id] && (
-                        <div className="pt-4 border-t">
-                          <CommentSection postId={post.id} />
-                        </div>
-                      )}
-                    </CardContent>
-                  </Card>
+                    {/* Pinned Badge */}
+                    {post.pinned && (
+                      <Badge className="absolute top-2 left-2 z-10">Pinned</Badge>
+                    )}
+
+                    {/* View Count Badge */}
+                    <div className="absolute bottom-2 left-2 z-10 flex items-center gap-1 bg-black/60 text-white px-2 py-1 rounded text-xs font-medium">
+                      <Play className="w-3 h-3 fill-current" />
+                      {post.view_count || 0}
+                    </div>
+                  </div>
                 );
-              })
-            ) : (
-              <Card>
-                <CardContent className="py-8 text-center">
-                  <p className="text-muted-foreground">No posts yet</p>
-                </CardContent>
-              </Card>
-            )}
-          </div>
+              })}
+            </div>
+          ) : (
+            <Card>
+              <CardContent className="py-12 text-center">
+                <p className="text-muted-foreground mb-3">No posts yet</p>
+                <p className="text-sm text-muted-foreground">Start sharing content to get your posts displayed here</p>
+              </CardContent>
+            </Card>
+          )}
         </TabsContent>
 
         {isOwnProfile && (
-          <TabsContent value="settings">
-            <Card>
-              <CardHeader><CardTitle>Account Settings</CardTitle></CardHeader>
-              <CardContent>
-                <div className="space-y-4">
-                  <div>
-                    <p className="text-sm font-medium">Account Created</p>
-                    <p className="text-sm text-muted-foreground">{new Date(profile.created_at).toLocaleDateString()}</p>
-                  </div>
-                  <div>
-                    <p className="text-sm font-medium">Email</p>
-                    <p className="text-sm text-muted-foreground">{user?.email}</p>
-                  </div>
-                  <div>
-                    <p className="text-sm font-medium">User ID</p>
-                    <p className="text-xs text-muted-foreground font-mono break-all">{profile.id}</p>
-                  </div>
-                  {profile.vip && (
-                    <div>
-                      <p className="text-sm font-medium">VIP Status</p>
-                      <p className="text-sm text-muted-foreground">Expires: {new Date(profile.vip_expires_at).toLocaleDateString()}</p>
-                    </div>
-                  )}
-                </div>
-              </CardContent>
-            </Card>
-
-            {/* Delete Account */}
-            <Card className="border-destructive mt-4">
+          <TabsContent value="ai">
+            <Card className="glass-card">
               <CardHeader>
-                <CardTitle className="text-destructive text-lg">Delete Account</CardTitle>
+                <CardTitle className="flex items-center gap-2">
+                  <Brain className="w-5 h-5" />
+                  Connect Lenory AI
+                </CardTitle>
               </CardHeader>
-              <CardContent className="space-y-3">
+              <CardContent className="space-y-4">
                 <p className="text-sm text-muted-foreground">
-                  This will permanently delete your account, all posts, messages, groups, balances, and
-                  remove you from Supabase authentication. This cannot be undone.
+                  Integrate AI-powered features into your content creation and audience insights. Click below to access full Lenory AI integration settings.
                 </p>
-                <Button
-                  variant="destructive"
-                  className="w-full"
-                  onClick={async () => {
-                    if (!confirm('Are you ABSOLUTELY sure? This will permanently delete your entire account and all your data. This cannot be undone.')) return;
-                    const confirmText = prompt('Type DELETE to permanently remove your account:');
-                    if (confirmText !== 'DELETE') {
-                      toast({ title: 'Cancelled', description: 'Account deletion cancelled.' });
-                      return;
-                    }
-                    try {
-                      const res = await supabase.functions.invoke('delete-user', {
-                        body: { target_user_id: user?.id, self_delete: true },
-                      });
-                      if (res.error) throw new Error(res.error.message);
-                      if (res.data?.success === false) throw new Error(res.data.error);
-                      toast({ title: 'Account Deleted', description: 'Your account has been permanently removed.' });
-                      await signOut();
-                    } catch (err: any) {
-                      toast({ title: 'Error', description: err.message, variant: 'destructive' });
-                    }
-                  }}
-                >
-                  <Settings className="w-4 h-4 mr-2" />
-                  Delete My Account Permanently
+                <Button onClick={() => navigate('/connect-lenory-ai')} className="w-full gap-2">
+                  <Brain className="w-4 h-4" />
+                  Go to Lenory AI Setup
                 </Button>
               </CardContent>
             </Card>

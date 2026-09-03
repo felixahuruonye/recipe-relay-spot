@@ -29,6 +29,8 @@ import MusicianDashboard from "./pages/MusicianDashboard";
 import Storyline from "./pages/Storyline";
 import WalletPage from "./pages/WalletPage";
 import Offers from "./pages/Offers";
+import CreatorDashboard from "./pages/CreatorDashboard";
+import ConnectLenoryAI from "./pages/ConnectLenoryAI";
 
 import ChatHub from "./pages/ChatHub";
 import Welcome from "./pages/Welcome";
@@ -202,6 +204,16 @@ const App = () => (
             <Route path="/tasks" element={
               <ProtectedRoute>
                 <Offers />
+              </ProtectedRoute>
+            } />
+            <Route path="/creator-dashboard" element={
+              <ProtectedRoute>
+                <CreatorDashboard />
+              </ProtectedRoute>
+            } />
+            <Route path="/connect-lenory-ai" element={
+              <ProtectedRoute>
+                <ConnectLenoryAI />
               </ProtectedRoute>
             } />
 
