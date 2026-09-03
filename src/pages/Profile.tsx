@@ -106,80 +106,88 @@ const Profile = () => {
   };
 
   const fetchUserPosts = async (filter: 'all' | 'privacy' | 'reposts' | 'bookmarks' | 'reactions' = 'all') => {
-    if (!profileId) return;
+    if (!profileId && filter !== 'bookmarks' && filter !== 'reactions') return;
     try {
       let postsData: any[] = [];
 
       if (filter === 'reactions') {
         // Get ALL posts that the current user has liked (not just their own)
-        if (!user) return;
-        const { data: likedPosts } = await supabase
+        if (!user) {
+          toast({ title: 'Login required', description: 'Please login to view your reactions' });
+          return;
+        }
+        const { data: likedPosts, error: likesError } = await supabase
           .from('post_likes')
           .select('post_id')
           .eq('user_id', user.id);
 
+        if (likesError) throw likesError;
+
         if (likedPosts && likedPosts.length > 0) {
-          const { data } = await supabase
+          const { data, error } = await supabase
             .from('posts')
             .select('*')
             .in('id', likedPosts.map(lp => lp.post_id))
             .eq('status', 'approved')
             .order('created_at', { ascending: false });
+          if (error) throw error;
           postsData = data || [];
         }
       } else if (filter === 'bookmarks') {
         // Get ALL bookmarked posts across the app for current user
-        if (!user) return;
-        const { data: bookmarked } = await supabase
+        if (!user) {
+          toast({ title: 'Login required', description: 'Please login to view your bookmarks' });
+          return;
+        }
+        const { data: bookmarked, error: bookmarksError } = await supabase
           .from('user_bookmarks')
           .select('post_id')
           .eq('user_id', user.id);
 
+        if (bookmarksError) throw bookmarksError;
+
         if (bookmarked && bookmarked.length > 0) {
-          const { data } = await supabase
+          const { data, error } = await supabase
             .from('posts')
             .select('*')
             .in('id', bookmarked.map(b => b.post_id))
             .eq('status', 'approved')
             .order('created_at', { ascending: false });
+          if (error) throw error;
           postsData = data || [];
         }
       } else if (filter === 'privacy') {
-        // Get private posts from the profile user
-        const { data } = await supabase
+        // Get private posts from the profile user - only if viewing own profile
+        if (!isOwnProfile) return;
+        const { data, error } = await supabase
           .from('posts')
           .select('*')
           .eq('user_id', profileId)
           .eq('status', 'approved')
           .eq('is_private', true)
           .order('created_at', { ascending: false });
+        if (error) throw error;
         postsData = data || [];
       } else if (filter === 'reposts') {
         // Get reposted storylines from the profile user
-        const { data } = await supabase
+        const { data, error } = await supabase
           .from('posts')
           .select('*')
           .eq('user_id', profileId)
           .eq('status', 'approved')
           .eq('is_repost', true)
           .order('created_at', { ascending: false });
+        if (error) throw error;
         postsData = data || [];
       } else {
         // All posts (default) - hide private posts from other users
-        let query = supabase
+        const { data, error } = await supabase
           .from('posts')
           .select('*')
           .eq('user_id', profileId)
-          .eq('status', 'approved');
-
-        // Hide private posts from other users
-        if (!isOwnProfile) {
-          query = query.eq('is_private', false);
-        }
-
-        const { data, error } = await query
+          .eq('status', 'approved')
+          .eq('is_private', false)
           .order('created_at', { ascending: false });
-
         if (error) throw error;
         postsData = data || [];
       }
@@ -217,6 +225,7 @@ const Profile = () => {
       setUserPosts(postsWithCounts);
     } catch (error) {
       console.error('Error fetching posts:', error);
+      toast({ title: 'Error', description: 'Failed to load posts', variant: 'destructive' });
     }
   };
 
@@ -502,24 +511,28 @@ const Profile = () => {
               <span className="hidden sm:inline">All Posts</span>
               <span className="sm:hidden">All</span>
             </Button>
-            <Button 
-              onClick={() => handleFilterChange('privacy')}
-              variant={activeFilter === 'privacy' ? 'default' : 'outline'}
-              size="sm" 
-              className={`gap-1 flex-shrink-0 ${activeFilter === 'privacy' ? 'bg-primary text-primary-foreground' : ''}`}
-            >
-              <Lock className="w-4 h-4" />
-              <span className="hidden sm:inline">Privacy</span>
-            </Button>
-            <Button 
-              onClick={() => handleFilterChange('reposts')}
-              variant={activeFilter === 'reposts' ? 'default' : 'outline'}
-              size="sm" 
-              className={`gap-1 flex-shrink-0 ${activeFilter === 'reposts' ? 'bg-primary text-primary-foreground' : ''}`}
-            >
-              <Repeat2 className="w-4 h-4" />
-              <span className="hidden sm:inline">Reposts</span>
-            </Button>
+            {isOwnProfile && (
+              <Button 
+                onClick={() => handleFilterChange('privacy')}
+                variant={activeFilter === 'privacy' ? 'default' : 'outline'}
+                size="sm" 
+                className={`gap-1 flex-shrink-0 ${activeFilter === 'privacy' ? 'bg-primary text-primary-foreground' : ''}`}
+              >
+                <Lock className="w-4 h-4" />
+                <span className="hidden sm:inline">Privacy</span>
+              </Button>
+            )}
+            {isOwnProfile && (
+              <Button 
+                onClick={() => handleFilterChange('reposts')}
+                variant={activeFilter === 'reposts' ? 'default' : 'outline'}
+                size="sm" 
+                className={`gap-1 flex-shrink-0 ${activeFilter === 'reposts' ? 'bg-primary text-primary-foreground' : ''}`}
+              >
+                <Repeat2 className="w-4 h-4" />
+                <span className="hidden sm:inline">Reposts</span>
+              </Button>
+            )}
             <Button 
               onClick={() => handleFilterChange('bookmarks')}
               variant={activeFilter === 'bookmarks' ? 'default' : 'outline'}

@@ -1022,14 +1022,6 @@ const TikTokPost: React.FC<{
           <Share2 className="w-6 h-6 text-white drop-shadow-lg" />
         </button>
 
-        {isOwnPost && (
-          <button onClick={() => toast({ title: 'Promote Video', description: 'Promotion feature coming soon!' })} className="flex flex-col items-center gap-0.5">
-            <div className="p-2 rounded-full bg-cyan-500/30 border border-cyan-500">
-              <Zap className="w-5 h-5 text-cyan-400 drop-shadow-lg" />
-            </div>
-          </button>
-        )}
-
         <button onClick={() => handleAction(onSendToFriend, 'Login to send')} className="flex flex-col items-center gap-0.5">
           <Send className="w-6 h-6 text-white drop-shadow-lg" />
         </button>
