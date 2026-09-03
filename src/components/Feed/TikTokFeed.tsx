@@ -10,7 +10,7 @@ import {
   Heart, MessageCircle, Share2, Star, Volume2, VolumeX,
   Plus, Music2, Eye, Send, Copy, Disc,
   Home, Search, MessageSquare, X, Clock, Trash2, Edit, Flag, EyeOff, ChevronLeft, ChevronRight, ExternalLink,
-  Wallet, ShoppingBag, User
+  Wallet, ShoppingBag, User, Bookmark, Zap
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { useToast } from '@/hooks/use-toast';
@@ -605,6 +605,55 @@ const EnhancedShareMenu: React.FC<{
 }> = ({ open, onClose, post, isOwnPost, onDelete, onEdit }) => {
   const { toast } = useToast();
   const navigate = useNavigate();
+  const { user } = useAuth();
+  const [isBookmarked, setIsBookmarked] = useState(false);
+
+  useEffect(() => {
+    checkIfBookmarked();
+  }, [post.id, user?.id]);
+
+  const checkIfBookmarked = async () => {
+    if (!user) return;
+    try {
+      const { data, count } = await supabase
+        .from('user_bookmarks')
+        .select('*', { count: 'exact', head: true })
+        .eq('post_id', post.id)
+        .eq('user_id', user.id);
+      setIsBookmarked((count || 0) > 0);
+    } catch (error) {
+      console.error('Error checking bookmark:', error);
+    }
+  };
+
+  const handleBookmark = async () => {
+    if (!user) {
+      toast({ title: 'Login required', description: 'Please login to bookmark posts' });
+      return;
+    }
+
+    try {
+      if (isBookmarked) {
+        await supabase
+          .from('user_bookmarks')
+          .delete()
+          .eq('post_id', post.id)
+          .eq('user_id', user.id);
+        setIsBookmarked(false);
+        toast({ title: 'Removed from bookmarks' });
+      } else {
+        await supabase
+          .from('user_bookmarks')
+          .insert({ post_id: post.id, user_id: user.id });
+        setIsBookmarked(true);
+        toast({ title: 'Added to bookmarks' });
+      }
+    } catch (error) {
+      console.error('Error toggling bookmark:', error);
+      toast({ title: 'Error', description: 'Failed to update bookmark', variant: 'destructive' });
+    }
+    onClose();
+  };
 
   const copyLink = () => {
     navigator.clipboard.writeText(`${window.location.origin}/?post=${post.id}`);
@@ -660,6 +709,10 @@ const EnhancedShareMenu: React.FC<{
           <button onClick={copyLink} className="flex items-center gap-3 w-full p-3 rounded-lg hover:bg-muted/50">
             <Copy className="w-5 h-5 text-muted-foreground" />
             <span className="text-sm">Copy Link</span>
+          </button>
+          <button onClick={handleBookmark} className={`flex items-center gap-3 w-full p-3 rounded-lg hover:bg-muted/50 ${isBookmarked ? 'text-primary' : ''}`}>
+            <Bookmark className={`w-5 h-5 ${isBookmarked ? 'fill-current' : 'text-muted-foreground'}`} />
+            <span className="text-sm">{isBookmarked ? 'Remove from Bookmarks' : 'Add to Bookmarks'}</span>
           </button>
           <button onClick={shareNative} className="flex items-center gap-3 w-full p-3 rounded-lg hover:bg-muted/50">
             <Share2 className="w-5 h-5 text-muted-foreground" />
@@ -968,6 +1021,14 @@ const TikTokPost: React.FC<{
         <button onClick={onShare} className="flex flex-col items-center gap-0.5">
           <Share2 className="w-6 h-6 text-white drop-shadow-lg" />
         </button>
+
+        {isOwnPost && (
+          <button onClick={() => toast({ title: 'Promote Video', description: 'Promotion feature coming soon!' })} className="flex flex-col items-center gap-0.5">
+            <div className="p-2 rounded-full bg-cyan-500/30 border border-cyan-500">
+              <Zap className="w-5 h-5 text-cyan-400 drop-shadow-lg" />
+            </div>
+          </button>
+        )}
 
         <button onClick={() => handleAction(onSendToFriend, 'Login to send')} className="flex flex-col items-center gap-0.5">
           <Send className="w-6 h-6 text-white drop-shadow-lg" />
@@ -1399,6 +1460,7 @@ const TikTokFeed: React.FC = () => {
         .from('posts')
         .select('*')
         .eq('status', 'approved')
+        .eq('is_private', false)
         .or('disabled.is.null,disabled.eq.false')
         .order('boosted', { ascending: false })
         .order('created_at', { ascending: false })

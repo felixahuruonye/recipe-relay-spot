@@ -111,7 +111,7 @@ const Profile = () => {
       let postsData: any[] = [];
 
       if (filter === 'reactions') {
-        // Get posts that the current user has liked
+        // Get ALL posts that the current user has liked (not just their own)
         if (!user) return;
         const { data: likedPosts } = await supabase
           .from('post_likes')
@@ -127,18 +127,8 @@ const Profile = () => {
             .order('created_at', { ascending: false });
           postsData = data || [];
         }
-      } else if (filter === 'privacy') {
-        // Get private posts
-        const { data } = await supabase
-          .from('posts')
-          .select('*')
-          .eq('user_id', profileId)
-          .eq('status', 'approved')
-          .eq('privacy_status', 'private')
-          .order('created_at', { ascending: false });
-        postsData = data || [];
       } else if (filter === 'bookmarks') {
-        // Get bookmarked posts
+        // Get ALL bookmarked posts across the app for current user
         if (!user) return;
         const { data: bookmarked } = await supabase
           .from('user_bookmarks')
@@ -154,8 +144,18 @@ const Profile = () => {
             .order('created_at', { ascending: false });
           postsData = data || [];
         }
+      } else if (filter === 'privacy') {
+        // Get private posts from the profile user
+        const { data } = await supabase
+          .from('posts')
+          .select('*')
+          .eq('user_id', profileId)
+          .eq('status', 'approved')
+          .eq('is_private', true)
+          .order('created_at', { ascending: false });
+        postsData = data || [];
       } else if (filter === 'reposts') {
-        // Get reposted posts
+        // Get reposted storylines from the profile user
         const { data } = await supabase
           .from('posts')
           .select('*')
@@ -165,13 +165,21 @@ const Profile = () => {
           .order('created_at', { ascending: false });
         postsData = data || [];
       } else {
-        // All posts (default)
-        const { data, error } = await supabase
+        // All posts (default) - hide private posts from other users
+        let query = supabase
           .from('posts')
           .select('*')
           .eq('user_id', profileId)
-          .eq('status', 'approved')
+          .eq('status', 'approved');
+
+        // Hide private posts from other users
+        if (!isOwnProfile) {
+          query = query.eq('is_private', false);
+        }
+
+        const { data, error } = await query
           .order('created_at', { ascending: false });
+
         if (error) throw error;
         postsData = data || [];
       }
@@ -215,6 +223,60 @@ const Profile = () => {
   const handleFilterChange = (filter: 'all' | 'privacy' | 'reposts' | 'bookmarks' | 'reactions') => {
     setActiveFilter(filter);
     fetchUserPosts(filter);
+  };
+
+  const handleTogglePrivacy = async (postId: string, currentPrivacy: boolean) => {
+    try {
+      await supabase
+        .from('posts')
+        .update({ is_private: !currentPrivacy })
+        .eq('id', postId);
+      
+      toast({
+        title: 'Privacy Updated',
+        description: `Post is now ${!currentPrivacy ? 'private' : 'visible to everyone'}`,
+      });
+      
+      // Refresh posts
+      fetchUserPosts(activeFilter);
+    } catch (error) {
+      console.error('Error updating privacy:', error);
+      toast({ title: 'Error', description: 'Failed to update privacy', variant: 'destructive' });
+    }
+  };
+
+  const handleReshareToStoryline = async (postId: string) => {
+    try {
+      const { data: postData } = await supabase
+        .from('posts')
+        .select('*')
+        .eq('id', postId)
+        .single();
+
+      if (!postData) return;
+
+      // Create a new story repost
+      await supabase
+        .from('posts')
+        .insert({
+          title: postData.title,
+          body: postData.body,
+          media_urls: postData.media_urls,
+          category: 'storyline',
+          is_story: true,
+          is_repost: true,
+          user_id: user?.id,
+          status: 'approved',
+        });
+
+      toast({
+        title: 'Reshared to Storyline',
+        description: 'Post added to your storyline',
+      });
+    } catch (error) {
+      console.error('Error resharing:', error);
+      toast({ title: 'Error', description: 'Failed to reshare', variant: 'destructive' });
+    }
   };
 
   const handleLike = async (postId: string) => {
@@ -432,6 +494,15 @@ const Profile = () => {
           {/* Filter Buttons */}
           <div className="flex gap-2 overflow-x-auto pb-2">
             <Button 
+              onClick={() => handleFilterChange('all')}
+              variant={activeFilter === 'all' ? 'default' : 'outline'}
+              size="sm" 
+              className={`gap-1 flex-shrink-0 ${activeFilter === 'all' ? 'bg-primary text-primary-foreground' : ''}`}
+            >
+              <span className="hidden sm:inline">All Posts</span>
+              <span className="sm:hidden">All</span>
+            </Button>
+            <Button 
               onClick={() => handleFilterChange('privacy')}
               variant={activeFilter === 'privacy' ? 'default' : 'outline'}
               size="sm" 
@@ -505,16 +576,47 @@ const Profile = () => {
                     )}
 
                     {/* Overlay - Show on hover */}
-                    <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity duration-200 flex items-center justify-center">
+                    <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity duration-200 flex flex-col items-center justify-center gap-3 p-4">
                       <div className="flex flex-col items-center gap-2">
                         <Play className="w-12 h-12 text-white fill-white" />
                         <p className="text-white text-sm font-medium">{post.view_count || 0} views</p>
                       </div>
+
+                      {/* Privacy Toggle - Only for own profile */}
+                      {isOwnProfile && activeFilter === 'privacy' && (
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleTogglePrivacy(post.id, post.is_private);
+                          }}
+                          className="px-3 py-1 bg-red-500 hover:bg-red-600 text-white text-xs rounded-full font-semibold"
+                        >
+                          {post.is_private ? '🔒 Make Public' : '🔓 Make Private'}
+                        </button>
+                      )}
+
+                      {/* Reshare to Storyline - Only for reposts */}
+                      {isOwnProfile && activeFilter === 'reposts' && (
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleReshareToStoryline(post.id);
+                          }}
+                          className="px-3 py-1 bg-cyan-500 hover:bg-cyan-600 text-white text-xs rounded-full font-semibold"
+                        >
+                          ↗️ Reshare to Storyline
+                        </button>
+                      )}
                     </div>
 
                     {/* Pinned Badge */}
                     {post.pinned && (
                       <Badge className="absolute top-2 left-2 z-10">Pinned</Badge>
+                    )}
+
+                    {/* Privacy Lock Badge */}
+                    {post.is_private && (
+                      <Badge className="absolute top-2 right-2 z-10 bg-red-500">🔒 Private</Badge>
                     )}
 
                     {/* View Count Badge */}
