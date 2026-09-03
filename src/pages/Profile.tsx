@@ -49,6 +49,7 @@ const Profile = () => {
   const [editProfileOpen, setEditProfileOpen] = useState(false);
   const [showFollowers, setShowFollowers] = useState(false);
   const [showFollowing, setShowFollowing] = useState(false);
+  const [activeFilter, setActiveFilter] = useState<'all' | 'privacy' | 'reposts' | 'bookmarks' | 'reactions'>('all');
   const { toast } = useToast();
 
   const profileId = userId || user?.id;
@@ -104,16 +105,76 @@ const Profile = () => {
     }
   };
 
-  const fetchUserPosts = async () => {
+  const fetchUserPosts = async (filter: 'all' | 'privacy' | 'reposts' | 'bookmarks' | 'reactions' = 'all') => {
     if (!profileId) return;
     try {
-      const { data: postsData, error } = await supabase
-        .from('posts')
-        .select('*')
-        .eq('user_id', profileId)
-        .eq('status', 'approved')
-        .order('created_at', { ascending: false });
-      if (error) throw error;
+      let postsData: any[] = [];
+
+      if (filter === 'reactions') {
+        // Get posts that the current user has liked
+        if (!user) return;
+        const { data: likedPosts } = await supabase
+          .from('post_likes')
+          .select('post_id')
+          .eq('user_id', user.id);
+
+        if (likedPosts && likedPosts.length > 0) {
+          const { data } = await supabase
+            .from('posts')
+            .select('*')
+            .in('id', likedPosts.map(lp => lp.post_id))
+            .eq('status', 'approved')
+            .order('created_at', { ascending: false });
+          postsData = data || [];
+        }
+      } else if (filter === 'privacy') {
+        // Get private posts
+        const { data } = await supabase
+          .from('posts')
+          .select('*')
+          .eq('user_id', profileId)
+          .eq('status', 'approved')
+          .eq('privacy_status', 'private')
+          .order('created_at', { ascending: false });
+        postsData = data || [];
+      } else if (filter === 'bookmarks') {
+        // Get bookmarked posts
+        if (!user) return;
+        const { data: bookmarked } = await supabase
+          .from('user_bookmarks')
+          .select('post_id')
+          .eq('user_id', user.id);
+
+        if (bookmarked && bookmarked.length > 0) {
+          const { data } = await supabase
+            .from('posts')
+            .select('*')
+            .in('id', bookmarked.map(b => b.post_id))
+            .eq('status', 'approved')
+            .order('created_at', { ascending: false });
+          postsData = data || [];
+        }
+      } else if (filter === 'reposts') {
+        // Get reposted posts
+        const { data } = await supabase
+          .from('posts')
+          .select('*')
+          .eq('user_id', profileId)
+          .eq('status', 'approved')
+          .eq('is_repost', true)
+          .order('created_at', { ascending: false });
+        postsData = data || [];
+      } else {
+        // All posts (default)
+        const { data, error } = await supabase
+          .from('posts')
+          .select('*')
+          .eq('user_id', profileId)
+          .eq('status', 'approved')
+          .order('created_at', { ascending: false });
+        if (error) throw error;
+        postsData = data || [];
+      }
 
       let likesLookup: { [key: string]: any[] } = {};
       if (postsData && postsData.length > 0) {
@@ -132,7 +193,7 @@ const Profile = () => {
       setPostLikes(likesLookup);
 
       const postsWithCounts = await Promise.all(
-        (postsData || []).map(async (p: any) => {
+        postsData.map(async (p: any) => {
           const { count } = await (supabase as any)
             .from('post_comments')
             .select('*', { count: 'exact', head: true })
@@ -149,6 +210,11 @@ const Profile = () => {
     } catch (error) {
       console.error('Error fetching posts:', error);
     }
+  };
+
+  const handleFilterChange = (filter: 'all' | 'privacy' | 'reposts' | 'bookmarks' | 'reactions') => {
+    setActiveFilter(filter);
+    fetchUserPosts(filter);
   };
 
   const handleLike = async (postId: string) => {
@@ -365,19 +431,39 @@ const Profile = () => {
         <TabsContent value="posts" className="space-y-4">
           {/* Filter Buttons */}
           <div className="flex gap-2 overflow-x-auto pb-2">
-            <Button variant="outline" size="sm" className="gap-1 flex-shrink-0">
+            <Button 
+              onClick={() => handleFilterChange('privacy')}
+              variant={activeFilter === 'privacy' ? 'default' : 'outline'}
+              size="sm" 
+              className={`gap-1 flex-shrink-0 ${activeFilter === 'privacy' ? 'bg-primary text-primary-foreground' : ''}`}
+            >
               <Lock className="w-4 h-4" />
               <span className="hidden sm:inline">Privacy</span>
             </Button>
-            <Button variant="outline" size="sm" className="gap-1 flex-shrink-0">
+            <Button 
+              onClick={() => handleFilterChange('reposts')}
+              variant={activeFilter === 'reposts' ? 'default' : 'outline'}
+              size="sm" 
+              className={`gap-1 flex-shrink-0 ${activeFilter === 'reposts' ? 'bg-primary text-primary-foreground' : ''}`}
+            >
               <Repeat2 className="w-4 h-4" />
               <span className="hidden sm:inline">Reposts</span>
             </Button>
-            <Button variant="outline" size="sm" className="gap-1 flex-shrink-0">
+            <Button 
+              onClick={() => handleFilterChange('bookmarks')}
+              variant={activeFilter === 'bookmarks' ? 'default' : 'outline'}
+              size="sm" 
+              className={`gap-1 flex-shrink-0 ${activeFilter === 'bookmarks' ? 'bg-primary text-primary-foreground' : ''}`}
+            >
               <Bookmark className="w-4 h-4" />
               <span className="hidden sm:inline">Bookmarks</span>
             </Button>
-            <Button variant="outline" size="sm" className="gap-1 flex-shrink-0">
+            <Button 
+              onClick={() => handleFilterChange('reactions')}
+              variant={activeFilter === 'reactions' ? 'default' : 'outline'}
+              size="sm" 
+              className={`gap-1 flex-shrink-0 ${activeFilter === 'reactions' ? 'bg-primary text-primary-foreground' : ''}`}
+            >
               <Heart className="w-4 h-4" />
               <span className="hidden sm:inline">Reactions</span>
             </Button>
