@@ -7,7 +7,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Crown, Star, ShoppingBag, Settings, LogOut, Edit, Heart, MessageCircle, UserPlus, Send, Eye, Lock, Repeat2, Bookmark, Play, Brain } from 'lucide-react';
+import { Crown, Star, ShoppingBag, Settings, LogOut, Edit, Heart, MessageCircle, UserPlus, Send, Eye, Lock, Repeat2, Bookmark, Play, Brain, BarChart3 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { useParams, useNavigate } from 'react-router-dom';
 import { VideoPlayer } from '@/components/Feed/VideoPlayer';
@@ -347,47 +347,18 @@ const Profile = () => {
       </Card>
 
       {/* VIP Section */}
-      {isOwnProfile && !profile.vip && (
-        <Card className="border-yellow-200 bg-yellow-50">
-          <CardHeader>
-            <CardTitle className="text-yellow-800 flex items-center">
-              <Crown className="w-5 h-5 mr-2" />Upgrade to VIP
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="space-y-3">
-              <div className="text-sm space-y-2">
-                <p><strong>✅ VIP Badge</strong> - Blue checkmark beside your name</p>
-                <p><strong>✅ Priority Posts</strong> - Your posts get highlighted</p>
-                <p><strong>✅ Premium Content</strong> - VIP-only content access</p>
-                <p><strong>✅ Special Discounts</strong> - Lower marketplace fees</p>
-                <p><strong>✅ Exclusive Contests</strong> - VIP-only challenges</p>
-              </div>
-              <Button onClick={handleVipUpgrade} className="w-full bg-yellow-600 hover:bg-yellow-700">
-                <Crown className="w-4 h-4 mr-2" />Become VIP
-              </Button>
-            </div>
-          </CardContent>
-        </Card>
-      )}
-
-      {/* Star Balance Section */}
+      {/* Creator Dashboard & VIP Buttons */}
       {isOwnProfile && (
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center">
-              <Star className="w-5 h-5 mr-2 text-yellow-500" />Star Balance: {profile.star_balance}
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <p className="text-sm text-muted-foreground mb-4">
-              Stars are used to access premium content in private groups and purchase exclusive items.
-            </p>
-            <Button onClick={handleBuyStars} variant="outline">
-              <Star className="w-4 h-4 mr-2" />Buy Stars
-            </Button>
-          </CardContent>
-        </Card>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+          <Button onClick={() => navigate('/creator-dashboard')} className="w-full bg-gradient-to-r from-blue-500 to-cyan-500 hover:from-blue-600 hover:to-cyan-600 h-12 text-white font-semibold">
+            <BarChart3 className="w-5 h-5 mr-2" />
+            Creator Dashboard
+          </Button>
+          <Button onClick={handleVipUpgrade} className="w-full bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-600 hover:to-orange-600 h-12 text-white font-semibold">
+            <Crown className="w-5 h-5 mr-2" />
+            Upgrade to VIP
+          </Button>
+        </div>
       )}
 
       {/* Tabs for Posts */}
@@ -429,6 +400,7 @@ const Profile = () => {
                   <div
                     key={post.id}
                     className="group relative rounded-lg overflow-hidden bg-muted aspect-square cursor-pointer"
+                    onClick={() => navigate(`/?post=${post.id}`)}
                   >
                     {/* Thumbnail */}
                     {firstMediaUrl ? (

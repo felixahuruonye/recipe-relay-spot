@@ -4,11 +4,18 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Switch } from '@/components/ui/switch';
 import { Label } from '@/components/ui/label';
 import { Button } from '@/components/ui/button';
-import { Sun, Moon, Settings as SettingsIcon, MessageSquare, Share2, HelpCircle, LogOut, Lock, Coins } from 'lucide-react';
+import { Sun, Moon, Settings as SettingsIcon, MessageSquare, Share2, HelpCircle, LogOut, Lock, Coins, Trash2 } from 'lucide-react';
 import { useTheme } from '@/contexts/ThemeContext';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
+
+interface UserProfile {
+  id: string;
+  created_at: string;
+  vip: boolean;
+  vip_expires_at: string;
+}
 
 const Settings = () => {
   const { theme, toggleTheme } = useTheme();
@@ -18,10 +25,29 @@ const Settings = () => {
   const isDark = theme === 'dark';
   const [lockFollowers, setLockFollowers] = useState(false);
   const [autoSpend, setAutoSpend] = useState(false);
+  const [profile, setProfile] = useState<UserProfile | null>(null);
+  const [deleting, setDeleting] = useState(false);
 
   useEffect(() => {
-    if (user) loadSettings();
+    if (user) {
+      loadSettings();
+      loadProfile();
+    }
   }, [user]);
+
+  const loadProfile = async () => {
+    if (!user) return;
+    try {
+      const { data } = await supabase
+        .from('user_profiles')
+        .select('id, created_at, vip, vip_expires_at')
+        .eq('id', user.id)
+        .single();
+      setProfile(data);
+    } catch (error) {
+      console.error('Error loading profile:', error);
+    }
+  };
 
   const loadSettings = async () => {
     if (!user) return;
@@ -61,6 +87,32 @@ const Settings = () => {
   const handleSignOut = async () => {
     await signOut();
     navigate('/auth');
+  };
+
+  const handleDeleteAccount = async () => {
+    if (!user) return;
+    if (!confirm('Are you ABSOLUTELY sure? This will permanently delete your entire account and all your data. This cannot be undone.')) return;
+    
+    const confirmText = prompt('Type DELETE to permanently remove your account:');
+    if (confirmText !== 'DELETE') {
+      toast({ title: 'Cancelled', description: 'Account deletion cancelled.' });
+      return;
+    }
+
+    setDeleting(true);
+    try {
+      const res = await supabase.functions.invoke('delete-user', {
+        body: { target_user_id: user.id, self_delete: true },
+      });
+      if (res.error) throw new Error(res.error.message);
+      if (res.data?.success === false) throw new Error(res.data.error);
+      toast({ title: 'Account Deleted', description: 'Your account has been permanently removed.' });
+      await signOut();
+    } catch (err: any) {
+      toast({ title: 'Error', description: err.message, variant: 'destructive' });
+    } finally {
+      setDeleting(false);
+    }
   };
 
   return (
@@ -126,6 +178,33 @@ const Settings = () => {
         </CardContent>
       </Card>
 
+      {/* Account Settings */}
+      {profile && (
+        <Card className="glass-card">
+          <CardHeader><CardTitle>Account Information</CardTitle></CardHeader>
+          <CardContent className="space-y-4">
+            <div>
+              <p className="text-sm font-medium">Account Created</p>
+              <p className="text-sm text-muted-foreground">{new Date(profile.created_at).toLocaleDateString()}</p>
+            </div>
+            <div>
+              <p className="text-sm font-medium">Email</p>
+              <p className="text-sm text-muted-foreground">{user?.email}</p>
+            </div>
+            <div>
+              <p className="text-sm font-medium">User ID</p>
+              <p className="text-xs text-muted-foreground font-mono break-all">{profile.id}</p>
+            </div>
+            {profile.vip && (
+              <div>
+                <p className="text-sm font-medium">VIP Status</p>
+                <p className="text-sm text-muted-foreground">Expires: {new Date(profile.vip_expires_at).toLocaleDateString()}</p>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      )}
+
       {/* Quick Actions */}
       <Card className="glass-card">
         <CardHeader><CardTitle>Quick Actions</CardTitle></CardHeader>
@@ -145,6 +224,30 @@ const Settings = () => {
           <Button variant="destructive" className="w-full justify-start h-14 mt-4" onClick={handleSignOut}>
             <LogOut className="h-5 w-5 mr-3" />
             <div className="text-left"><div className="font-medium">Sign Out</div><div className="text-xs opacity-80">Log out of your account</div></div>
+          </Button>
+        </CardContent>
+      </Card>
+
+      {/* Delete Account */}
+      <Card className="border-destructive mt-4">
+        <CardHeader>
+          <CardTitle className="text-destructive text-lg flex items-center gap-2">
+            <Trash2 className="w-5 h-5" />
+            Delete Account
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          <p className="text-sm text-muted-foreground">
+            This will permanently delete your account, all posts, messages, groups, balances, and remove you from Supabase authentication. This cannot be undone.
+          </p>
+          <Button
+            variant="destructive"
+            className="w-full"
+            onClick={handleDeleteAccount}
+            disabled={deleting}
+          >
+            <Trash2 className="w-4 h-4 mr-2" />
+            {deleting ? 'Deleting...' : 'Delete My Account Permanently'}
           </Button>
         </CardContent>
       </Card>
