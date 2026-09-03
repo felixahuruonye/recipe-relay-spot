@@ -615,11 +615,12 @@ const EnhancedShareMenu: React.FC<{
   const checkIfBookmarked = async () => {
     if (!user) return;
     try {
-      const { data, count } = await supabase
+      const { count, error } = await (supabase as any)
         .from('user_bookmarks')
         .select('*', { count: 'exact', head: true })
         .eq('post_id', post.id)
         .eq('user_id', user.id);
+      if (error) throw error;
       setIsBookmarked((count || 0) > 0);
     } catch (error) {
       console.error('Error checking bookmark:', error);
@@ -634,23 +635,25 @@ const EnhancedShareMenu: React.FC<{
 
     try {
       if (isBookmarked) {
-        await supabase
+        const { error } = await (supabase as any)
           .from('user_bookmarks')
           .delete()
           .eq('post_id', post.id)
           .eq('user_id', user.id);
+        if (error) throw error;
         setIsBookmarked(false);
         toast({ title: 'Removed from bookmarks' });
       } else {
-        await supabase
+        const { error } = await (supabase as any)
           .from('user_bookmarks')
           .insert({ post_id: post.id, user_id: user.id });
+        if (error) throw error;
         setIsBookmarked(true);
         toast({ title: 'Added to bookmarks' });
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error toggling bookmark:', error);
-      toast({ title: 'Error', description: 'Failed to update bookmark', variant: 'destructive' });
+      toast({ title: 'Error', description: error?.message || 'Failed to update bookmark', variant: 'destructive' });
     }
     onClose();
   };
@@ -1448,7 +1451,7 @@ const TikTokFeed: React.FC = () => {
 
   const fetchPosts = async () => {
     try {
-      const { data: postsData } = await supabase
+      let { data: postsData, error: postsError } = await (supabase as any)
         .from('posts')
         .select('*')
         .eq('status', 'approved')
@@ -1457,6 +1460,21 @@ const TikTokFeed: React.FC = () => {
         .order('boosted', { ascending: false })
         .order('created_at', { ascending: false })
         .limit(50);
+
+      // Fallback for when the is_private migration hasn't been applied yet,
+      // so the feed never silently breaks and shows zero posts.
+      if (postsError) {
+        console.error('Error fetching posts with is_private filter, falling back:', postsError);
+        const fallback = await supabase
+          .from('posts')
+          .select('*')
+          .eq('status', 'approved')
+          .or('disabled.is.null,disabled.eq.false')
+          .order('boosted', { ascending: false })
+          .order('created_at', { ascending: false })
+          .limit(50);
+        postsData = fallback.data;
+      }
 
       const allPosts = postsData || [];
       if (allPosts.length > 0) {

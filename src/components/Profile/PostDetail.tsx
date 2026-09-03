@@ -84,10 +84,15 @@ const PostDetail = () => {
 
       setCommentCount(commentsCount || 0);
 
-      // Record view
-      await supabase
-        .from('post_views')
-        .insert({ post_id: postId, user_id: user?.id });
+      // Record view (best-effort, must not block the page from loading)
+      if (user?.id) {
+        supabase
+          .from('post_views')
+          .insert({ post_id: postId, user_id: user.id })
+          .then(({ error: viewError }) => {
+            if (viewError) console.error('Error recording view:', viewError);
+          });
+      }
 
     } catch (error) {
       console.error('Error fetching post:', error);

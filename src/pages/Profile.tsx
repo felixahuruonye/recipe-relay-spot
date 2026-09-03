@@ -139,7 +139,7 @@ const Profile = () => {
           toast({ title: 'Login required', description: 'Please login to view your bookmarks' });
           return;
         }
-        const { data: bookmarked, error: bookmarksError } = await supabase
+        const { data: bookmarked, error: bookmarksError } = await (supabase as any)
           .from('user_bookmarks')
           .select('post_id')
           .eq('user_id', user.id);
@@ -150,7 +150,7 @@ const Profile = () => {
           const { data, error } = await supabase
             .from('posts')
             .select('*')
-            .in('id', bookmarked.map(b => b.post_id))
+            .in('id', bookmarked.map((b: any) => b.post_id))
             .eq('status', 'approved')
             .order('created_at', { ascending: false });
           if (error) throw error;
@@ -159,7 +159,7 @@ const Profile = () => {
       } else if (filter === 'privacy') {
         // Get private posts from the profile user - only if viewing own profile
         if (!isOwnProfile) return;
-        const { data, error } = await supabase
+        const { data, error } = await (supabase as any)
           .from('posts')
           .select('*')
           .eq('user_id', profileId)
@@ -170,7 +170,7 @@ const Profile = () => {
         postsData = data || [];
       } else if (filter === 'reposts') {
         // Get reposted storylines from the profile user
-        const { data, error } = await supabase
+        const { data, error } = await (supabase as any)
           .from('posts')
           .select('*')
           .eq('user_id', profileId)
@@ -181,13 +181,27 @@ const Profile = () => {
         postsData = data || [];
       } else {
         // All posts (default) - hide private posts from other users
-        const { data, error } = await supabase
+        let { data, error } = await (supabase as any)
           .from('posts')
           .select('*')
           .eq('user_id', profileId)
           .eq('status', 'approved')
           .eq('is_private', false)
           .order('created_at', { ascending: false });
+
+        // Fallback for when the is_private migration hasn't been applied yet
+        if (error) {
+          console.error('is_private filter failed, falling back to unfiltered query:', error);
+          const fallback = await supabase
+            .from('posts')
+            .select('*')
+            .eq('user_id', profileId)
+            .eq('status', 'approved')
+            .order('created_at', { ascending: false });
+          data = fallback.data;
+          error = fallback.error;
+        }
+
         if (error) throw error;
         postsData = data || [];
       }
@@ -223,9 +237,17 @@ const Profile = () => {
       );
 
       setUserPosts(postsWithCounts);
-    } catch (error) {
-      console.error('Error fetching posts:', error);
-      toast({ title: 'Error', description: 'Failed to load posts', variant: 'destructive' });
+    } catch (error: any) {
+      console.error(`Error fetching posts (filter=${filter}):`, error);
+      const details = error?.message || error?.hint || error?.details || 'Unknown error';
+      toast({
+        title: 'Error loading posts',
+        description: details.includes('column') || details.includes('does not exist')
+          ? 'Database is missing required setup. Please run the latest migration.'
+          : details,
+        variant: 'destructive'
+      });
+      setUserPosts([]);
     }
   };
 
@@ -236,11 +258,13 @@ const Profile = () => {
 
   const handleTogglePrivacy = async (postId: string, currentPrivacy: boolean) => {
     try {
-      await supabase
+      const { error } = await supabase
         .from('posts')
         .update({ is_private: !currentPrivacy })
         .eq('id', postId);
-      
+
+      if (error) throw error;
+
       toast({
         title: 'Privacy Updated',
         description: `Post is now ${!currentPrivacy ? 'private' : 'visible to everyone'}`,
@@ -248,24 +272,25 @@ const Profile = () => {
       
       // Refresh posts
       fetchUserPosts(activeFilter);
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error updating privacy:', error);
-      toast({ title: 'Error', description: 'Failed to update privacy', variant: 'destructive' });
+      toast({ title: 'Error', description: error?.message || 'Failed to update privacy', variant: 'destructive' });
     }
   };
 
   const handleReshareToStoryline = async (postId: string) => {
     try {
-      const { data: postData } = await supabase
+      const { data: postData, error: fetchError } = await supabase
         .from('posts')
         .select('*')
         .eq('id', postId)
         .single();
 
+      if (fetchError) throw fetchError;
       if (!postData) return;
 
       // Create a new story repost
-      await supabase
+      const { error: insertError } = await supabase
         .from('posts')
         .insert({
           title: postData.title,
@@ -276,15 +301,19 @@ const Profile = () => {
           is_repost: true,
           user_id: user?.id,
           status: 'approved',
-        });
+        } as any);
+
+      if (insertError) throw insertError;
 
       toast({
         title: 'Reshared to Storyline',
         description: 'Post added to your storyline',
       });
-    } catch (error) {
+
+      fetchUserPosts(activeFilter);
+    } catch (error: any) {
       console.error('Error resharing:', error);
-      toast({ title: 'Error', description: 'Failed to reshare', variant: 'destructive' });
+      toast({ title: 'Error', description: error?.message || 'Failed to reshare', variant: 'destructive' });
     }
   };
 
