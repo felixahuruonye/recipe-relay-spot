@@ -601,9 +601,11 @@ const PostInsightsModal: React.FC<{
   onClose: () => void;
   postId: string;
   type: 'liked' | 'viewed';
-}> = ({ open, onClose, postId, type }) => {
+  onUnlocked?: () => void;
+}> = ({ open, onClose, postId, type, onUnlocked }) => {
   const { user } = useAuth();
   const { toast } = useToast();
+  const navigate = useNavigate();
   const [checking, setChecking] = useState(true);
   const [unlocked, setUnlocked] = useState(false);
   const [expiresAt, setExpiresAt] = useState<string | null>(null);
@@ -656,6 +658,7 @@ const PostInsightsModal: React.FC<{
       setUnlocked(true);
       setExpiresAt((data as any)?.expires_at || null);
       toast({ title: 'Unlocked!', description: '25 Stars deducted. Access lasts 28 days.' });
+      onUnlocked?.();
       fetchList();
     } catch (error: any) {
       console.error('Error unlocking insights:', error);
@@ -775,7 +778,11 @@ const PostInsightsModal: React.FC<{
               ) : (
                 <div className="space-y-1">
                   {rows.map((row, idx) => (
-                    <div key={idx} className="flex items-center gap-3 p-2 rounded-lg hover:bg-muted/50">
+                    <button
+                      key={idx}
+                      onClick={() => { if (row.id) { onClose(); navigate(`/profile/${row.id}`); } }}
+                      className="flex items-center gap-3 p-2 rounded-lg hover:bg-muted/50 w-full text-left"
+                    >
                       <Avatar className="w-9 h-9">
                         <AvatarImage src={row.avatar_url} />
                         <AvatarFallback>{row.username?.[0]?.toUpperCase() || '?'}</AvatarFallback>
@@ -789,7 +796,7 @@ const PostInsightsModal: React.FC<{
                           <Clock className="w-3 h-3" />{formatDuration(row.duration)}
                         </Badge>
                       )}
-                    </div>
+                    </button>
                   ))}
                 </div>
               )}
@@ -817,11 +824,29 @@ const EnhancedShareMenu: React.FC<{
   const [ownerAllowsRepost, setOwnerAllowsRepost] = useState(true);
   const [sharingToStory, setSharingToStory] = useState(false);
   const [insightsType, setInsightsType] = useState<'liked' | 'viewed' | null>(null);
+  const [insightsUnlocked, setInsightsUnlocked] = useState(false);
 
   useEffect(() => {
     checkIfBookmarked();
     if (!isOwnPost) fetchOwnerRepostSetting();
+    else checkInsightsUnlocked();
   }, [post.id, user?.id]);
+
+  const checkInsightsUnlocked = async () => {
+    if (!user) return;
+    try {
+      const { data, error } = await (supabase as any)
+        .from('post_insight_unlocks')
+        .select('expires_at')
+        .eq('post_id', post.id)
+        .eq('user_id', user.id)
+        .maybeSingle();
+      if (error) throw error;
+      setInsightsUnlocked(!!data && new Date(data.expires_at) > new Date());
+    } catch (error) {
+      console.error('Error checking insights unlock:', error);
+    }
+  };
 
   const fetchOwnerRepostSetting = async () => {
     try {
@@ -993,12 +1018,12 @@ const EnhancedShareMenu: React.FC<{
               <button onClick={() => { setInsightsType('liked'); }} className="flex items-center gap-3 w-full p-3 rounded-lg hover:bg-muted/50">
                 <Users className="w-5 h-5 text-muted-foreground" />
                 <span className="text-sm flex-1 text-left">Liked By</span>
-                <Lock className="w-3.5 h-3.5 text-muted-foreground" />
+                {!insightsUnlocked && <Lock className="w-3.5 h-3.5 text-muted-foreground" />}
               </button>
               <button onClick={() => { setInsightsType('viewed'); }} className="flex items-center gap-3 w-full p-3 rounded-lg hover:bg-muted/50">
                 <Eye className="w-5 h-5 text-muted-foreground" />
                 <span className="text-sm flex-1 text-left">Viewed By</span>
-                <Lock className="w-3.5 h-3.5 text-muted-foreground" />
+                {!insightsUnlocked && <Lock className="w-3.5 h-3.5 text-muted-foreground" />}
               </button>
             </>
           )}
@@ -1034,6 +1059,7 @@ const EnhancedShareMenu: React.FC<{
           onClose={() => setInsightsType(null)}
           postId={post.id}
           type={insightsType}
+          onUnlocked={() => setInsightsUnlocked(true)}
         />
       )}
     </motion.div>
@@ -1663,9 +1689,19 @@ const TikTokFeed: React.FC = () => {
   // owners can see this in the "Viewed By" insights panel. Best-effort:
   // records elapsed seconds via record_watch_duration whenever the user
   // scrolls to a different slide or leaves the feed.
+  //
+  // IMPORTANT: this must NOT depend on `feedSlides` directly - fetchPosts()
+  // (and therefore a new feedSlides array) runs after every qualified view
+  // across the whole feed, which would re-run this effect and reset the
+  // timer to ~0 elapsed seconds constantly, even while staying on the same
+  // slide. A ref holds the latest feedSlides so only activeIndex changes
+  // restart the timer.
+  const feedSlidesRef = useRef(feedSlides);
+  useEffect(() => { feedSlidesRef.current = feedSlides; }, [feedSlides]);
+
   const watchStartRef = useRef<{ postId: string; start: number } | null>(null);
   useEffect(() => {
-    const slide = feedSlides[activeIndex];
+    const slide = feedSlidesRef.current[activeIndex];
 
     // Flush time spent on the previous slide before switching
     if (watchStartRef.current && user) {
@@ -1678,7 +1714,20 @@ const TikTokFeed: React.FC = () => {
 
     watchStartRef.current = (slide && slide.type === 'post' && user) ? { postId: slide.post.id, start: Date.now() } : null;
 
+    // Heartbeat: flush partial progress every 10s so long views on the same
+    // slide still get recorded even if the user closes the tab mid-view.
+    const heartbeat = setInterval(() => {
+      if (watchStartRef.current && user) {
+        const elapsed = Math.round((Date.now() - watchStartRef.current.start) / 1000);
+        if (elapsed > 0) {
+          supabase.rpc('record_watch_duration' as any, { p_post_id: watchStartRef.current.postId, p_seconds: elapsed }).then(() => {});
+          watchStartRef.current.start = Date.now();
+        }
+      }
+    }, 10000);
+
     return () => {
+      clearInterval(heartbeat);
       if (watchStartRef.current && user) {
         const elapsed = Math.round((Date.now() - watchStartRef.current.start) / 1000);
         const prevPostId = watchStartRef.current.postId;
@@ -1688,7 +1737,7 @@ const TikTokFeed: React.FC = () => {
         watchStartRef.current = null;
       }
     };
-  }, [activeIndex, feedSlides, user]);
+  }, [activeIndex, user]);
 
   // Process earning
   const processEarning = useCallback((post: Post) => {
