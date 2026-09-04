@@ -802,6 +802,7 @@ const PostInsightsModal: React.FC<{
 };
 
 
+const EnhancedShareMenu: React.FC<{
   open: boolean;
   onClose: () => void;
   post: Post;
