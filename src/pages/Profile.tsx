@@ -50,6 +50,8 @@ const Profile = () => {
   const [showFollowers, setShowFollowers] = useState(false);
   const [showFollowing, setShowFollowing] = useState(false);
   const [activeFilter, setActiveFilter] = useState<'all' | 'privacy' | 'reposts' | 'bookmarks' | 'reactions'>('all');
+  const [expiredStorylines, setExpiredStorylines] = useState<any[]>([]);
+  const [bookmarkedProducts, setBookmarkedProducts] = useState<any[]>([]);
   const { toast } = useToast();
 
   const profileId = userId || user?.id;
@@ -134,51 +136,70 @@ const Profile = () => {
           postsData = data || [];
         }
       } else if (filter === 'bookmarks') {
-        // Get ALL bookmarked posts across the app for current user
+        // Bookmarks can be posts AND marketplace products - fetch both
         if (!user) {
           toast({ title: 'Login required', description: 'Please login to view your bookmarks' });
           return;
         }
-        const { data: bookmarked, error: bookmarksError } = await (supabase as any)
+        const { data: bookmarks, error: bookmarksError } = await (supabase as any)
           .from('user_bookmarks')
-          .select('post_id')
-          .eq('user_id', user.id);
+          .select('item_type, item_id')
+          .eq('user_id', user.id)
+          .order('created_at', { ascending: false });
 
         if (bookmarksError) throw bookmarksError;
 
-        if (bookmarked && bookmarked.length > 0) {
+        const postIds = (bookmarks || []).filter((b: any) => b.item_type === 'post').map((b: any) => b.item_id);
+        const productIds = (bookmarks || []).filter((b: any) => b.item_type === 'product').map((b: any) => b.item_id);
+
+        if (postIds.length > 0) {
           const { data, error } = await supabase
             .from('posts')
             .select('*')
-            .in('id', bookmarked.map((b: any) => b.post_id))
+            .in('id', postIds)
             .eq('status', 'approved')
             .order('created_at', { ascending: false });
           if (error) throw error;
           postsData = data || [];
         }
+
+        if (productIds.length > 0) {
+          const { data, error } = await supabase
+            .from('products')
+            .select('*')
+            .in('id', productIds);
+          if (error) throw error;
+          setBookmarkedProducts(data || []);
+        } else {
+          setBookmarkedProducts([]);
+        }
       } else if (filter === 'privacy') {
-        // Get private posts from the profile user - only if viewing own profile
+        // Show ALL of the owner's posts (public + private) so they can
+        // pick which ones to lock/unlock - only visible on own profile
         if (!isOwnProfile) return;
         const { data, error } = await (supabase as any)
           .from('posts')
           .select('*')
           .eq('user_id', profileId)
           .eq('status', 'approved')
-          .eq('is_private', true)
           .order('created_at', { ascending: false });
         if (error) throw error;
         postsData = data || [];
       } else if (filter === 'reposts') {
-        // Get reposted storylines from the profile user
-        const { data, error } = await (supabase as any)
-          .from('posts')
+        // Reposts = expired storyline entries the owner can reshare.
+        // Only visible on own profile.
+        if (!isOwnProfile) return;
+        const { data, error } = await supabase
+          .from('user_storylines')
           .select('*')
           .eq('user_id', profileId)
-          .eq('status', 'approved')
-          .eq('is_repost', true)
-          .order('created_at', { ascending: false });
+          .lt('expires_at', new Date().toISOString())
+          .order('created_at', { ascending: false })
+          .limit(50);
         if (error) throw error;
-        postsData = data || [];
+        setExpiredStorylines(data || []);
+        setUserPosts([]);
+        return;
       } else {
         // All posts (default) - hide private posts from other users
         let { data, error } = await (supabase as any)
@@ -205,6 +226,9 @@ const Profile = () => {
         if (error) throw error;
         postsData = data || [];
       }
+
+      if (filter !== 'reposts') setExpiredStorylines([]);
+      if (filter !== 'bookmarks') setBookmarkedProducts([]);
 
       let likesLookup: { [key: string]: any[] } = {};
       if (postsData && postsData.length > 0) {
@@ -242,12 +266,14 @@ const Profile = () => {
       const details = error?.message || error?.hint || error?.details || 'Unknown error';
       toast({
         title: 'Error loading posts',
-        description: details.includes('column') || details.includes('does not exist')
+        description: details.includes('column') || details.includes('does not exist') || details.includes('relation')
           ? 'Database is missing required setup. Please run the latest migration.'
           : details,
         variant: 'destructive'
       });
       setUserPosts([]);
+      setExpiredStorylines([]);
+      setBookmarkedProducts([]);
     }
   };
 
@@ -278,42 +304,48 @@ const Profile = () => {
     }
   };
 
-  const handleReshareToStoryline = async (postId: string) => {
+  const handleReshareToStoryline = async (storyline: any) => {
     try {
-      const { data: postData, error: fetchError } = await supabase
-        .from('posts')
-        .select('*')
-        .eq('id', postId)
-        .single();
-
-      if (fetchError) throw fetchError;
-      if (!postData) return;
-
-      // Create a new story repost
-      const { error: insertError } = await supabase
-        .from('posts')
+      const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString();
+      const { error } = await supabase
+        .from('user_storylines')
         .insert({
-          title: postData.title,
-          body: postData.body,
-          media_urls: postData.media_urls,
-          category: 'storyline',
-          is_story: true,
-          is_repost: true,
           user_id: user?.id,
-          status: 'approved',
+          media_url: storyline.media_url,
+          media_type: storyline.media_type,
+          caption: storyline.caption,
+          expires_at: expiresAt,
         } as any);
 
-      if (insertError) throw insertError;
+      if (error) throw error;
 
       toast({
         title: 'Reshared to Storyline',
-        description: 'Post added to your storyline',
+        description: 'Your story is live again for 24 hours',
       });
 
-      fetchUserPosts(activeFilter);
+      fetchUserPosts('reposts');
     } catch (error: any) {
       console.error('Error resharing:', error);
       toast({ title: 'Error', description: error?.message || 'Failed to reshare', variant: 'destructive' });
+    }
+  };
+
+  const handleRemoveBookmark = async (itemType: 'post' | 'product', itemId: string) => {
+    if (!user) return;
+    try {
+      const { error } = await (supabase as any)
+        .from('user_bookmarks')
+        .delete()
+        .eq('item_type', itemType)
+        .eq('item_id', itemId)
+        .eq('user_id', user.id);
+      if (error) throw error;
+      toast({ title: 'Removed from bookmarks' });
+      fetchUserPosts('bookmarks');
+    } catch (error: any) {
+      console.error('Error removing bookmark:', error);
+      toast({ title: 'Error', description: error?.message || 'Failed to remove bookmark', variant: 'destructive' });
     }
   };
 
@@ -582,8 +614,100 @@ const Profile = () => {
             </Button>
           </div>
 
-          {/* Posts Grid */}
-          {userPosts.length > 0 ? (
+          {/* Reposts: expired storylines */}
+          {activeFilter === 'reposts' ? (
+            expiredStorylines.length > 0 ? (
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                {expiredStorylines.map((story: any) => {
+                  const isVideo = story.media_type === 'video' || story.media_url?.match(/\.(mp4|webm|ogg|mov)$/i);
+                  return (
+                    <div key={story.id} className="group relative rounded-lg overflow-hidden bg-muted aspect-square">
+                      {isVideo ? (
+                        <video src={story.media_url} className="w-full h-full object-cover" />
+                      ) : (
+                        <img src={story.media_url} alt={story.caption || 'Story'} className="w-full h-full object-cover" />
+                      )}
+                      <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity duration-200 flex items-center justify-center p-4">
+                        <button
+                          onClick={() => handleReshareToStoryline(story)}
+                          className="px-3 py-2 bg-cyan-500 hover:bg-cyan-600 text-white text-xs rounded-full font-semibold"
+                        >
+                          ↗️ Reshare to Storyline
+                        </button>
+                      </div>
+                      <Badge className="absolute top-2 right-2 z-10 bg-muted-foreground/80">Expired</Badge>
+                      {story.caption && (
+                        <p className="absolute bottom-0 left-0 right-0 bg-black/60 text-white text-xs p-2 line-clamp-2">{story.caption}</p>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            ) : (
+              <Card>
+                <CardContent className="py-12 text-center">
+                  <p className="text-muted-foreground mb-3">No expired storylines yet</p>
+                  <p className="text-sm text-muted-foreground">Stories that disappear after 24 hours will show up here so you can reshare them</p>
+                </CardContent>
+              </Card>
+            )
+          ) : activeFilter === 'bookmarks' && (userPosts.length > 0 || bookmarkedProducts.length > 0) ? (
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+              {userPosts.map((post: any) => {
+                const firstMediaUrl = post.media_urls?.[0];
+                const isVideo = firstMediaUrl?.match(/\.(mp4|webm|ogg|mov)$/i) || firstMediaUrl?.includes('video');
+                return (
+                  <div key={`post-${post.id}`} className="group relative rounded-lg overflow-hidden bg-muted aspect-square cursor-pointer" onClick={() => navigate(`/?post=${post.id}`)}>
+                    {firstMediaUrl ? (
+                      isVideo ? <video src={firstMediaUrl} className="w-full h-full object-cover" /> : <img src={firstMediaUrl} alt={post.title} className="w-full h-full object-cover" />
+                    ) : (
+                      <div className="w-full h-full flex items-center justify-center bg-gradient-to-br from-primary/20 to-primary/5">
+                        <p className="text-center text-muted-foreground text-xs px-4">{post.title}</p>
+                      </div>
+                    )}
+                    <button
+                      onClick={(e) => { e.stopPropagation(); handleRemoveBookmark('post', post.id); }}
+                      className="absolute top-2 right-2 z-10 p-1.5 rounded-full bg-black/60 hover:bg-red-500"
+                    >
+                      <Bookmark className="w-4 h-4 fill-primary text-primary" />
+                    </button>
+                    <Badge className="absolute top-2 left-2 z-10">Post</Badge>
+                    <div className="absolute bottom-2 left-2 z-10 flex items-center gap-1 bg-black/60 text-white px-2 py-1 rounded text-xs font-medium">
+                      <Play className="w-3 h-3 fill-current" />{post.view_count || 0}
+                    </div>
+                  </div>
+                );
+              })}
+              {bookmarkedProducts.map((product: any) => (
+                <div key={`product-${product.id}`} className="group relative rounded-lg overflow-hidden bg-muted aspect-square cursor-pointer" onClick={() => navigate(`/marketplace?product=${product.id}`)}>
+                  {product.images?.[0] ? (
+                    <img src={product.images[0]} alt={product.title} className="w-full h-full object-cover" />
+                  ) : (
+                    <div className="w-full h-full flex items-center justify-center bg-gradient-to-br from-primary/20 to-primary/5">
+                      <p className="text-center text-muted-foreground text-xs px-4">{product.title}</p>
+                    </div>
+                  )}
+                  <button
+                    onClick={(e) => { e.stopPropagation(); handleRemoveBookmark('product', product.id); }}
+                    className="absolute top-2 right-2 z-10 p-1.5 rounded-full bg-black/60 hover:bg-red-500"
+                  >
+                    <Bookmark className="w-4 h-4 fill-primary text-primary" />
+                  </button>
+                  <Badge className="absolute top-2 left-2 z-10">Product</Badge>
+                  <div className="absolute bottom-2 left-2 z-10 bg-black/60 text-white px-2 py-1 rounded text-xs font-medium">
+                    ₦{product.price_ngn?.toLocaleString()}
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : activeFilter === 'bookmarks' ? (
+            <Card>
+              <CardContent className="py-12 text-center">
+                <p className="text-muted-foreground mb-3">No bookmarks yet</p>
+                <p className="text-sm text-muted-foreground">Tap the bookmark icon on any post or product to save it here</p>
+              </CardContent>
+            </Card>
+          ) : userPosts.length > 0 ? (
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
               {userPosts.map((post: any) => {
                 const firstMediaUrl = post.media_urls?.[0];
@@ -624,29 +748,16 @@ const Profile = () => {
                         <p className="text-white text-sm font-medium">{post.view_count || 0} views</p>
                       </div>
 
-                      {/* Privacy Toggle - Only for own profile */}
+                      {/* Privacy Toggle - shown on every post while viewing the Privacy tab */}
                       {isOwnProfile && activeFilter === 'privacy' && (
                         <button
                           onClick={(e) => {
                             e.stopPropagation();
                             handleTogglePrivacy(post.id, post.is_private);
                           }}
-                          className="px-3 py-1 bg-red-500 hover:bg-red-600 text-white text-xs rounded-full font-semibold"
+                          className={`px-3 py-1.5 text-white text-xs rounded-full font-semibold ${post.is_private ? 'bg-green-600 hover:bg-green-700' : 'bg-red-500 hover:bg-red-600'}`}
                         >
-                          {post.is_private ? '🔒 Make Public' : '🔓 Make Private'}
-                        </button>
-                      )}
-
-                      {/* Reshare to Storyline - Only for reposts */}
-                      {isOwnProfile && activeFilter === 'reposts' && (
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            handleReshareToStoryline(post.id);
-                          }}
-                          className="px-3 py-1 bg-cyan-500 hover:bg-cyan-600 text-white text-xs rounded-full font-semibold"
-                        >
-                          ↗️ Reshare to Storyline
+                          {post.is_private ? '🔓 Make Public' : '🔒 Make Private'}
                         </button>
                       )}
                     </div>
@@ -673,8 +784,17 @@ const Profile = () => {
           ) : (
             <Card>
               <CardContent className="py-12 text-center">
-                <p className="text-muted-foreground mb-3">No posts yet</p>
-                <p className="text-sm text-muted-foreground">Start sharing content to get your posts displayed here</p>
+                {activeFilter === 'privacy' ? (
+                  <>
+                    <p className="text-muted-foreground mb-3">No posts to show</p>
+                    <p className="text-sm text-muted-foreground">Upload a post first, then come back here to lock or unlock it</p>
+                  </>
+                ) : (
+                  <>
+                    <p className="text-muted-foreground mb-3">No posts yet</p>
+                    <p className="text-sm text-muted-foreground">Start sharing content to get your posts displayed here</p>
+                  </>
+                )}
               </CardContent>
             </Card>
           )}

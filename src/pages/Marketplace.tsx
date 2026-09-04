@@ -13,7 +13,7 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { useNavigate } from 'react-router-dom';
-import { Plus, ShoppingBag, Star, Crown, Package, Search, Upload, Edit2, Trash2, Eye, Copy, Share2, Truck, MessageCircle, ArrowLeft, Send } from 'lucide-react';
+import { Plus, ShoppingBag, Star, Crown, Package, Search, Upload, Edit2, Trash2, Eye, Copy, Share2, Truck, MessageCircle, ArrowLeft, Send, Bookmark } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 
 interface Product {
@@ -104,6 +104,48 @@ const Marketplace = () => {
   const [newProduct, setNewProduct] = useState({ title: '', description: '', price: '', stock: '', delivery_options: '', seller_contact: '' });
   const [productImages, setProductImages] = useState<File[]>([]);
   const [activeTab, setActiveTab] = useState('browse');
+  const [bookmarkedIds, setBookmarkedIds] = useState<Set<string>>(new Set());
+
+  const fetchBookmarks = async () => {
+    if (!user) return;
+    const { data } = await (supabase as any)
+      .from('user_bookmarks')
+      .select('item_id')
+      .eq('item_type', 'product')
+      .eq('user_id', user.id);
+    setBookmarkedIds(new Set((data || []).map((b: any) => b.item_id)));
+  };
+
+  const toggleBookmark = async (productId: string) => {
+    if (!user) {
+      toast({ title: 'Login required', description: 'Please login to bookmark products' });
+      return;
+    }
+    const isBookmarked = bookmarkedIds.has(productId);
+    try {
+      if (isBookmarked) {
+        const { error } = await (supabase as any)
+          .from('user_bookmarks')
+          .delete()
+          .eq('item_type', 'product')
+          .eq('item_id', productId)
+          .eq('user_id', user.id);
+        if (error) throw error;
+        setBookmarkedIds(prev => { const next = new Set(prev); next.delete(productId); return next; });
+        toast({ title: 'Removed from bookmarks' });
+      } else {
+        const { error } = await (supabase as any)
+          .from('user_bookmarks')
+          .insert({ item_type: 'product', item_id: productId, user_id: user.id });
+        if (error) throw error;
+        setBookmarkedIds(prev => new Set(prev).add(productId));
+        toast({ title: 'Added to bookmarks' });
+      }
+    } catch (error: any) {
+      console.error('Error toggling product bookmark:', error);
+      toast({ title: 'Error', description: error?.message || 'Failed to update bookmark', variant: 'destructive' });
+    }
+  };
 
   useEffect(() => {
     if (user) {
@@ -111,6 +153,7 @@ const Marketplace = () => {
       fetchProducts();
       fetchMyProducts();
       fetchPaymentUrls();
+      fetchBookmarks();
     }
   }, [user]);
 
@@ -511,7 +554,13 @@ const Marketplace = () => {
           {loading ? <div className="text-center py-12 text-muted-foreground">Loading...</div> : (
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
               {filteredProducts.map(p => (
-                <Card key={p.id} className="hover:shadow-lg transition-shadow overflow-hidden cursor-pointer" onClick={() => openProductDetail(p)}>
+                <Card key={p.id} className="hover:shadow-lg transition-shadow overflow-hidden cursor-pointer relative" onClick={() => openProductDetail(p)}>
+                  <button
+                    onClick={(e) => { e.stopPropagation(); toggleBookmark(p.id); }}
+                    className="absolute top-2 right-2 z-10 p-1.5 rounded-full bg-black/50 hover:bg-black/70"
+                  >
+                    <Bookmark className={`w-4 h-4 ${bookmarkedIds.has(p.id) ? 'fill-primary text-primary' : 'text-white'}`} />
+                  </button>
                   {p.images?.length > 0 ? (
                     <div className="h-44 overflow-hidden"><img src={p.images[0]} alt={p.title} className="w-full h-full object-cover hover:scale-105 transition-transform" /></div>
                   ) : <div className="h-44 bg-muted flex items-center justify-center"><Package className="w-10 h-10 text-muted-foreground" /></div>}

@@ -618,7 +618,8 @@ const EnhancedShareMenu: React.FC<{
       const { count, error } = await (supabase as any)
         .from('user_bookmarks')
         .select('*', { count: 'exact', head: true })
-        .eq('post_id', post.id)
+        .eq('item_type', 'post')
+        .eq('item_id', post.id)
         .eq('user_id', user.id);
       if (error) throw error;
       setIsBookmarked((count || 0) > 0);
@@ -638,7 +639,8 @@ const EnhancedShareMenu: React.FC<{
         const { error } = await (supabase as any)
           .from('user_bookmarks')
           .delete()
-          .eq('post_id', post.id)
+          .eq('item_type', 'post')
+          .eq('item_id', post.id)
           .eq('user_id', user.id);
         if (error) throw error;
         setIsBookmarked(false);
@@ -646,7 +648,7 @@ const EnhancedShareMenu: React.FC<{
       } else {
         const { error } = await (supabase as any)
           .from('user_bookmarks')
-          .insert({ post_id: post.id, user_id: user.id });
+          .insert({ item_type: 'post', item_id: post.id, user_id: user.id });
         if (error) throw error;
         setIsBookmarked(true);
         toast({ title: 'Added to bookmarks' });
@@ -789,6 +791,7 @@ const TikTokPost: React.FC<{
   onComment, onShare, onSendToFriend, onSoundDrilldown, onProfile, onRequireLogin, onVideoEnd, onViewQualified, onImageTimerEnd, onSendStar, isLoggedIn, hasSeenBefore, onRewardPreview
 }) => {
   const navigate = useNavigate();
+  const { toast } = useToast();
   const videoRef = useRef<HTMLVideoElement>(null);
   const musicAudioRef = useRef<HTMLAudioElement>(null);
   const [imageTimer, setImageTimer] = useState(5);
@@ -1087,6 +1090,19 @@ const TikTokPost: React.FC<{
               {mTrack ? `♪ ${mTrack.title} - ${mTrack.artist_name} (${mTrack.source === 'community' ? 'Community' : 'Lenory'})` : `Original sound - ${postUser?.username}`}
             </span>
           </div>
+
+          {/* Promote Video - big button, own posts only */}
+          {isOwnPost && (
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                toast({ title: 'Promote Video', description: 'Promotion feature coming soon!' });
+              }}
+              className="mt-2 w-full bg-cyan-400 hover:bg-cyan-300 text-black font-extrabold py-2.5 rounded-full text-sm tracking-wide shadow-lg pointer-events-auto"
+            >
+              PROMOTE VIDEO
+            </button>
+          )}
         </div>
       </div>
     </div>

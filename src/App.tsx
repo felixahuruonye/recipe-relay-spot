@@ -31,7 +31,6 @@ import WalletPage from "./pages/WalletPage";
 import Offers from "./pages/Offers";
 import CreatorDashboard from "./pages/CreatorDashboard";
 import ConnectLenoryAI from "./pages/ConnectLenoryAI";
-import PostDetail from "./components/Profile/PostDetail";
 
 import ChatHub from "./pages/ChatHub";
 import Welcome from "./pages/Welcome";
