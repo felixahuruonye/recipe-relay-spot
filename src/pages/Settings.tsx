@@ -4,7 +4,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Switch } from '@/components/ui/switch';
 import { Label } from '@/components/ui/label';
 import { Button } from '@/components/ui/button';
-import { Sun, Moon, Settings as SettingsIcon, MessageSquare, Share2, HelpCircle, LogOut, Lock, Coins, Trash2 } from 'lucide-react';
+import { Sun, Moon, Settings as SettingsIcon, MessageSquare, Share2, HelpCircle, LogOut, Lock, Coins, Trash2, Repeat2 } from 'lucide-react';
 import { useTheme } from '@/contexts/ThemeContext';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/integrations/supabase/client';
@@ -25,6 +25,7 @@ const Settings = () => {
   const isDark = theme === 'dark';
   const [lockFollowers, setLockFollowers] = useState(false);
   const [autoSpend, setAutoSpend] = useState(false);
+  const [allowReposts, setAllowReposts] = useState(true);
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [deleting, setDeleting] = useState(false);
 
@@ -55,6 +56,24 @@ const Settings = () => {
     const settings = data?.story_settings as any;
     setLockFollowers(settings?.lock_followers || false);
     setAutoSpend(settings?.auto_spend || false);
+    // Default ON - only false if the user has explicitly disabled it before
+    setAllowReposts(settings?.allow_reposts !== false);
+  };
+
+  const toggleAllowReposts = async (checked: boolean) => {
+    if (!user) return;
+    setAllowReposts(checked);
+    const { data: current } = await supabase.from('user_profiles').select('story_settings').eq('id', user.id).single();
+    const existing = (current?.story_settings as any) || {};
+    await supabase.from('user_profiles').update({
+      story_settings: { ...existing, allow_reposts: checked }
+    }).eq('id', user.id);
+    toast({
+      title: checked ? 'Reposts to Storyline enabled' : 'Reposts to Storyline disabled',
+      description: checked
+        ? 'Other users can now share your posts to their storyline.'
+        : 'Other users can no longer share your posts to their storyline.'
+    });
   };
 
   const toggleLockFollowers = async (checked: boolean) => {
@@ -174,6 +193,16 @@ const Settings = () => {
               <p className="text-sm text-muted-foreground mt-1">Hide your followers and following lists from other users</p>
             </div>
             <Switch id="lock-followers" checked={lockFollowers} onCheckedChange={toggleLockFollowers} />
+          </div>
+          <div className="flex items-center justify-between glass-card p-4 rounded-lg border border-primary/20">
+            <div className="flex items-center gap-3">
+              <Repeat2 className="w-5 h-5 text-muted-foreground shrink-0" />
+              <div>
+                <Label htmlFor="allow-reposts" className="font-bold cursor-pointer">Allow Reposts to Storyline</Label>
+                <p className="text-sm text-muted-foreground mt-1">Let other users share your posts to their own storyline</p>
+              </div>
+            </div>
+            <Switch id="allow-reposts" checked={allowReposts} onCheckedChange={toggleAllowReposts} />
           </div>
         </CardContent>
       </Card>

@@ -10,7 +10,7 @@ import {
   Heart, MessageCircle, Share2, Star, Volume2, VolumeX,
   Plus, Music2, Eye, Send, Copy, Disc,
   Home, Search, MessageSquare, X, Clock, Trash2, Edit, Flag, EyeOff, ChevronLeft, ChevronRight, ExternalLink,
-  Wallet, ShoppingBag, User, Bookmark, Zap
+  Wallet, ShoppingBag, User, Bookmark, Zap, Users, Lock, Loader2, PlayCircle
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { useToast } from '@/hooks/use-toast';
@@ -595,7 +595,213 @@ const SendToFriend: React.FC<{
 };
 
 // ── Share Menu with Edit/Delete/Report ──
-const EnhancedShareMenu: React.FC<{
+// ── Post Insights Modal (Liked By / Viewed By, paid unlock) ──
+const PostInsightsModal: React.FC<{
+  open: boolean;
+  onClose: () => void;
+  postId: string;
+  type: 'liked' | 'viewed';
+}> = ({ open, onClose, postId, type }) => {
+  const { user } = useAuth();
+  const { toast } = useToast();
+  const [checking, setChecking] = useState(true);
+  const [unlocked, setUnlocked] = useState(false);
+  const [expiresAt, setExpiresAt] = useState<string | null>(null);
+  const [unlocking, setUnlocking] = useState(false);
+  const [loadingList, setLoadingList] = useState(false);
+  const [rows, setRows] = useState<any[]>([]);
+
+  useEffect(() => {
+    if (open) checkUnlockStatus();
+  }, [open, postId]);
+
+  const checkUnlockStatus = async () => {
+    if (!user) { setChecking(false); return; }
+    setChecking(true);
+    try {
+      const { data, error } = await (supabase as any)
+        .from('post_insight_unlocks')
+        .select('expires_at')
+        .eq('post_id', postId)
+        .eq('user_id', user.id)
+        .maybeSingle();
+      if (error) throw error;
+      const active = !!data && new Date(data.expires_at) > new Date();
+      setUnlocked(active);
+      setExpiresAt(data?.expires_at || null);
+      if (active) fetchList();
+    } catch (error) {
+      console.error('Error checking insights unlock:', error);
+    } finally {
+      setChecking(false);
+    }
+  };
+
+  const handleUnlock = async () => {
+    if (!user) {
+      toast({ title: 'Login required', description: 'Please login to unlock insights' });
+      return;
+    }
+    setUnlocking(true);
+    try {
+      const { data, error } = await supabase.rpc('unlock_post_insights' as any, {
+        p_post_id: postId,
+        p_user_id: user.id,
+      });
+      if (error) throw error;
+      if ((data as any)?.success === false) {
+        toast({ title: 'Not enough Stars', description: 'You need 25 Stars to unlock this', variant: 'destructive' });
+        return;
+      }
+      setUnlocked(true);
+      setExpiresAt((data as any)?.expires_at || null);
+      toast({ title: 'Unlocked!', description: '25 Stars deducted. Access lasts 28 days.' });
+      fetchList();
+    } catch (error: any) {
+      console.error('Error unlocking insights:', error);
+      toast({ title: 'Error', description: error?.message || 'Failed to unlock', variant: 'destructive' });
+    } finally {
+      setUnlocking(false);
+    }
+  };
+
+  const fetchList = async () => {
+    setLoadingList(true);
+    try {
+      if (type === 'liked') {
+        const { data: likes, error } = await supabase
+          .from('post_likes')
+          .select('user_id, created_at')
+          .eq('post_id', postId)
+          .order('created_at', { ascending: false });
+        if (error) throw error;
+        const userIds = [...new Set((likes || []).map((l: any) => l.user_id))];
+        const { data: profiles } = userIds.length
+          ? await supabase.from('user_profiles').select('id, username, avatar_url').in('id', userIds)
+          : { data: [] as any[] };
+        const profileMap = new Map((profiles || []).map((p: any) => [p.id, p]));
+        setRows((likes || []).map((l: any) => ({ ...profileMap.get(l.user_id), when: l.created_at })));
+      } else {
+        const { data: views, error } = await (supabase as any)
+          .from('post_views')
+          .select('user_id, viewed_at, watch_duration_seconds')
+          .eq('post_id', postId)
+          .order('viewed_at', { ascending: false });
+        if (error) throw error;
+        const userIds = [...new Set((views || []).map((v: any) => v.user_id))];
+        const { data: profiles } = userIds.length
+          ? await supabase.from('user_profiles').select('id, username, avatar_url').in('id', userIds)
+          : { data: [] as any[] };
+        const profileMap = new Map((profiles || []).map((p: any) => [p.id, p]));
+        setRows((views || []).map((v: any) => ({
+          ...profileMap.get(v.user_id),
+          when: v.viewed_at,
+          duration: v.watch_duration_seconds || 0,
+        })));
+      }
+    } catch (error: any) {
+      console.error('Error fetching insights list:', error);
+      toast({ title: 'Error', description: error?.message || 'Failed to load list', variant: 'destructive' });
+    } finally {
+      setLoadingList(false);
+    }
+  };
+
+  const formatDuration = (seconds: number) => {
+    if (seconds < 60) return `${seconds}s`;
+    const mins = Math.floor(seconds / 60);
+    if (mins < 60) return `${mins}m`;
+    const hrs = Math.floor(mins / 60);
+    return `${hrs}h ${mins % 60}m`;
+  };
+
+  const formatWhen = (iso: string) => {
+    try {
+      return new Date(iso).toLocaleString(undefined, { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
+    } catch {
+      return iso;
+    }
+  };
+
+  if (!open) return null;
+
+  return (
+    <motion.div className="fixed inset-0 z-[60]" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
+      <div className="absolute inset-0 bg-black/50" onClick={onClose} />
+      <motion.div
+        className="absolute bottom-0 left-0 right-0 max-w-[480px] mx-auto bg-card rounded-t-2xl overflow-hidden max-h-[75vh] flex flex-col"
+        initial={{ y: '100%' }} animate={{ y: 0 }} exit={{ y: '100%' }}
+      >
+        <div className="p-4 border-b border-border flex items-center justify-between shrink-0">
+          <h3 className="font-bold text-sm flex items-center gap-2">
+            {type === 'liked' ? <Heart className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+            {type === 'liked' ? 'Liked By' : 'Viewed By'}
+          </h3>
+          <button onClick={onClose}><X className="w-5 h-5 text-muted-foreground" /></button>
+        </div>
+
+        <div className="overflow-y-auto flex-1">
+          {checking ? (
+            <div className="p-8 flex justify-center"><Loader2 className="w-6 h-6 animate-spin text-muted-foreground" /></div>
+          ) : !unlocked ? (
+            <div className="p-6 text-center space-y-4">
+              <div className="w-14 h-14 mx-auto rounded-full bg-primary/10 flex items-center justify-center">
+                <Lock className="w-7 h-7 text-primary" />
+              </div>
+              <div>
+                <p className="font-semibold">Unlock {type === 'liked' ? 'Liked By' : 'Viewed By'} insights</p>
+                <p className="text-sm text-muted-foreground mt-1">
+                  See exactly who {type === 'liked' ? 'liked' : 'viewed'} this post{type === 'viewed' ? ', including how long they watched' : ''}. Unlocks for 28 days.
+                </p>
+              </div>
+              <Button onClick={handleUnlock} disabled={unlocking} className="gap-2">
+                {unlocking ? <Loader2 className="w-4 h-4 animate-spin" /> : <Star className="w-4 h-4 fill-current" />}
+                Unlock for 25 Stars
+              </Button>
+            </div>
+          ) : (
+            <div className="p-2">
+              {expiresAt && (
+                <p className="text-xs text-muted-foreground px-2 pb-2">
+                  Unlocked until {new Date(expiresAt).toLocaleDateString()}
+                </p>
+              )}
+              {loadingList ? (
+                <div className="p-8 flex justify-center"><Loader2 className="w-6 h-6 animate-spin text-muted-foreground" /></div>
+              ) : rows.length === 0 ? (
+                <div className="p-8 text-center text-sm text-muted-foreground">
+                  {type === 'liked' ? 'No likes yet' : 'No views yet'}
+                </div>
+              ) : (
+                <div className="space-y-1">
+                  {rows.map((row, idx) => (
+                    <div key={idx} className="flex items-center gap-3 p-2 rounded-lg hover:bg-muted/50">
+                      <Avatar className="w-9 h-9">
+                        <AvatarImage src={row.avatar_url} />
+                        <AvatarFallback>{row.username?.[0]?.toUpperCase() || '?'}</AvatarFallback>
+                      </Avatar>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-medium truncate">@{row.username || 'unknown'}</p>
+                        <p className="text-xs text-muted-foreground">{formatWhen(row.when)}</p>
+                      </div>
+                      {type === 'viewed' && (
+                        <Badge variant="outline" className="text-[10px] gap-1">
+                          <Clock className="w-3 h-3" />{formatDuration(row.duration)}
+                        </Badge>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+      </motion.div>
+    </motion.div>
+  );
+};
+
+
   open: boolean;
   onClose: () => void;
   post: Post;
@@ -607,10 +813,62 @@ const EnhancedShareMenu: React.FC<{
   const navigate = useNavigate();
   const { user } = useAuth();
   const [isBookmarked, setIsBookmarked] = useState(false);
+  const [ownerAllowsRepost, setOwnerAllowsRepost] = useState(true);
+  const [sharingToStory, setSharingToStory] = useState(false);
+  const [insightsType, setInsightsType] = useState<'liked' | 'viewed' | null>(null);
 
   useEffect(() => {
     checkIfBookmarked();
+    if (!isOwnPost) fetchOwnerRepostSetting();
   }, [post.id, user?.id]);
+
+  const fetchOwnerRepostSetting = async () => {
+    try {
+      const { data } = await supabase
+        .from('user_profiles')
+        .select('story_settings')
+        .eq('id', post.user_id)
+        .single();
+      const settings = (data?.story_settings as any) || {};
+      // Default ON - only false if the owner explicitly disabled it
+      setOwnerAllowsRepost(settings.allow_reposts !== false);
+    } catch (error) {
+      console.error('Error fetching owner repost setting:', error);
+    }
+  };
+
+  const handleShareToStory = async () => {
+    if (!user) {
+      toast({ title: 'Login required', description: 'Please login to share to your storyline' });
+      return;
+    }
+    const mediaUrl = post.media_urls?.[0];
+    if (!mediaUrl) {
+      toast({ title: 'Cannot share', description: 'This post has no media to share to a story' });
+      return;
+    }
+    setSharingToStory(true);
+    try {
+      const isVideo = /\.(mp4|webm|ogg|mov)$/i.test(mediaUrl) || mediaUrl.includes('video');
+      const { error } = await supabase
+        .from('user_storylines')
+        .insert({
+          user_id: user.id,
+          media_url: mediaUrl,
+          media_type: isVideo ? 'video' : 'image',
+          caption: post.title,
+          expires_at: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(),
+        } as any);
+      if (error) throw error;
+      toast({ title: 'Shared to your Storyline!', description: 'Live for the next 24 hours' });
+    } catch (error: any) {
+      console.error('Error sharing to story:', error);
+      toast({ title: 'Error', description: error?.message || 'Failed to share to storyline', variant: 'destructive' });
+    } finally {
+      setSharingToStory(false);
+    }
+    onClose();
+  };
 
   const checkIfBookmarked = async () => {
     if (!user) return;
@@ -723,6 +981,26 @@ const EnhancedShareMenu: React.FC<{
             <Share2 className="w-5 h-5 text-muted-foreground" />
             <span className="text-sm">Share via...</span>
           </button>
+          {!isOwnPost && ownerAllowsRepost && (
+            <button onClick={handleShareToStory} disabled={sharingToStory} className="flex items-center gap-3 w-full p-3 rounded-lg hover:bg-muted/50 disabled:opacity-50">
+              {sharingToStory ? <Loader2 className="w-5 h-5 animate-spin text-muted-foreground" /> : <PlayCircle className="w-5 h-5 text-muted-foreground" />}
+              <span className="text-sm">Share To Story</span>
+            </button>
+          )}
+          {isOwnPost && (
+            <>
+              <button onClick={() => { setInsightsType('liked'); }} className="flex items-center gap-3 w-full p-3 rounded-lg hover:bg-muted/50">
+                <Users className="w-5 h-5 text-muted-foreground" />
+                <span className="text-sm flex-1 text-left">Liked By</span>
+                <Lock className="w-3.5 h-3.5 text-muted-foreground" />
+              </button>
+              <button onClick={() => { setInsightsType('viewed'); }} className="flex items-center gap-3 w-full p-3 rounded-lg hover:bg-muted/50">
+                <Eye className="w-5 h-5 text-muted-foreground" />
+                <span className="text-sm flex-1 text-left">Viewed By</span>
+                <Lock className="w-3.5 h-3.5 text-muted-foreground" />
+              </button>
+            </>
+          )}
           {isOwnPost && (
             <>
               <button onClick={() => { onEdit?.(); onClose(); }} className="flex items-center gap-3 w-full p-3 rounded-lg hover:bg-muted/50">
@@ -749,6 +1027,14 @@ const EnhancedShareMenu: React.FC<{
           )}
         </div>
       </motion.div>
+      {insightsType && (
+        <PostInsightsModal
+          open={!!insightsType}
+          onClose={() => setInsightsType(null)}
+          postId={post.id}
+          type={insightsType}
+        />
+      )}
     </motion.div>
   );
 };
@@ -1371,6 +1657,37 @@ const TikTokFeed: React.FC = () => {
     // Manually inserting first caused the RPC to short-circuit as "already_viewed"
     // and skip the wallet credit + notification for the uploader.
   }, [activeIndex, feedSlides, user, processedPosts]);
+
+  // Track how long the logged-in user spends on each post, so post
+  // owners can see this in the "Viewed By" insights panel. Best-effort:
+  // records elapsed seconds via record_watch_duration whenever the user
+  // scrolls to a different slide or leaves the feed.
+  const watchStartRef = useRef<{ postId: string; start: number } | null>(null);
+  useEffect(() => {
+    const slide = feedSlides[activeIndex];
+
+    // Flush time spent on the previous slide before switching
+    if (watchStartRef.current && user) {
+      const elapsed = Math.round((Date.now() - watchStartRef.current.start) / 1000);
+      const prevPostId = watchStartRef.current.postId;
+      if (elapsed > 0) {
+        supabase.rpc('record_watch_duration' as any, { p_post_id: prevPostId, p_seconds: elapsed }).then(() => {});
+      }
+    }
+
+    watchStartRef.current = (slide && slide.type === 'post' && user) ? { postId: slide.post.id, start: Date.now() } : null;
+
+    return () => {
+      if (watchStartRef.current && user) {
+        const elapsed = Math.round((Date.now() - watchStartRef.current.start) / 1000);
+        const prevPostId = watchStartRef.current.postId;
+        if (elapsed > 0) {
+          supabase.rpc('record_watch_duration' as any, { p_post_id: prevPostId, p_seconds: elapsed }).then(() => {});
+        }
+        watchStartRef.current = null;
+      }
+    };
+  }, [activeIndex, feedSlides, user]);
 
   // Process earning
   const processEarning = useCallback((post: Post) => {
