@@ -19,6 +19,8 @@ interface EditProfileProps {
     username: string;
     bio: string;
     avatar_url: string;
+    full_name?: string;
+    full_name_updated_at?: string | null;
   };
   onProfileUpdated: () => void;
 }
@@ -33,10 +35,18 @@ export const EditProfile: React.FC<EditProfileProps> = ({
   const { theme, toggleTheme } = useTheme();
   const [username, setUsername] = useState(currentProfile.username);
   const [bio, setBio] = useState(currentProfile.bio || '');
+  const [fullName, setFullName] = useState(currentProfile.full_name || '');
   const [avatarFile, setAvatarFile] = useState<File | null>(null);
   const [avatarPreview, setAvatarPreview] = useState(currentProfile.avatar_url);
   const [loading, setLoading] = useState(false);
   const { toast } = useToast();
+
+  const nameLocked = (() => {
+    if (!currentProfile.full_name_updated_at) return null;
+    const nextAllowed = new Date(currentProfile.full_name_updated_at);
+    nextAllowed.setDate(nextAllowed.getDate() + 90);
+    return nextAllowed > new Date() ? nextAllowed : null;
+  })();
 
   const handleAvatarChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -85,6 +95,18 @@ export const EditProfile: React.FC<EditProfileProps> = ({
     e.preventDefault();
     if (!user) return;
 
+    const trimmedName = fullName.trim();
+    const nameChanged = trimmedName !== (currentProfile.full_name || '').trim();
+
+    if (nameChanged && nameLocked) {
+      toast({
+        title: 'Name is locked',
+        description: `You can change your Creator Name again on ${nameLocked.toLocaleDateString()}`,
+        variant: 'destructive',
+      });
+      return;
+    }
+
     setLoading(true);
 
     try {
@@ -98,7 +120,7 @@ export const EditProfile: React.FC<EditProfileProps> = ({
         }
       }
 
-      // Update profile
+      // Update profile (username, bio, avatar go straight through)
       const { error } = await supabase
         .from('user_profiles')
         .update({
@@ -109,6 +131,20 @@ export const EditProfile: React.FC<EditProfileProps> = ({
         .eq('id', user.id);
 
       if (error) throw error;
+
+      // Creator Name is rate-limited server-side, so it goes through its own RPC
+      if (nameChanged) {
+        const { data, error: nameError } = await supabase.rpc('update_full_name' as any, {
+          p_user_id: user.id,
+          p_full_name: trimmedName,
+        });
+        if (nameError) throw nameError;
+        if ((data as any)?.success === false) {
+          toast({ title: 'Could not update Creator Name', description: (data as any).error, variant: 'destructive' });
+          setLoading(false);
+          return;
+        }
+      }
 
       toast({
         title: "Success",
@@ -196,6 +232,29 @@ export const EditProfile: React.FC<EditProfileProps> = ({
                 )}
               </div>
             </div>
+          </div>
+
+          {/* Creator Name */}
+          <div className="space-y-2">
+            <Label htmlFor="full-name">Creator Name</Label>
+            <Input
+              id="full-name"
+              value={fullName}
+              onChange={(e) => setFullName(e.target.value)}
+              placeholder="Your real name"
+              maxLength={80}
+              required
+              disabled={!!nameLocked}
+            />
+            {nameLocked ? (
+              <p className="text-xs text-muted-foreground">
+                🔒 You can change this again on {nameLocked.toLocaleDateString()}
+              </p>
+            ) : (
+              <p className="text-xs text-muted-foreground">
+                Your real name, shown on your profile. Changing it locks it for 90 days.
+              </p>
+            )}
           </div>
 
           {/* Username */}

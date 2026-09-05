@@ -18,6 +18,7 @@ const Auth = () => {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [username, setUsername] = useState('');
+  const [fullName, setFullName] = useState('');
   const [forgotPasswordEmail, setForgotPasswordEmail] = useState('');
   const [isForgotPasswordOpen, setIsForgotPasswordOpen] = useState(false);
   const [deferredPrompt, setDeferredPrompt] = useState<any>(null);
@@ -57,7 +58,7 @@ const Auth = () => {
     e.preventDefault();
     setIsLoading(true);
     const ref = localStorage.getItem(REFERRAL_STORAGE_KEY) || undefined;
-    const { error } = await signUp(email, password, { username, ref });
+    const { error } = await signUp(email, password, { username, full_name: fullName.trim(), ref });
     if (!error) toast({ title: "Account created!", description: "Please check your email for verification." });
     setIsLoading(false);
   };
@@ -111,6 +112,11 @@ const Auth = () => {
             
             <TabsContent value="signup">
               <form onSubmit={handleSignUp} className="space-y-4">
+                <div className="space-y-2">
+                  <Label htmlFor="signup-fullname">Creator's Real Name</Label>
+                  <Input id="signup-fullname" type="text" placeholder="Enter your real name" value={fullName} onChange={e => setFullName(e.target.value)} required maxLength={80} />
+                  <p className="text-xs text-muted-foreground">This is your real name, shown on your profile. You can change it once every 90 days.</p>
+                </div>
                 <div className="space-y-2">
                   <Label htmlFor="signup-username">Username</Label>
                   <Input id="signup-username" type="text" placeholder="Choose a username" value={username} onChange={e => setUsername(e.target.value)} required />

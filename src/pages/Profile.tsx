@@ -9,7 +9,7 @@ import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Crown, Star, ShoppingBag, Settings, LogOut, Edit, Heart, MessageCircle, UserPlus, Send, Eye, Lock, Repeat2, Bookmark, Play, Brain, BarChart3 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import { VideoPlayer } from '@/components/Feed/VideoPlayer';
 import { CommentSection } from '@/components/Feed/CommentSection';
 import { ShareMenu } from '@/components/Feed/ShareMenu';
@@ -40,6 +40,7 @@ const Profile = () => {
   const { user, signOut } = useAuth();
   const { userId } = useParams();
   const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [loading, setLoading] = useState(true);
   const [userPosts, setUserPosts] = useState([]);
@@ -56,6 +57,15 @@ const Profile = () => {
 
   const profileId = userId || user?.id;
   const isOwnProfile = !userId || userId === user?.id;
+
+  useEffect(() => {
+    if (searchParams.get('editProfile') === 'true') {
+      setEditProfileOpen(true);
+      searchParams.delete('editProfile');
+      setSearchParams(searchParams, { replace: true });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   useEffect(() => {
     if (profileId) {
@@ -828,7 +838,7 @@ const Profile = () => {
         <EditProfile
           open={editProfileOpen}
           onOpenChange={setEditProfileOpen}
-          currentProfile={{ username: profile.username, bio: profile.bio, avatar_url: profile.avatar_url }}
+          currentProfile={{ username: profile.username, bio: profile.bio, avatar_url: profile.avatar_url, full_name: profile.full_name, full_name_updated_at: (profile as any).full_name_updated_at }}
           onProfileUpdated={fetchProfile}
         />
       )}

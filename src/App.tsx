@@ -31,6 +31,7 @@ import WalletPage from "./pages/WalletPage";
 import Offers from "./pages/Offers";
 import CreatorDashboard from "./pages/CreatorDashboard";
 import ConnectLenoryAI from "./pages/ConnectLenoryAI";
+import AddName from "./pages/AddName";
 
 import ChatHub from "./pages/ChatHub";
 import Welcome from "./pages/Welcome";
@@ -85,6 +86,35 @@ const OnboardingGate = () => {
   return null;
 };
 
+// Sends a logged-in user with no Creator Name on file to a one-time
+// prompt to fill it in, from anywhere in the app. New signups already
+// collect this at account creation, so this mainly catches existing
+// users from before the field existed.
+const RealNameGate = () => {
+  const { user, loading } = useAuth();
+  const location = useLocation();
+  const navigate = useNavigate();
+
+  useEffect(() => {
+    if (loading || !user) return;
+    let cancelled = false;
+    supabase.from('user_profiles').select('full_name, onboarding_completed').eq('id', user.id).maybeSingle()
+      .then(({ data }) => {
+        if (cancelled) return;
+        const exemptPath = location.pathname === '/add-name' || location.pathname === '/welcome' || location.pathname === '/profile';
+        const needsName = data && (!data.full_name || data.full_name.trim() === '');
+        // Let the existing onboarding/follow-gate finish first if it's still pending
+        if (needsName && data.onboarding_completed !== false && !exemptPath) {
+          navigate('/add-name', { replace: true });
+        }
+      });
+    return () => { cancelled = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user, loading, location.pathname]);
+
+  return null;
+};
+
 const queryClient = new QueryClient();
 
 const ProtectedRoute = ({ children }: { children: React.ReactNode }) => {
@@ -122,9 +152,11 @@ const App = () => (
           <BrowserRouter>
             <ReferralCapture />
             <OnboardingGate />
+            <RealNameGate />
             <Routes>
             <Route path="/auth" element={<Auth />} />
             <Route path="/welcome" element={<Welcome />} />
+            <Route path="/add-name" element={<AddName />} />
             {/* Public TikTok-style feed - no login required */}
             <Route path="/" element={<TikTokFeed />} />
             <Route path="/index" element={<TikTokFeed />} />
