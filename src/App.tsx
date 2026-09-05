@@ -32,6 +32,7 @@ import Offers from "./pages/Offers";
 import CreatorDashboard from "./pages/CreatorDashboard";
 import ConnectLenoryAI from "./pages/ConnectLenoryAI";
 import AddName from "./pages/AddName";
+import CreatorEarnings from "./pages/CreatorEarnings";
 
 import ChatHub from "./pages/ChatHub";
 import Welcome from "./pages/Welcome";
@@ -241,6 +242,11 @@ const App = () => (
             <Route path="/creator-dashboard" element={
               <ProtectedRoute>
                 <CreatorDashboard />
+              </ProtectedRoute>
+            } />
+            <Route path="/creator-earnings" element={
+              <ProtectedRoute>
+                <CreatorEarnings />
               </ProtectedRoute>
             } />
             <Route path="/connect-lenory-ai" element={

@@ -4,7 +4,9 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Switch } from '@/components/ui/switch';
 import { Label } from '@/components/ui/label';
 import { Button } from '@/components/ui/button';
-import { Sun, Moon, Settings as SettingsIcon, MessageSquare, Share2, HelpCircle, LogOut, Lock, Coins, Trash2, Repeat2 } from 'lucide-react';
+import { Input } from '@/components/ui/input';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Sun, Moon, Settings as SettingsIcon, MessageSquare, Share2, HelpCircle, LogOut, Lock, Coins, Trash2, Repeat2, MapPin } from 'lucide-react';
 import { useTheme } from '@/contexts/ThemeContext';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/integrations/supabase/client';
@@ -28,6 +30,11 @@ const Settings = () => {
   const [allowReposts, setAllowReposts] = useState(true);
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [deleting, setDeleting] = useState(false);
+  const [gender, setGender] = useState('');
+  const [dob, setDob] = useState('');
+  const [country, setCountry] = useState('');
+  const [stateRegion, setStateRegion] = useState('');
+  const [savingDemographics, setSavingDemographics] = useState(false);
 
   useEffect(() => {
     if (user) {
@@ -39,14 +46,40 @@ const Settings = () => {
   const loadProfile = async () => {
     if (!user) return;
     try {
-      const { data } = await supabase
+      const { data } = await (supabase as any)
         .from('user_profiles')
-        .select('id, created_at, vip, vip_expires_at')
+        .select('id, created_at, vip, vip_expires_at, gender, date_of_birth, location_info')
         .eq('id', user.id)
         .single();
       setProfile(data);
+      setGender(data?.gender || '');
+      setDob(data?.date_of_birth || '');
+      setCountry((data?.location_info as any)?.country || '');
+      setStateRegion((data?.location_info as any)?.state || '');
     } catch (error) {
       console.error('Error loading profile:', error);
+    }
+  };
+
+  const saveDemographics = async () => {
+    if (!user) return;
+    setSavingDemographics(true);
+    try {
+      const { error } = await (supabase as any)
+        .from('user_profiles')
+        .update({
+          gender: gender || null,
+          date_of_birth: dob || null,
+          location_info: { country: country || null, state: stateRegion || null },
+        })
+        .eq('id', user.id);
+      if (error) throw error;
+      toast({ title: 'Saved', description: 'Your profile info was updated' });
+    } catch (error: any) {
+      console.error('Error saving demographics:', error);
+      toast({ title: 'Error', description: error?.message || 'Failed to save', variant: 'destructive' });
+    } finally {
+      setSavingDemographics(false);
     }
   };
 
@@ -204,6 +237,47 @@ const Settings = () => {
             </div>
             <Switch id="allow-reposts" checked={allowReposts} onCheckedChange={toggleAllowReposts} />
           </div>
+        </CardContent>
+      </Card>
+
+      {/* Personal Info - powers Creator Dashboard demographic analytics */}
+      <Card className="glass-card">
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2"><MapPin className="w-5 h-5" /> Personal Info</CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <p className="text-xs text-muted-foreground">
+            Optional. Used to power viewer insights on creators' dashboards (e.g. "most of my viewers are 18-24").
+            Never shown publicly on your profile.
+          </p>
+          <div className="space-y-2">
+            <Label>Gender</Label>
+            <Select value={gender} onValueChange={setGender}>
+              <SelectTrigger><SelectValue placeholder="Prefer not to say" /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="male">Male</SelectItem>
+                <SelectItem value="female">Female</SelectItem>
+                <SelectItem value="other">Other</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="space-y-2">
+            <Label>Date of Birth</Label>
+            <Input type="date" value={dob} onChange={(e) => setDob(e.target.value)} max={new Date().toISOString().split('T')[0]} />
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <div className="space-y-2">
+              <Label>Country</Label>
+              <Input value={country} onChange={(e) => setCountry(e.target.value)} placeholder="e.g. Nigeria" />
+            </div>
+            <div className="space-y-2">
+              <Label>State</Label>
+              <Input value={stateRegion} onChange={(e) => setStateRegion(e.target.value)} placeholder="e.g. Lagos" />
+            </div>
+          </div>
+          <Button onClick={saveDemographics} disabled={savingDemographics} className="w-full">
+            {savingDemographics ? 'Saving...' : 'Save'}
+          </Button>
         </CardContent>
       </Card>
 
