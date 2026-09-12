@@ -1677,7 +1677,12 @@ const TikTokFeed: React.FC = () => {
     const post = slide.post;
     if (!user && !processedPosts.has(post.id)) {
       setProcessedPosts(prev => new Set(prev).add(post.id));
-      supabase.rpc('record_public_post_view' as any, { p_post_id: post.id }).then(() => fetchPosts());
+      // NOTE: previously called fetchPosts() here too - removed. It rebuilt
+      // and re-ranked the entire feed on every single anonymous view, which
+      // could silently reorder posts out from under the user mid-scroll.
+      // New posts are already surfaced independently via the realtime
+      // "new posts" pill, so nothing is lost by not refetching here.
+      supabase.rpc('record_public_post_view' as any, { p_post_id: post.id });
     }
     // NOTE: do NOT insert into post_views here — process_post_view RPC will
     // handle it atomically and emit the uploader's earning notification.
@@ -1767,7 +1772,10 @@ const TikTokFeed: React.FC = () => {
           if ((data as any)?.success) {
             setProcessedPosts(prev => new Set(prev).add(post.id));
             setPostViewCounts(prev => ({ ...prev, [post.id]: (prev[post.id] ?? post.view_count ?? 0) + ((data as any)?.already_viewed ? 0 : 1) }));
-            fetchPosts();
+            // fetchPosts() removed here - view_count is already reflected
+            // locally above; re-fetching the whole feed on every view was
+            // silently reshuffling post order mid-scroll (see fetchPosts()
+            // -> rankPostIds, which recomputes on every call).
           }
           if (!autoSpendNoticeRef.current) {
             autoSpendNoticeRef.current = true;
@@ -1804,7 +1812,10 @@ const TikTokFeed: React.FC = () => {
             setPostViewCounts(prev => ({ ...prev, [post.id]: (prev[post.id] ?? post.view_count ?? 0) + 1 }));
           }
           loadMyProfile();
-          fetchPosts();
+          // fetchPosts() removed here for the same reason as the two view
+          // paths above - loadMyProfile() already refreshes the balance,
+          // and view_count is reflected locally just above when it's a
+          // first view. A full feed rebuild+re-rank isn't needed per view.
           if (result.charged) {
             setLastEarnAmount(result.viewer_cashback || 0);
             setShowStarFloat(true);
@@ -2187,6 +2198,23 @@ const TikTokFeed: React.FC = () => {
               </div>
             ) : (
               feedSlides.map((slide, index) => {
+                // Windowed rendering: TikTok/IG only ever keep a handful of
+                // real slides mounted (with actual media <video>/<img> src)
+                // at once - everything else is a lightweight placeholder
+                // until it's about to be needed. Previously every slide in
+                // the whole feed (up to ~50+ posts, each with a real <video
+                // src=...>) was mounted simultaneously the entire time,
+                // which is almost certainly the main cause of scroll jank
+                // on mid-range phones: dozens of concurrent video elements
+                // competing for network/decode/memory. The placeholder
+                // keeps the exact same h-[100dvh] height so scroll-snap
+                // math (activeIndex * window.innerHeight) stays correct
+                // whether or not a given slide is currently hydrated.
+                const inWindow = Math.abs(index - activeIndex) <= 2;
+                if (!inWindow) {
+                  return <div key={slide.key} className="h-[100dvh] snap-start snap-always bg-black" />;
+                }
+
                 if (slide.type === 'suggested' || slide.type === 'trending-stories') {
                   return <MixedFeedCard key={slide.key} type={slide.type} />;
                 }
