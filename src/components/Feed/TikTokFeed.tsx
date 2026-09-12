@@ -217,13 +217,32 @@ const MixedFeedCard: React.FC<{
   isActive?: boolean;
   isMuted?: boolean;
   soundUrl?: string;
-}> = ({ type, product, isActive, isMuted, soundUrl }) => {
+  likeCount?: number;
+  reviewCount?: number;
+  bookmarkCount?: number;
+  isLiked?: boolean;
+  isBookmarked?: boolean;
+  onToggleLike?: () => void;
+  onToggleBookmark?: () => void;
+}> = ({ type, product, isActive, isMuted, soundUrl, likeCount, reviewCount, bookmarkCount, isLiked, isBookmarked, onToggleLike, onToggleBookmark }) => {
   return (
     <div className="h-[100dvh] snap-start snap-always bg-background flex items-center justify-center p-4 overflow-y-auto">
       <div className="w-full max-w-md py-16">
         {type === 'suggested' && <SuggestedUsers />}
         {type === 'product' && product && (
-          <ProductCard product={product as any} isActive={isActive} isMuted={isMuted} soundUrl={soundUrl} />
+          <ProductCard
+            product={product as any}
+            isActive={isActive}
+            isMuted={isMuted}
+            soundUrl={soundUrl}
+            likeCount={likeCount}
+            reviewCount={reviewCount}
+            bookmarkCount={bookmarkCount}
+            isLiked={isLiked}
+            isBookmarked={isBookmarked}
+            onToggleLike={onToggleLike}
+            onToggleBookmark={onToggleBookmark}
+          />
         )}
         {type === 'trending-stories' && <TrendingStoriesCard />}
       </div>
@@ -1440,6 +1459,11 @@ const TikTokFeed: React.FC = () => {
   const [posts, setPosts] = useState<Post[]>([]);
   const [products, setProducts] = useState<Product[]>([]);
   const [productSounds, setProductSounds] = useState<{ url: string; title: string }[]>([]);
+  const [productLikeCounts, setProductLikeCounts] = useState<Record<string, number>>({});
+  const [productReviewCounts, setProductReviewCounts] = useState<Record<string, number>>({});
+  const [productBookmarkCounts, setProductBookmarkCounts] = useState<Record<string, number>>({});
+  const [myProductLikes, setMyProductLikes] = useState<Set<string>>(new Set());
+  const [myProductBookmarks, setMyProductBookmarks] = useState<Set<string>>(new Set());
   const [users, setUsers] = useState<Record<string, UserProfile>>({});
   const [postLikes, setPostLikes] = useState<Record<string, any[]>>({});
   const [postViewCounts, setPostViewCounts] = useState<Record<string, number>>({});
@@ -1981,6 +2005,118 @@ const TikTokFeed: React.FC = () => {
       : { data: [] as any[] };
     const profileMap = new Map((profiles || []).map((p: any) => [p.id, p]));
     setProducts(((data as any[]) || []).map((p) => ({ ...p, user_profiles: profileMap.get(p.seller_user_id) })));
+
+    const productIds = (data || []).map((p: any) => p.id);
+    if (productIds.length > 0) fetchProductEngagement(productIds);
+  };
+
+  // Batched like/review/bookmark counts (+ this user's own like/bookmark
+  // state) for every product currently in the feed, fetched once per
+  // fetchProducts() call rather than per-card, so scrolling past a dozen
+  // product cards doesn't fire a dozen separate count queries.
+  const fetchProductEngagement = async (productIds: string[]) => {
+    try {
+      const [likesRes, reviewsRes, bookmarksRes] = await Promise.all([
+        (supabase as any).from('product_likes').select('product_id, user_id').in('product_id', productIds),
+        supabase.from('product_reviews').select('product_id').in('product_id', productIds),
+        (supabase as any).from('user_bookmarks').select('item_id, user_id').eq('item_type', 'product').in('item_id', productIds),
+      ]);
+
+      const likeCounts: Record<string, number> = {};
+      const myLikes = new Set<string>();
+      (likesRes.data || []).forEach((l: any) => {
+        likeCounts[l.product_id] = (likeCounts[l.product_id] || 0) + 1;
+        if (l.user_id === user?.id) myLikes.add(l.product_id);
+      });
+
+      const reviewCounts: Record<string, number> = {};
+      (reviewsRes.data || []).forEach((r: any) => {
+        reviewCounts[r.product_id] = (reviewCounts[r.product_id] || 0) + 1;
+      });
+
+      const bookmarkCounts: Record<string, number> = {};
+      const myBookmarks = new Set<string>();
+      (bookmarksRes.data || []).forEach((b: any) => {
+        bookmarkCounts[b.item_id] = (bookmarkCounts[b.item_id] || 0) + 1;
+        if (b.user_id === user?.id) myBookmarks.add(b.item_id);
+      });
+
+      setProductLikeCounts(likeCounts);
+      setProductReviewCounts(reviewCounts);
+      setProductBookmarkCounts(bookmarkCounts);
+      setMyProductLikes(myLikes);
+      setMyProductBookmarks(myBookmarks);
+    } catch (error) {
+      console.error('Error fetching product engagement:', error);
+    }
+  };
+
+  const toggleProductLike = async (productId: string) => {
+    if (!user) {
+      toast({ title: 'Login required', description: 'Please login to like products' });
+      return;
+    }
+    const isLiked = myProductLikes.has(productId);
+    // Optimistic update
+    setMyProductLikes(prev => {
+      const next = new Set(prev);
+      isLiked ? next.delete(productId) : next.add(productId);
+      return next;
+    });
+    setProductLikeCounts(prev => ({ ...prev, [productId]: Math.max(0, (prev[productId] || 0) + (isLiked ? -1 : 1)) }));
+
+    try {
+      if (isLiked) {
+        const { error } = await (supabase as any).from('product_likes').delete().eq('product_id', productId).eq('user_id', user.id);
+        if (error) throw error;
+      } else {
+        const { error } = await (supabase as any).from('product_likes').insert({ product_id: productId, user_id: user.id });
+        if (error) throw error;
+      }
+    } catch (error: any) {
+      console.error('Error toggling product like:', error);
+      // Roll back the optimistic update if the write actually failed
+      setMyProductLikes(prev => {
+        const next = new Set(prev);
+        isLiked ? next.add(productId) : next.delete(productId);
+        return next;
+      });
+      setProductLikeCounts(prev => ({ ...prev, [productId]: Math.max(0, (prev[productId] || 0) + (isLiked ? 1 : -1)) }));
+      toast({ title: 'Error', description: error?.message || 'Failed to update like', variant: 'destructive' });
+    }
+  };
+
+  const toggleProductBookmark = async (productId: string) => {
+    if (!user) {
+      toast({ title: 'Login required', description: 'Please login to bookmark products' });
+      return;
+    }
+    const isBookmarked = myProductBookmarks.has(productId);
+    setMyProductBookmarks(prev => {
+      const next = new Set(prev);
+      isBookmarked ? next.delete(productId) : next.add(productId);
+      return next;
+    });
+    setProductBookmarkCounts(prev => ({ ...prev, [productId]: Math.max(0, (prev[productId] || 0) + (isBookmarked ? -1 : 1)) }));
+
+    try {
+      if (isBookmarked) {
+        const { error } = await (supabase as any).from('user_bookmarks').delete().eq('item_type', 'product').eq('item_id', productId).eq('user_id', user.id);
+        if (error) throw error;
+      } else {
+        const { error } = await (supabase as any).from('user_bookmarks').insert({ item_type: 'product', item_id: productId, user_id: user.id });
+        if (error) throw error;
+      }
+    } catch (error: any) {
+      console.error('Error toggling product bookmark:', error);
+      setMyProductBookmarks(prev => {
+        const next = new Set(prev);
+        isBookmarked ? next.add(productId) : next.delete(productId);
+        return next;
+      });
+      setProductBookmarkCounts(prev => ({ ...prev, [productId]: Math.max(0, (prev[productId] || 0) + (isBookmarked ? 1 : -1)) }));
+      toast({ title: 'Error', description: error?.message || 'Failed to update bookmark', variant: 'destructive' });
+    }
   };
 
   // Background music that auto-plays on product cards, alternating one
@@ -2266,6 +2402,7 @@ const TikTokFeed: React.FC = () => {
                   const soundUrl = productSounds.length
                     ? productSounds[slide.soundIndex % productSounds.length]?.url
                     : undefined;
+                  const pid = slide.product.id;
                   return (
                     <MixedFeedCard
                       key={slide.key}
@@ -2274,6 +2411,13 @@ const TikTokFeed: React.FC = () => {
                       isActive={index === activeIndex}
                       isMuted={isMuted}
                       soundUrl={soundUrl}
+                      likeCount={productLikeCounts[pid] || 0}
+                      reviewCount={productReviewCounts[pid] || 0}
+                      bookmarkCount={productBookmarkCounts[pid] || 0}
+                      isLiked={myProductLikes.has(pid)}
+                      isBookmarked={myProductBookmarks.has(pid)}
+                      onToggleLike={() => toggleProductLike(pid)}
+                      onToggleBookmark={() => toggleProductBookmark(pid)}
                     />
                   );
                 }

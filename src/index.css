@@ -115,6 +115,34 @@ All colors MUST be HSL.
                 0 0 20px hsl(var(--primary) / 0.3),
                 0 0 30px hsl(var(--primary) / 0.1);
   }
+
+  /* Colorful animated border for the Marketplace product cards in the
+     feed - a rotating rainbow-ish glow so the card reads as a bright,
+     eye-catching "hit" the way a GenZ-facing app card would, rather than
+     a plain static border. */
+  .product-card-glow {
+    position: relative;
+  }
+  .product-card-glow::before {
+    content: '';
+    position: absolute;
+    inset: -3px;
+    border-radius: inherit;
+    background: conic-gradient(from var(--glow-angle, 0deg),
+      #ff4fd8, #ff9d4f, #ffe94f, #4fffb0, #4fd8ff, #a94fff, #ff4fd8);
+    z-index: -1;
+    filter: blur(6px);
+    opacity: 0.85;
+    animation: product-card-spin 6s linear infinite;
+  }
+  @property --glow-angle {
+    syntax: '<angle>';
+    initial-value: 0deg;
+    inherits: false;
+  }
+  @keyframes product-card-spin {
+    to { --glow-angle: 360deg; }
+  }
   
   .text-shadow-3d {
     text-shadow: 2px 2px 4px hsl(var(--primary) / 0.3),
