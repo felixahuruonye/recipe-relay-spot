@@ -1536,18 +1536,40 @@ const TikTokFeed: React.FC = () => {
     const productOrder = products.length ? [...products.slice(productSeed), ...products.slice(0, productSeed)] : [];
     const slides: FeedSlide[] = [];
     let productIndex = 0;
+
+    // Product cards must always stay visible to everyone - never gated
+    // behind "only if you've touched Marketplace before" - but how OFTEN
+    // they show adapts a little to behavior: someone who bookmarks
+    // products sees them a bit more often, someone who never touches
+    // Marketplace still sees them regularly, just not oversaturated.
+    // Placement is randomized within bounds (rather than a fixed "every
+    // 3rd post") so it feels like it's organically popping up as you
+    // scroll instead of ticking on a clockwork interval - while a hard
+    // maxGap guarantees it can never go silent for a long stretch, which
+    // is what made it feel like "sometimes I don't see it at all."
+    const bookmarkSignal = Math.min(myProductBookmarks.size, 3);
+    const minGap = 3;
+    const maxGap = Math.max(minGap + 1, 6 - bookmarkSignal);
+    let rngState = seed || 1;
+    const nextRand = () => {
+      rngState = (rngState * 1103515245 + 12345) & 0x7fffffff;
+      return rngState / 0x7fffffff;
+    };
+    let nextProductAt = minGap + Math.floor(nextRand() * (maxGap - minGap + 1));
+
     orderedPosts.forEach((post, index) => {
       slides.push({ type: 'post', key: `post-${post.id}`, post, postIndex: index });
       if (index === 1) slides.push({ type: 'suggested', key: 'suggested-users' });
-      if ((index + 1) % 3 === 0 && productOrder.length > 0) {
+      if (index === nextProductAt && productOrder.length > 0) {
         const product = productOrder[productIndex % productOrder.length];
         slides.push({ type: 'product', key: `product-${product.id}-${index}`, product, soundIndex: productIndex });
         productIndex += 1;
+        nextProductAt = index + minGap + Math.floor(nextRand() * (maxGap - minGap + 1));
       }
       if ((index + 1) % 6 === 0) slides.push({ type: 'trending-stories', key: `trending-stories-${index}` });
     });
     return slides;
-  }, [posts, products, user?.id]);
+  }, [posts, products, user?.id, myProductBookmarks]);
 
   // Fetch posts
   useEffect(() => { fetchPosts(); fetchProducts(); fetchProductSounds(); }, []);
@@ -1992,13 +2014,22 @@ const TikTokFeed: React.FC = () => {
   };
 
   const fetchProducts = async () => {
-    const { data } = await supabase
+    const { data, error } = await supabase
       .from('products')
       .select('*')
       .eq('status', 'active')
       .order('featured', { ascending: false })
       .order('created_at', { ascending: false })
       .limit(18);
+
+    if (error) {
+      // Don't silently wipe out an already-loaded product list just
+      // because a background refresh failed - that was very likely why
+      // products would sometimes vanish from the feed with no warning.
+      console.error('Error fetching products:', error);
+      return;
+    }
+
     const sellerIds = [...new Set((data || []).map((p) => p.seller_user_id))];
     const { data: profiles } = sellerIds.length
       ? await supabase.from('user_profiles').select('id, username, avatar_url, vip').in('id', sellerIds)

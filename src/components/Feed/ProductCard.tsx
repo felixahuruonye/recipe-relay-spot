@@ -79,21 +79,24 @@ export const ProductCard: React.FC<ProductCardProps> = ({
     if (audioRef.current) audioRef.current.muted = !!isMuted;
   }, [isMuted]);
 
-  const ActionButton = ({ icon: Icon, count, active, activeColor, onClick }: any) => (
+  const ActionButton = ({ icon: Icon, count, label, active, activeColor, onClick }: any) => (
     <button
       onClick={(e) => { e.stopPropagation(); onClick?.(); }}
-      className="flex flex-col items-center gap-1"
+      className="flex items-center gap-2 px-3 py-2 rounded-full bg-muted/60 hover:bg-muted transition-colors"
     >
-      <div className={`p-2.5 rounded-full bg-black/50 backdrop-blur-sm border border-white/10 ${active ? activeColor : ''}`}>
-        <Icon className={`w-5 h-5 text-white ${active ? 'fill-current' : ''}`} />
-      </div>
-      <span className="text-white text-xs font-semibold drop-shadow">{count}</span>
+      <Icon className={`w-5 h-5 ${active ? `${activeColor} fill-current` : 'text-muted-foreground'}`} />
+      <span className="text-sm font-semibold">{count}</span>
+      <span className="text-xs text-muted-foreground hidden sm:inline">{label}</span>
     </button>
   );
 
   return (
-    <div className="relative">
-      <Card className="product-card-glow overflow-hidden hover:shadow-lg transition-shadow border-2 border-primary/20">
+    // Wrapper carries the glow + padding, Card sits inset from its edges.
+    // (Putting the glow directly on the Card doesn't work - the Card's
+    // own overflow-hidden, needed to round off the product image corners,
+    // clips the glow ring away completely.)
+    <div className="product-card-glow rounded-2xl p-[3px]">
+      <Card className="overflow-hidden hover:shadow-lg transition-shadow rounded-2xl">
         {soundUrl && <audio ref={audioRef} src={soundUrl} loop muted={isMuted} preload="auto" />}
         <div className="relative">
           <Badge className="absolute top-2 left-2 z-10 bg-primary">
@@ -122,15 +125,6 @@ export const ProductCard: React.FC<ProductCardProps> = ({
               <Package className="w-12 h-12 text-muted-foreground" />
             </div>
           )}
-
-          {/* Like / Review / Bookmark - left side, same style as the
-              action buttons on a normal post, just mirrored to the left
-              per request. */}
-          <div className="absolute left-2 bottom-2 z-10 flex flex-col gap-3">
-            <ActionButton icon={Heart} count={likeCount} active={isLiked} activeColor="!bg-red-500/70" onClick={onToggleLike} />
-            <ActionButton icon={MessageCircle} count={reviewCount} onClick={handleOpenReviews} />
-            <ActionButton icon={Bookmark} count={bookmarkCount} active={isBookmarked} activeColor="!bg-primary/70" onClick={onToggleBookmark} />
-          </div>
         </div>
 
         <CardHeader className="pb-2">
@@ -156,6 +150,14 @@ export const ProductCard: React.FC<ProductCardProps> = ({
               <ShoppingBag className="w-4 h-4 mr-2" />
               Buy Now
             </Button>
+          </div>
+
+          {/* Like / Review / Bookmark - moved below the card content
+              where there's real room, instead of cramped over the image. */}
+          <div className="flex items-center justify-between pt-2 border-t">
+            <ActionButton icon={Heart} count={likeCount} label="Likes" active={isLiked} activeColor="text-red-500" onClick={onToggleLike} />
+            <ActionButton icon={MessageCircle} count={reviewCount} label="Reviews" onClick={handleOpenReviews} />
+            <ActionButton icon={Bookmark} count={bookmarkCount} label="Saved" active={isBookmarked} activeColor="text-primary" onClick={onToggleBookmark} />
           </div>
         </CardContent>
       </Card>

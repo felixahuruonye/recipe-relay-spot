@@ -119,21 +119,32 @@ All colors MUST be HSL.
   /* Colorful animated border for the Marketplace product cards in the
      feed - a rotating rainbow-ish glow so the card reads as a bright,
      eye-catching "hit" the way a GenZ-facing app card would, rather than
-     a plain static border. */
+     a plain static border.
+     IMPORTANT: this class must go on a wrapper OUTSIDE any element that
+     has overflow-hidden (like the Card itself) - overflow-hidden clips
+     an element's own ::before/::after too, so putting this directly on
+     an overflow-hidden card makes the glow invisible. The wrapper should
+     have a little padding so the Card sits inset from its edges,
+     revealing the glow ring around it. */
   .product-card-glow {
     position: relative;
+    z-index: 0;
   }
   .product-card-glow::before {
     content: '';
     position: absolute;
-    inset: -3px;
+    inset: 0;
     border-radius: inherit;
     background: conic-gradient(from var(--glow-angle, 0deg),
       #ff4fd8, #ff9d4f, #ffe94f, #4fffb0, #4fd8ff, #a94fff, #ff4fd8);
-    z-index: -1;
-    filter: blur(6px);
-    opacity: 0.85;
+    z-index: 0;
+    filter: blur(8px);
+    opacity: 0.9;
     animation: product-card-spin 6s linear infinite;
+  }
+  .product-card-glow > * {
+    position: relative;
+    z-index: 1;
   }
   @property --glow-angle {
     syntax: '<angle>';
