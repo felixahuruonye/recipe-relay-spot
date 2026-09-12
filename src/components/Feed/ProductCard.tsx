@@ -1,10 +1,10 @@
-import React from 'react';
+import React, { useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Card, CardContent, CardHeader } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
-import { ShoppingBag, Star, Crown, Package } from 'lucide-react';
+import { ShoppingBag, Star, Crown, Package, Music2 } from 'lucide-react';
 
 interface ProductCardProps {
   product: {
@@ -21,17 +21,45 @@ interface ProductCardProps {
       vip: boolean;
     };
   };
+  // Background "sound" that plays while this specific card is the active
+  // slide in the feed - same idea as a TikTok video having a sound
+  // attached to it. Controlled entirely by the parent feed (isActive
+  // tracks scroll position, isMuted mirrors the feed's global mute toggle).
+  isActive?: boolean;
+  isMuted?: boolean;
+  soundUrl?: string;
 }
 
-export const ProductCard: React.FC<ProductCardProps> = ({ product }) => {
+export const ProductCard: React.FC<ProductCardProps> = ({ product, isActive, isMuted, soundUrl }) => {
   const navigate = useNavigate();
+  const audioRef = useRef<HTMLAudioElement>(null);
 
   const handleBuyNow = () => {
     navigate(`/marketplace?product=${product.id}`);
   };
 
+  // Play while this card is on screen, pause the moment it scrolls away -
+  // the <audio loop> attribute already handles "start over automatically
+  // if it ends", so a card that stays active for a while just keeps
+  // looping its own track rather than falling silent.
+  useEffect(() => {
+    const audio = audioRef.current;
+    if (!audio) return;
+    if (isActive && !isMuted) {
+      audio.currentTime = 0;
+      audio.play().catch(() => {});
+    } else {
+      audio.pause();
+    }
+  }, [isActive, isMuted, soundUrl]);
+
+  useEffect(() => {
+    if (audioRef.current) audioRef.current.muted = !!isMuted;
+  }, [isMuted]);
+
   return (
     <Card className="overflow-hidden hover:shadow-lg transition-shadow border-2 border-primary/20">
+      {soundUrl && <audio ref={audioRef} src={soundUrl} loop muted={isMuted} preload="auto" />}
       <div className="relative">
         <Badge className="absolute top-2 left-2 z-10 bg-primary">
           <ShoppingBag className="w-3 h-3 mr-1" />
@@ -41,6 +69,11 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product }) => {
           <Badge className="absolute top-2 right-2 z-10 bg-yellow-500">
             <Star className="w-3 h-3 mr-1" />
             Featured
+          </Badge>
+        )}
+        {soundUrl && (
+          <Badge variant="outline" className="absolute bottom-2 left-2 z-10 bg-black/60 text-white border-none gap-1">
+            <Music2 className="w-3 h-3" /> Sound on
           </Badge>
         )}
         {product.images && product.images.length > 0 ? (

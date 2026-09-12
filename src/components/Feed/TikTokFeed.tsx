@@ -86,7 +86,7 @@ interface Product {
 type FeedSlide =
   | { type: 'post'; key: string; post: Post; postIndex: number }
   | { type: 'suggested'; key: string }
-  | { type: 'product'; key: string; product: Product }
+  | { type: 'product'; key: string; product: Product; soundIndex: number }
   | { type: 'trending-stories'; key: string };
 
 const seedFromString = (s: string) => {
@@ -211,12 +211,20 @@ const StarFloatAnimation: React.FC<{ amount: number; visible: boolean }> = ({ am
   );
 };
 
-const MixedFeedCard: React.FC<{ type: 'suggested' | 'product' | 'trending-stories'; product?: Product }> = ({ type, product }) => {
+const MixedFeedCard: React.FC<{
+  type: 'suggested' | 'product' | 'trending-stories';
+  product?: Product;
+  isActive?: boolean;
+  isMuted?: boolean;
+  soundUrl?: string;
+}> = ({ type, product, isActive, isMuted, soundUrl }) => {
   return (
     <div className="h-[100dvh] snap-start snap-always bg-background flex items-center justify-center p-4 overflow-y-auto">
       <div className="w-full max-w-md py-16">
         {type === 'suggested' && <SuggestedUsers />}
-        {type === 'product' && product && <ProductCard product={product as any} />}
+        {type === 'product' && product && (
+          <ProductCard product={product as any} isActive={isActive} isMuted={isMuted} soundUrl={soundUrl} />
+        )}
         {type === 'trending-stories' && <TrendingStoriesCard />}
       </div>
     </div>
@@ -1431,6 +1439,7 @@ const TikTokFeed: React.FC = () => {
 
   const [posts, setPosts] = useState<Post[]>([]);
   const [products, setProducts] = useState<Product[]>([]);
+  const [productSounds, setProductSounds] = useState<{ url: string; title: string }[]>([]);
   const [users, setUsers] = useState<Record<string, UserProfile>>({});
   const [postLikes, setPostLikes] = useState<Record<string, any[]>>({});
   const [postViewCounts, setPostViewCounts] = useState<Record<string, number>>({});
@@ -1508,7 +1517,7 @@ const TikTokFeed: React.FC = () => {
       if (index === 1) slides.push({ type: 'suggested', key: 'suggested-users' });
       if ((index + 1) % 3 === 0 && productOrder.length > 0) {
         const product = productOrder[productIndex % productOrder.length];
-        slides.push({ type: 'product', key: `product-${product.id}-${index}`, product });
+        slides.push({ type: 'product', key: `product-${product.id}-${index}`, product, soundIndex: productIndex });
         productIndex += 1;
       }
       if ((index + 1) % 6 === 0) slides.push({ type: 'trending-stories', key: `trending-stories-${index}` });
@@ -1517,7 +1526,7 @@ const TikTokFeed: React.FC = () => {
   }, [posts, products, user?.id]);
 
   // Fetch posts
-  useEffect(() => { fetchPosts(); fetchProducts(); }, []);
+  useEffect(() => { fetchPosts(); fetchProducts(); fetchProductSounds(); }, []);
 
   useEffect(() => {
     const loadStoryCount = async () => {
@@ -1974,6 +1983,18 @@ const TikTokFeed: React.FC = () => {
     setProducts(((data as any[]) || []).map((p) => ({ ...p, user_profiles: profileMap.get(p.seller_user_id) })));
   };
 
+  // Background music that auto-plays on product cards, alternating one
+  // track per card (like a TikTok "sound" attached to each card). Fetched
+  // once - the list itself rarely changes - and looked up by soundIndex.
+  const fetchProductSounds = async () => {
+    const { data } = await (supabase as any)
+      .from('product_card_sounds')
+      .select('url, title')
+      .eq('active', true)
+      .order('sort_order', { ascending: true });
+    setProductSounds((data as any[]) || []);
+  };
+
   const loadFollowing = async () => {
     if (!user) return;
     const { data } = await supabase.from('followers').select('following_id').eq('follower_id', user.id);
@@ -2239,10 +2260,22 @@ const TikTokFeed: React.FC = () => {
                 }
 
                 if (slide.type === 'suggested' || slide.type === 'trending-stories') {
-                  return <MixedFeedCard key={slide.key} type={slide.type} />;
+                  return <MixedFeedCard key={slide.key} type={slide.type} isActive={index === activeIndex} />;
                 }
                 if (slide.type === 'product') {
-                  return <MixedFeedCard key={slide.key} type="product" product={slide.product} />;
+                  const soundUrl = productSounds.length
+                    ? productSounds[slide.soundIndex % productSounds.length]?.url
+                    : undefined;
+                  return (
+                    <MixedFeedCard
+                      key={slide.key}
+                      type="product"
+                      product={slide.product}
+                      isActive={index === activeIndex}
+                      isMuted={isMuted}
+                      soundUrl={soundUrl}
+                    />
+                  );
                 }
                 const post = slide.post;
                 return (
