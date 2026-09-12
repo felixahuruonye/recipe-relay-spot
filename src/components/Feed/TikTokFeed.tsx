@@ -101,8 +101,8 @@ const seedFromString = (s: string) => {
 // Ranks posts once (freshness + engagement + light personalization). The
 // result is stored as an ordered id list and re-used until the next
 // deliberate refresh, so live stat ticks never reorder cards under the user.
-const rankPostIds = (allPosts: Post[], userKey: string): string[] => {
-  const seed = seedFromString(`${userKey}-${new Date().toDateString()}`);
+const rankPostIds = (allPosts: Post[], userKey: string, sessionSeed: number): string[] => {
+  const seed = sessionSeed;
   return [...allPosts]
     .map((p) => {
       const ageHrs = Math.max(1, (Date.now() - new Date(p.created_at).getTime()) / 3600000);
@@ -1229,6 +1229,7 @@ const TikTokPost: React.FC<{
           loop={!autoScroll}
           playsInline
           muted={isMuted}
+          preload="auto"
           onEnded={onVideoEnd}
           onTimeUpdate={(e) => {
             const video = e.currentTarget;
@@ -1468,6 +1469,15 @@ const TikTokFeed: React.FC = () => {
   // like/view ticking up somewhere in the feed never reshuffles what's on
   // screen - only an explicit tap on the "New posts" pill does.
   const [orderedPostIds, setOrderedPostIds] = useState<string[]>([]);
+  // A fresh random seed each time the app mounts (real reload, not just
+  // switching tabs within the same session), so re-opening the app gives
+  // a genuinely different shuffle instead of showing the same top-of-feed
+  // every time - the seed used to be derived from the calendar date, which
+  // meant the exact same order all day long, every reload, until midnight.
+  // Nothing is excluded from the candidate pool, so a post you've already
+  // seen can still resurface later at a different position - it's just
+  // never permanently hidden.
+  const sessionSeedRef = useRef(Math.floor(Math.random() * 1_000_000_000));
   const [newPostsAvailable, setNewPostsAvailable] = useState(0);
   const [rewardBox, setRewardBox] = useState<RewardBoxData | null>(null);
   const processingRef = useRef<Set<string>>(new Set());
@@ -1479,7 +1489,7 @@ const TikTokFeed: React.FC = () => {
   const autoSpendNoticeRef = useRef(false);
 
   const feedSlides = useMemo<FeedSlide[]>(() => {
-    const seed = seedFromString(`${user?.id || 'guest'}-${new Date().toDateString()}`);
+    const seed = sessionSeedRef.current;
     // Order is decided once (in fetchPosts / mergeNewPosts) and frozen in
     // orderedPostIds. We just look each post up by id here, so a live field
     // update (likes_count, view_count ticking up from realtime) changes what
@@ -1835,6 +1845,19 @@ const TikTokFeed: React.FC = () => {
   }, [user, processedPosts, toast, autoSpend, myProfile]);
 
 
+  // Explicit, user-initiated refresh (tapping Home/"For You" while already
+  // in the feed). Unlike the automatic background calls removed earlier -
+  // which silently reshuffled posts out from under an actively-scrolling
+  // user, and were the actual bug - this one only runs when the person
+  // deliberately asks for a fresh feed, which is exactly what tapping
+  // Home/For You on TikTok itself does. Reshuffles the session seed too,
+  // so it isn't just the same order scrolled back to the top.
+  const handleHomeRefresh = useCallback(() => {
+    sessionSeedRef.current = Math.floor(Math.random() * 1_000_000_000);
+    fetchPosts();
+    feedRef.current?.scrollTo({ top: 0, behavior: 'smooth' });
+  }, []);
+
   const scrollToNext = useCallback(() => {
     if (!feedRef.current || !autoScroll) return;
     const nextIndex = activeIndex + 1;
@@ -1916,7 +1939,7 @@ const TikTokFeed: React.FC = () => {
         }
 
         setPosts(allPosts as Post[]);
-        setOrderedPostIds(rankPostIds(allPosts as Post[], user?.id || 'guest'));
+        setOrderedPostIds(rankPostIds(allPosts as Post[], user?.id || 'guest', sessionSeedRef.current));
         setUsers(usersMap);
         setPostLikes(likesMap);
         setPostCommentCounts(commentCountMap);
@@ -2310,7 +2333,7 @@ const TikTokFeed: React.FC = () => {
             <div className="flex items-center gap-3 px-3 pt-3 pb-1 pointer-events-auto overflow-hidden">
               <div className="shrink-0" />
               <div className="flex items-end justify-center gap-4 flex-1 min-w-0 text-white font-black">
-                <button className="text-base border-b-2 border-white pb-1 whitespace-nowrap" onClick={() => feedRef.current?.scrollTo({ top: 0, behavior: 'smooth' })}>For You</button>
+                <button className="text-base border-b-2 border-white pb-1 whitespace-nowrap" onClick={handleHomeRefresh}>For You</button>
                 <button className="relative text-base text-white/55 pb-1 whitespace-nowrap" onClick={() => user ? navigate('/storyline') : requireLogin('Login for stories')}>
                   Stories
                   {storyCount > 0 && <span className="absolute -top-3 -right-4 rounded-full bg-destructive px-1.5 py-0.5 text-[9px] leading-none text-destructive-foreground">{storyCount > 999 ? '1M' : storyCount}</span>}
@@ -2329,7 +2352,7 @@ const TikTokFeed: React.FC = () => {
           {/* BOTTOM NAVIGATION */}
           <div className="absolute bottom-0 left-0 right-0 z-40">
             <div className="flex items-center justify-around py-1.5 px-1 bg-black/88 backdrop-blur-md border-t border-white/10">
-              <NavBtn icon={Home} label="Watch" active onClick={() => feedRef.current?.scrollTo({ top: 0, behavior: 'smooth' })} />
+              <NavBtn icon={Home} label="Watch" active onClick={handleHomeRefresh} />
               <NavBtn icon={MessageCircle} label="Chat" badge={chatCount} onClick={() => user ? navigate('/chat') : requireLogin('Login to chat')} />
               <button
                 onClick={() => { if (!user) { requireLogin('Login to post'); return; } setEditPost(null); setShowCreatePost(true); }}
