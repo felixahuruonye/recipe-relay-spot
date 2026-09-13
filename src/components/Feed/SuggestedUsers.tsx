@@ -1,10 +1,11 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
+import { motion, AnimatePresence } from 'framer-motion';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { UserPlus, ChevronRight, Search, Crown, X, Shuffle } from 'lucide-react';
+import { UserPlus, ChevronRight, Search, Crown, Heart } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { useToast } from '@/hooks/use-toast';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
@@ -17,20 +18,50 @@ interface UserSuggestion {
   full_name: string | null;
 }
 
-export const SuggestedUsers: React.FC = () => {
+interface SuggestedUsersProps {
+  isActive?: boolean;
+  isMuted?: boolean;
+}
+
+const CARD_MS = 4000;
+
+export const SuggestedUsers: React.FC<SuggestedUsersProps> = ({ isActive, isMuted }) => {
   const { user } = useAuth();
   const navigate = useNavigate();
   const { toast } = useToast();
   const [suggestions, setSuggestions] = useState<UserSuggestion[]>([]);
   const [allUsers, setAllUsers] = useState<UserSuggestion[]>([]);
   const [followingSet, setFollowingSet] = useState<Set<string>>(new Set());
-  const [followerSet, setFollowerSet] = useState<Set<string>>(new Set()); // users who follow me
-  const [dismissed, setDismissed] = useState<Set<string>>(new Set());
+  const [followerSet, setFollowerSet] = useState<Set<string>>(new Set());
+  const [interactedWith, setInteractedWith] = useState<Set<string>>(new Set());
   const [showAll, setShowAll] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [loading, setLoading] = useState(true);
 
+  // Carousel state
+  const [cardIndex, setCardIndex] = useState(0); // 0..3 = profile cards, 4 = "view more" tile
+  const [direction, setDirection] = useState<1 | -1>(1);
+  const [autoPaused, setAutoPaused] = useState(false);
+  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const dragStartX = useRef<number | null>(null);
+
+  // Background sound rotation
+  const [sounds, setSounds] = useState<{ url: string }[]>([]);
+  const soundVisitCountRef = useRef(0);
+  const [currentSoundUrl, setCurrentSoundUrl] = useState<string | undefined>(undefined);
+  const audioRef = useRef<HTMLAudioElement>(null);
+
   useEffect(() => { if (user) loadSuggestions(); }, [user]);
+  useEffect(() => { loadSounds(); }, []);
+
+  const loadSounds = async () => {
+    const { data } = await (supabase as any)
+      .from('suggestion_card_sounds')
+      .select('url')
+      .eq('active', true)
+      .order('sort_order', { ascending: true });
+    setSounds((data as any[]) || []);
+  };
 
   const loadSuggestions = async () => {
     if (!user) return;
@@ -52,11 +83,32 @@ export const SuggestedUsers: React.FC = () => {
 
     const list = users || [];
     setAllUsers(list);
-    // Prioritize: people who follow me but I don't follow back, then others not followed
     const followBacks = list.filter(u => followerIds.has(u.id) && !followingIds.has(u.id));
     const others = list.filter(u => !followerIds.has(u.id) && !followingIds.has(u.id));
-    setSuggestions(shuffle([...followBacks, ...others]).slice(0, 12));
+    const finalList = shuffle([...followBacks, ...others]).slice(0, 12);
+    setSuggestions(finalList);
     setLoading(false);
+
+    // Has the current user ever liked/viewed/commented on a post by any
+    // of these suggested people? If so, show "Interacted with one of
+    // their post" instead of "Suggested for you" for that person.
+    const suggestedIds = finalList.map(u => u.id);
+    if (suggestedIds.length === 0) return;
+    const { data: theirPosts } = await supabase.from('posts').select('id, user_id').in('user_id', suggestedIds);
+    const postIds = (theirPosts || []).map((p: any) => p.id);
+    const ownerOf = new Map((theirPosts || []).map((p: any) => [p.id, p.user_id]));
+    if (postIds.length === 0) return;
+    const [{ data: likes }, { data: views }, { data: comments }] = await Promise.all([
+      supabase.from('post_likes').select('post_id').eq('user_id', user.id).in('post_id', postIds),
+      supabase.from('post_views').select('post_id').eq('user_id', user.id).in('post_id', postIds),
+      supabase.from('post_comments').select('post_id').eq('user_id', user.id).in('post_id', postIds),
+    ]);
+    const interacted = new Set<string>();
+    [...(likes || []), ...(views || []), ...(comments || [])].forEach((row: any) => {
+      const owner = ownerOf.get(row.post_id) as string | undefined;
+      if (owner) interacted.add(owner);
+    });
+    setInteractedWith(interacted);
   };
 
   const shuffle = <T,>(arr: T[]): T[] => [...arr].sort(() => Math.random() - 0.5);
@@ -65,8 +117,7 @@ export const SuggestedUsers: React.FC = () => {
     if (!user) return;
     try {
       if (followingSet.has(targetId)) {
-        await supabase.from('followers').delete()
-          .eq('follower_id', user.id).eq('following_id', targetId);
+        await supabase.from('followers').delete().eq('follower_id', user.id).eq('following_id', targetId);
         setFollowingSet(prev => { const n = new Set(prev); n.delete(targetId); return n; });
       } else {
         await supabase.from('followers').insert({ follower_id: user.id, following_id: targetId });
@@ -78,11 +129,66 @@ export const SuggestedUsers: React.FC = () => {
     }
   };
 
-  const dismiss = (id: string) => {
-    setDismissed(prev => new Set(prev).add(id));
+  const cards = suggestions.slice(0, 4);
+  const lastIndex = cards.length; // the "view more" tile sits right after the last real card
+
+  const goNext = () => {
+    setDirection(1);
+    setAutoPaused(false);
+    setCardIndex(i => Math.min(i + 1, lastIndex));
+  };
+  const goPrev = () => {
+    setDirection(-1);
+    setAutoPaused(true); // pause auto-advance on this card until the user manually moves forward again
+    setCardIndex(i => Math.max(i - 1, 0));
   };
 
-  const visible = suggestions.filter(u => !dismissed.has(u.id));
+  // Auto-advance every 4s while this slide is the active one, not muted-
+  // out of the loop, and not paused by a manual "go back".
+  useEffect(() => {
+    if (timerRef.current) clearTimeout(timerRef.current);
+    if (!isActive || autoPaused || loading || cards.length === 0) return;
+    if (cardIndex >= lastIndex) return; // don't auto-advance past the "view more" tile
+    timerRef.current = setTimeout(() => {
+      setDirection(1);
+      setCardIndex(i => Math.min(i + 1, lastIndex));
+    }, CARD_MS);
+    return () => { if (timerRef.current) clearTimeout(timerRef.current); };
+  }, [isActive, autoPaused, cardIndex, loading, cards.length, lastIndex]);
+
+  // Rotate through the 5 background tracks - a new one each time this
+  // slide becomes active again, looping the same one while it stays active.
+  useEffect(() => {
+    if (isActive && sounds.length > 0) {
+      setCurrentSoundUrl(sounds[soundVisitCountRef.current % sounds.length]?.url);
+      soundVisitCountRef.current += 1;
+    }
+  }, [isActive, sounds.length]);
+
+  useEffect(() => {
+    const audio = audioRef.current;
+    if (!audio) return;
+    if (isActive && !isMuted && currentSoundUrl) {
+      audio.currentTime = 0;
+      audio.play().catch(() => {});
+    } else {
+      audio.pause();
+    }
+  }, [isActive, isMuted, currentSoundUrl]);
+
+  useEffect(() => {
+    if (audioRef.current) audioRef.current.muted = !!isMuted;
+  }, [isMuted]);
+
+  const onPointerDown = (e: React.PointerEvent) => { dragStartX.current = e.clientX; };
+  const onPointerUp = (e: React.PointerEvent) => {
+    if (dragStartX.current === null) return;
+    const delta = e.clientX - dragStartX.current;
+    dragStartX.current = null;
+    if (delta < -50) goNext();
+    else if (delta > 50) goPrev();
+  };
+
   const filteredAll = searchQuery
     ? allUsers.filter(u =>
         u.username.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -90,65 +196,96 @@ export const SuggestedUsers: React.FC = () => {
       )
     : allUsers;
 
-  if (loading || visible.length === 0) return null;
+  if (loading || cards.length === 0) return null;
+
+  const current = cardIndex < cards.length ? cards[cardIndex] : null;
 
   return (
     <>
-      <div className="rounded-2xl border border-primary/20 bg-card/60 p-3 backdrop-blur">
-        <div className="flex items-center justify-between mb-3">
-          <h3 className="text-sm font-bold flex items-center gap-2">
-            <UserPlus className="w-4 h-4 text-primary" />
-            People you may know
-          </h3>
-          <button onClick={() => setSuggestions(shuffle(suggestions))} className="text-xs text-muted-foreground flex items-center gap-1 hover:text-primary">
-            <Shuffle className="w-3 h-3" /> Shuffle
-          </button>
-        </div>
+      {currentSoundUrl && <audio ref={audioRef} src={currentSoundUrl} loop muted={isMuted} preload="auto" />}
 
-        <div className="grid grid-cols-2 gap-2.5">
-          {visible.slice(0, 4).map(u => {
-            const followsMe = followerSet.has(u.id);
-            const iFollow = followingSet.has(u.id);
-            return (
-              <div key={u.id} className="relative rounded-xl bg-muted/40 border border-border p-3 flex flex-col items-center text-center">
-                <button onClick={() => dismiss(u.id)} className="absolute top-1.5 right-1.5 text-muted-foreground hover:text-foreground">
-                  <X className="w-3.5 h-3.5" />
-                </button>
-                <Avatar
-                  className="w-16 h-16 cursor-pointer ring-2 ring-primary/40 mb-2"
-                  onClick={() => navigate(`/profile/${u.id}`)}
-                >
-                  <AvatarImage src={u.avatar_url || ''} />
-                  <AvatarFallback className="text-lg">{u.username[0]?.toUpperCase()}</AvatarFallback>
-                </Avatar>
-                <div className="flex items-center gap-1 mb-0.5">
-                  <span className="text-xs font-semibold truncate max-w-[100px]" onClick={() => navigate(`/profile/${u.id}`)}>
-                    {u.username}
-                  </span>
-                  {u.vip && <Crown className="w-3 h-3 text-yellow-500 shrink-0" />}
+      <div className="flex items-center justify-between mb-3 px-1">
+        <h3 className="text-sm font-bold flex items-center gap-2">
+          <UserPlus className="w-4 h-4 text-primary" />
+          People you may know
+        </h3>
+        <div className="flex gap-1">
+          {cards.map((_, i) => (
+            <div key={i} className={`h-1 w-4 rounded-full ${i === cardIndex ? 'bg-primary' : 'bg-muted'}`} />
+          ))}
+        </div>
+      </div>
+
+      <div
+        className="relative h-[420px] select-none touch-pan-y"
+        onPointerDown={onPointerDown}
+        onPointerUp={onPointerUp}
+      >
+        <AnimatePresence initial={false} custom={direction} mode="popLayout">
+          {current ? (
+            <motion.div
+              key={current.id}
+              custom={direction}
+              initial={{ x: direction === 1 ? 300 : -300, opacity: 0 }}
+              animate={{ x: 0, opacity: 1 }}
+              exit={{ x: direction === 1 ? -300 : 300, opacity: 0 }}
+              transition={{ type: 'spring', stiffness: 300, damping: 30 }}
+              className="absolute inset-0"
+            >
+              <div className="product-card-glow rounded-2xl p-[3px] h-full">
+                <div className="rounded-2xl h-full overflow-hidden relative bg-muted">
+                  {current.avatar_url ? (
+                    <img src={current.avatar_url} alt={current.username} className="w-full h-full object-cover" />
+                  ) : (
+                    <div className="w-full h-full flex items-center justify-center bg-gradient-to-br from-primary/30 to-primary/10">
+                      <span className="text-6xl font-bold text-primary/60">{current.username[0]?.toUpperCase()}</span>
+                    </div>
+                  )}
+                  <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/10 to-transparent" />
+
+                  <div className="absolute bottom-0 left-0 right-0 p-4 space-y-2">
+                    <div className="flex items-center gap-1.5 cursor-pointer" onClick={() => navigate(`/profile/${current.id}`)}>
+                      <span className="text-white font-bold text-lg drop-shadow">{current.username}</span>
+                      {current.vip && <Crown className="w-4 h-4 text-yellow-400" />}
+                    </div>
+                    <p className="text-white/80 text-xs flex items-center gap-1">
+                      {interactedWith.has(current.id) ? (
+                        <><Heart className="w-3 h-3" /> Interacted with one of their posts</>
+                      ) : (
+                        'Suggested for you'
+                      )}
+                    </p>
+                    <Button
+                      className="w-full"
+                      variant={followingSet.has(current.id) ? 'outline' : 'default'}
+                      onClick={() => handleFollow(current.id)}
+                    >
+                      {followingSet.has(current.id) ? 'Following' : followerSet.has(current.id) ? 'Follow Back' : 'Follow'}
+                    </Button>
+                  </div>
                 </div>
-                <p className="text-[10px] text-muted-foreground mb-2">
-                  {followsMe ? 'Follows you' : 'Suggested for you'}
-                </p>
-                <Button
-                  size="sm"
-                  variant={iFollow ? 'outline' : 'default'}
-                  className="w-full h-7 text-[11px] font-semibold"
-                  onClick={() => handleFollow(u.id)}
-                >
-                  {iFollow ? 'Following' : followsMe ? 'Follow back' : 'Follow'}
-                </Button>
               </div>
-            );
-          })}
-        </div>
-
-        <button
-          onClick={() => setShowAll(true)}
-          className="w-full mt-3 text-xs text-primary font-semibold flex items-center justify-center gap-1 hover:underline"
-        >
-          View More <ChevronRight className="w-3.5 h-3.5" />
-        </button>
+            </motion.div>
+          ) : (
+            <motion.div
+              key="view-more"
+              initial={{ x: 300, opacity: 0 }}
+              animate={{ x: 0, opacity: 1 }}
+              exit={{ x: -300, opacity: 0 }}
+              transition={{ type: 'spring', stiffness: 300, damping: 30 }}
+              className="absolute inset-0 flex items-center justify-center"
+            >
+              <button onClick={() => setShowAll(true)} className="flex flex-col items-center gap-3">
+                <div className="product-card-glow rounded-full p-[3px]">
+                  <div className="rounded-full w-20 h-20 flex items-center justify-center bg-card border">
+                    <ChevronRight className="w-8 h-8 text-primary" />
+                  </div>
+                </div>
+                <span className="text-sm font-semibold text-muted-foreground">View More</span>
+              </button>
+            </motion.div>
+          )}
+        </AnimatePresence>
       </div>
 
       <Dialog open={showAll} onOpenChange={setShowAll}>

@@ -228,7 +228,7 @@ const MixedFeedCard: React.FC<{
   return (
     <div className="h-[100dvh] snap-start snap-always bg-background flex items-center justify-center p-4 overflow-y-auto">
       <div className="w-full max-w-md py-16">
-        {type === 'suggested' && <SuggestedUsers />}
+        {type === 'suggested' && <SuggestedUsers isActive={isActive} isMuted={isMuted} />}
         {type === 'product' && product && (
           <ProductCard
             product={product as any}
@@ -1497,6 +1497,7 @@ const TikTokFeed: React.FC = () => {
   const [showStarFloat, setShowStarFloat] = useState(false);
   const [lastEarnAmount, setLastEarnAmount] = useState(0);
   const [showSuggestedUsers, setShowSuggestedUsers] = useState(false);
+  const [followingCount, setFollowingCount] = useState<number | null>(null);
   // Stable slide order + a queue for posts that arrived via realtime but
   // haven't been merged in yet. Keeping order separate from `posts` means a
   // like/view ticking up somewhere in the feed never reshuffles what's on
@@ -1557,9 +1558,20 @@ const TikTokFeed: React.FC = () => {
     };
     let nextProductAt = minGap + Math.floor(nextRand() * (maxGap - minGap + 1));
 
+    // People-suggestion cards: frequency adjusts to how many people the
+    // user already follows - very few follows sees them often, 10+
+    // follows sees them rarely. Never fully absent, same guaranteed-gap
+    // approach as products above.
+    const followCount = followingCount ?? 0;
+    const suggestGap = followCount >= 10 ? { min: 14, max: 22 } : followCount >= 5 ? { min: 8, max: 12 } : { min: 4, max: 6 };
+    let nextSuggestedAt = suggestGap.min + Math.floor(nextRand() * (suggestGap.max - suggestGap.min + 1));
+
     orderedPosts.forEach((post, index) => {
       slides.push({ type: 'post', key: `post-${post.id}`, post, postIndex: index });
-      if (index === 1) slides.push({ type: 'suggested', key: 'suggested-users' });
+      if (index === nextSuggestedAt) {
+        slides.push({ type: 'suggested', key: `suggested-users-${index}` });
+        nextSuggestedAt = index + suggestGap.min + Math.floor(nextRand() * (suggestGap.max - suggestGap.min + 1));
+      }
       if (index === nextProductAt && productOrder.length > 0) {
         const product = productOrder[productIndex % productOrder.length];
         slides.push({ type: 'product', key: `product-${product.id}-${index}`, product, soundIndex: productIndex });
@@ -1569,10 +1581,16 @@ const TikTokFeed: React.FC = () => {
       if ((index + 1) % 6 === 0) slides.push({ type: 'trending-stories', key: `trending-stories-${index}` });
     });
     return slides;
-  }, [posts, products, user?.id, myProductBookmarks]);
+  }, [posts, products, user?.id, myProductBookmarks, followingCount]);
 
   // Fetch posts
   useEffect(() => { fetchPosts(); fetchProducts(); fetchProductSounds(); }, []);
+
+  useEffect(() => {
+    if (!user) { setFollowingCount(0); return; }
+    supabase.from('followers').select('*', { count: 'exact', head: true }).eq('follower_id', user.id)
+      .then(({ count }) => setFollowingCount(count || 0));
+  }, [user?.id]);
 
   useEffect(() => {
     const loadStoryCount = async () => {
@@ -2427,7 +2445,7 @@ const TikTokFeed: React.FC = () => {
                 }
 
                 if (slide.type === 'suggested' || slide.type === 'trending-stories') {
-                  return <MixedFeedCard key={slide.key} type={slide.type} isActive={index === activeIndex} />;
+                  return <MixedFeedCard key={slide.key} type={slide.type} isActive={index === activeIndex} isMuted={isMuted} />;
                 }
                 if (slide.type === 'product') {
                   const soundUrl = productSounds.length
