@@ -55,60 +55,89 @@ export const SuggestedUsers: React.FC<SuggestedUsersProps> = ({ isActive, isMute
   useEffect(() => { loadSounds(); }, []);
 
   const loadSounds = async () => {
-    const { data } = await (supabase as any)
-      .from('suggestion_card_sounds')
-      .select('url')
-      .eq('active', true)
-      .order('sort_order', { ascending: true });
-    setSounds((data as any[]) || []);
+    try {
+      const { data, error } = await (supabase as any)
+        .from('suggestion_card_sounds')
+        .select('url')
+        .eq('active', true)
+        .order('sort_order', { ascending: true });
+      if (error) throw error;
+      setSounds((data as any[]) || []);
+    } catch (error) {
+      console.error('Error loading suggestion sounds (non-critical):', error);
+    }
   };
 
   const loadSuggestions = async () => {
     if (!user) return;
-    const [{ data: following }, { data: followers }] = await Promise.all([
-      supabase.from('followers').select('following_id').eq('follower_id', user.id),
-      supabase.from('followers').select('follower_id').eq('following_id', user.id),
-    ]);
-    const followingIds = new Set(following?.map((f: any) => f.following_id) || []);
-    const followerIds = new Set(followers?.map((f: any) => f.follower_id) || []);
-    setFollowingSet(followingIds);
-    setFollowerSet(followerIds);
+    setLoading(true);
+    try {
+      // Race against a timeout so a slow/flaky connection can never leave
+      // this stuck in "loading" forever - on a hung request there was
+      // previously no fallback at all, and the card renders as nothing
+      // (return null) the entire time loading is true. Whatever data did
+      // resolve within the window still gets used below.
+      const withTimeout = <T,>(p: PromiseLike<T>, ms = 6000): Promise<T | null> =>
+        Promise.race([Promise.resolve(p), new Promise<null>((res) => setTimeout(() => res(null), ms))]);
 
-    const { data: users } = await supabase
-      .from('user_profiles')
-      .select('id, username, avatar_url, vip, full_name')
-      .neq('id', user.id)
-      .order('created_at', { ascending: false })
-      .limit(500);
+      const followRes = await withTimeout(Promise.all([
+        supabase.from('followers').select('following_id').eq('follower_id', user.id),
+        supabase.from('followers').select('follower_id').eq('following_id', user.id),
+      ]));
+      const following = followRes?.[0]?.data;
+      const followers = followRes?.[1]?.data;
+      const followingIds = new Set(following?.map((f: any) => f.following_id) || []);
+      const followerIds = new Set(followers?.map((f: any) => f.follower_id) || []);
+      setFollowingSet(followingIds);
+      setFollowerSet(followerIds);
 
-    const list = users || [];
-    setAllUsers(list);
-    const followBacks = list.filter(u => followerIds.has(u.id) && !followingIds.has(u.id));
-    const others = list.filter(u => !followerIds.has(u.id) && !followingIds.has(u.id));
-    const finalList = shuffle([...followBacks, ...others]).slice(0, 12);
-    setSuggestions(finalList);
-    setLoading(false);
+      const usersRes: any = await withTimeout(
+        supabase
+          .from('user_profiles')
+          .select('id, username, avatar_url, vip, full_name')
+          .neq('id', user.id)
+          .order('created_at', { ascending: false })
+          .limit(500)
+      );
+      const list = usersRes?.data || [];
+      setAllUsers(list);
+      const followBacks = list.filter(u => followerIds.has(u.id) && !followingIds.has(u.id));
+      const others = list.filter(u => !followerIds.has(u.id) && !followingIds.has(u.id));
+      const finalList = shuffle([...followBacks, ...others]).slice(0, 12);
+      setSuggestions(finalList);
 
-    // Has the current user ever liked/viewed/commented on a post by any
-    // of these suggested people? If so, show "Interacted with one of
-    // their post" instead of "Suggested for you" for that person.
-    const suggestedIds = finalList.map(u => u.id);
-    if (suggestedIds.length === 0) return;
-    const { data: theirPosts } = await supabase.from('posts').select('id, user_id').in('user_id', suggestedIds);
-    const postIds = (theirPosts || []).map((p: any) => p.id);
-    const ownerOf = new Map((theirPosts || []).map((p: any) => [p.id, p.user_id]));
-    if (postIds.length === 0) return;
-    const [{ data: likes }, { data: views }, { data: comments }] = await Promise.all([
-      supabase.from('post_likes').select('post_id').eq('user_id', user.id).in('post_id', postIds),
-      supabase.from('post_views').select('post_id').eq('user_id', user.id).in('post_id', postIds),
-      supabase.from('post_comments').select('post_id').eq('user_id', user.id).in('post_id', postIds),
-    ]);
-    const interacted = new Set<string>();
-    [...(likes || []), ...(views || []), ...(comments || [])].forEach((row: any) => {
-      const owner = ownerOf.get(row.post_id) as string | undefined;
-      if (owner) interacted.add(owner);
-    });
-    setInteractedWith(interacted);
+      // Has the current user ever liked/viewed/commented on a post by any
+      // of these suggested people? Nice-to-have label, not essential -
+      // its own try/catch so a failure here never affects whether the
+      // cards themselves show.
+      try {
+        const suggestedIds = finalList.map(u => u.id);
+        if (suggestedIds.length === 0) return;
+        const { data: theirPosts } = await supabase.from('posts').select('id, user_id').in('user_id', suggestedIds);
+        const postIds = (theirPosts || []).map((p: any) => p.id);
+        const ownerOf = new Map((theirPosts || []).map((p: any) => [p.id, p.user_id]));
+        if (postIds.length === 0) return;
+        const [{ data: likes }, { data: views }, { data: comments }] = await Promise.all([
+          supabase.from('post_likes').select('post_id').eq('user_id', user.id).in('post_id', postIds),
+          supabase.from('post_views').select('post_id').eq('user_id', user.id).in('post_id', postIds),
+          supabase.from('post_comments').select('post_id').eq('user_id', user.id).in('post_id', postIds),
+        ]);
+        const interacted = new Set<string>();
+        [...(likes || []), ...(views || []), ...(comments || [])].forEach((row: any) => {
+          const owner = ownerOf.get(row.post_id) as string | undefined;
+          if (owner) interacted.add(owner);
+        });
+        setInteractedWith(interacted);
+      } catch (err) {
+        console.error('Error checking suggestion interactions (non-critical):', err);
+      }
+    } catch (error) {
+      console.error('Error loading suggestions:', error);
+    } finally {
+      // Always runs, success or failure - this is the actual fix: nothing
+      // can leave the card stuck invisible indefinitely anymore.
+      setLoading(false);
+    }
   };
 
   const shuffle = <T,>(arr: T[]): T[] => [...arr].sort(() => Math.random() - 0.5);
@@ -196,7 +225,21 @@ export const SuggestedUsers: React.FC<SuggestedUsersProps> = ({ isActive, isMute
       )
     : allUsers;
 
-  if (loading || cards.length === 0) return null;
+  if (loading) {
+    return (
+      <div className="animate-pulse">
+        <div className="flex items-center justify-between mb-3 px-1">
+          <div className="h-4 w-32 bg-muted rounded" />
+        </div>
+        <div className="product-card-glow rounded-2xl p-[3px] h-[420px]">
+          <div className="rounded-2xl h-full bg-muted flex items-center justify-center">
+            <UserPlus className="w-10 h-10 text-muted-foreground/40" />
+          </div>
+        </div>
+      </div>
+    );
+  }
+  if (cards.length === 0) return null;
 
   const current = cardIndex < cards.length ? cards[cardIndex] : null;
 
