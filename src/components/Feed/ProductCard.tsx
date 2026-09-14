@@ -1,4 +1,4 @@
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Card, CardContent, CardHeader } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -49,6 +49,7 @@ export const ProductCard: React.FC<ProductCardProps> = ({
 }) => {
   const navigate = useNavigate();
   const audioRef = useRef<HTMLAudioElement>(null);
+  const [imgReady, setImgReady] = useState(false);
 
   const handleBuyNow = () => {
     navigate(`/marketplace?product=${product.id}`);
@@ -115,11 +116,20 @@ export const ProductCard: React.FC<ProductCardProps> = ({
             </Badge>
           )}
           {product.images && product.images.length > 0 ? (
-            <img
-              src={product.images[0]}
-              alt={product.title}
-              className="w-full h-48 object-cover"
-            />
+            <>
+              {!imgReady && (
+                <div className="w-full h-48 bg-muted flex items-center justify-center absolute inset-0 z-0">
+                  <div className="w-8 h-8 rounded-full border-2 border-muted-foreground/25 border-t-muted-foreground animate-spin" />
+                </div>
+              )}
+              <img
+                src={product.images[0]}
+                alt={product.title}
+                onLoad={() => setImgReady(true)}
+                onError={() => setImgReady(true)}
+                className={`w-full h-48 object-cover relative z-10 transition-opacity ${imgReady ? 'opacity-100' : 'opacity-0'}`}
+              />
+            </>
           ) : (
             <div className="w-full h-48 bg-muted flex items-center justify-center">
               <Package className="w-12 h-12 text-muted-foreground" />

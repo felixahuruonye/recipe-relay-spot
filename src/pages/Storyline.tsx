@@ -8,7 +8,7 @@ import { StorylineCard } from '@/components/Storyline/StorylineCard';
 import { CreateStoryline } from '@/components/Storyline/CreateStoryline';
 import { EnhancedStorylineViewer } from '@/components/Storyline/EnhancedStorylineViewer';
 import { StorySettings } from '@/components/Storyline/StorySettings';
-import { ArrowLeft, Plus, Star, Send } from 'lucide-react';
+import { ArrowLeft, Plus, Star, Send, Users, UserCheck, Compass } from 'lucide-react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 
 const Storyline = () => {
@@ -19,17 +19,40 @@ const Storyline = () => {
   const [profile, setProfile] = useState<any>(null);
   const [selectedUserId, setSelectedUserId] = useState<string | null>(null);
   const [showCreate, setShowCreate] = useState(false);
+  const [followingSet, setFollowingSet] = useState<Set<string>>(new Set());
+  const [followerSet, setFollowerSet] = useState<Set<string>>(new Set());
+  // Discover (everyone, current default behavior) stays the default tab -
+  // Friends and Following are additional filters on top of it.
+  const [activeTab, setActiveTab] = useState<'friends' | 'following' | 'discover'>('discover');
+
+  useEffect(() => {
+    if (!user) return;
+    Promise.all([
+      supabase.from('followers').select('following_id').eq('follower_id', user.id),
+      supabase.from('followers').select('follower_id').eq('following_id', user.id),
+    ]).then(([{ data: following }, { data: followers }]) => {
+      setFollowingSet(new Set((following || []).map((f: any) => f.following_id)));
+      setFollowerSet(new Set((followers || []).map((f: any) => f.follower_id)));
+    });
+  }, [user?.id]);
+
+  const visibleStories = React.useMemo(() => {
+    if (activeTab === 'discover') return stories;
+    if (activeTab === 'following') return stories.filter(s => followingSet.has(s.user_id) || s.user_id === user?.id);
+    // Friends: mutual follow only - both people follow each other
+    return stories.filter(s => (followingSet.has(s.user_id) && followerSet.has(s.user_id)) || s.user_id === user?.id);
+  }, [stories, activeTab, followingSet, followerSet, user?.id]);
 
   const storyUsers = React.useMemo(() => {
     const map = new Map<string, any>();
-    stories.forEach((story) => {
+    visibleStories.forEach((story) => {
       const existing = map.get(story.user_id);
       if (!existing || new Date(story.created_at).getTime() > new Date(existing.created_at).getTime()) {
         map.set(story.user_id, story);
       }
     });
     return Array.from(map.values());
-  }, [stories]);
+  }, [visibleStories]);
 
   const loadStories = async () => {
     const { data } = await supabase
@@ -125,14 +148,40 @@ const Storyline = () => {
         </button>
       </div>
 
+      <div data-swipe-exempt="true" className="flex gap-2">
+        <button
+          onClick={() => setActiveTab('friends')}
+          className={`flex items-center gap-1.5 px-4 py-2 rounded-full text-sm font-semibold transition-colors ${activeTab === 'friends' ? 'bg-primary text-primary-foreground' : 'bg-muted/60 text-muted-foreground'}`}
+        >
+          <Users className="w-4 h-4" /> Friends
+        </button>
+        <button
+          onClick={() => setActiveTab('following')}
+          className={`flex items-center gap-1.5 px-4 py-2 rounded-full text-sm font-semibold transition-colors ${activeTab === 'following' ? 'bg-primary text-primary-foreground' : 'bg-muted/60 text-muted-foreground'}`}
+        >
+          <UserCheck className="w-4 h-4" /> Following
+        </button>
+        <button
+          onClick={() => setActiveTab('discover')}
+          className={`flex items-center gap-1.5 px-4 py-2 rounded-full text-sm font-semibold transition-colors ${activeTab === 'discover' ? 'bg-primary text-primary-foreground' : 'bg-muted/60 text-muted-foreground'}`}
+        >
+          <Compass className="w-4 h-4" /> Discover
+        </button>
+      </div>
+
       <div data-swipe-exempt="true" className="flex gap-2 overflow-x-auto pb-2">
         {storyUsers.slice(0, 18).map((story) => (
           <StorylineCard key={story.id} type="story" previewUrl={story.preview_url || story.media_url} avatarUrl={story.user_profile?.avatar_url} username={story.user_profile?.username} starPrice={story.star_price} onSelect={() => setSelectedUserId(story.user_id)} />
         ))}
+        {storyUsers.length === 0 && (
+          <p className="text-sm text-muted-foreground py-4">
+            {activeTab === 'friends' ? "No stories from mutual friends yet" : activeTab === 'following' ? "People you follow haven't posted a story yet" : "No stories yet"}
+          </p>
+        )}
       </div>
 
       <div data-swipe-exempt="true" className="grid grid-cols-2 gap-3">
-        {stories.map((story) => (
+        {visibleStories.map((story) => (
           <button key={`grid-${story.id}`} onClick={() => setSelectedUserId(story.user_id)} className="relative aspect-[9/14] rounded-2xl overflow-hidden border border-border bg-card text-left">
             {story.media_type === 'video' ? <video src={story.media_url} className="h-full w-full object-cover" muted playsInline /> : <img src={story.preview_url || story.media_url} alt={story.caption || 'Story'} className="h-full w-full object-cover" />}
             <div className="absolute inset-0 bg-gradient-to-t from-black/85 via-transparent to-black/20" />

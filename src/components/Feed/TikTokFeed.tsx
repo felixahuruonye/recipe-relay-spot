@@ -1139,6 +1139,7 @@ const TikTokPost: React.FC<{
   const musicAudioRef = useRef<HTMLAudioElement>(null);
   const [imageTimer, setImageTimer] = useState(5);
   const [isPaused, setIsPaused] = useState(false);
+  const [mediaReady, setMediaReady] = useState(false);
   const [showDoubleHeart, setShowDoubleHeart] = useState(false);
   const [mediaIndex, setMediaIndex] = useState(0);
   const imageTimerRef = useRef<NodeJS.Timeout | null>(null);
@@ -1149,6 +1150,11 @@ const TikTokPost: React.FC<{
   const activeMedia = mediaItems[Math.min(mediaIndex, Math.max(mediaItems.length - 1, 0))];
   const displayMedia = post.thumbnail_url && activeMedia?.match(/\.(mp4|webm|ogg|mov)$/i) ? post.thumbnail_url : activeMedia;
   const isVideo = hasMedia && (activeMedia?.match(/\.(mp4|webm|ogg|mov)$/i) || activeMedia?.includes('video'));
+
+  // Track whether the active media has actually finished loading, so a
+  // slow connection shows a clear loading state instead of a blank gap
+  // before the video/image pops in.
+  useEffect(() => { setMediaReady(false); }, [activeMedia]);
   const externalVideoUrl = post.body?.match(/https?:\/\/(?:www\.)?(?:youtube\.com\/watch\?v=|youtu\.be\/|vimeo\.com\/|tiktok\.com\/[^\s]+|instagram\.com\/reel\/)[^\s]+/i)?.[0];
 
   useEffect(() => {
@@ -1272,16 +1278,32 @@ const TikTokPost: React.FC<{
           }}
           onPlay={() => setIsPaused(false)}
           onPause={() => setIsPaused(true)}
+          onLoadedData={() => setMediaReady(true)}
+          onError={() => setMediaReady(true)}
           onClick={handleMediaTap}
         />
       ) : hasMedia ? (
-        <img src={displayMedia} alt={post.title} onClick={handleMediaTap} className="relative z-10 max-w-full max-h-full object-contain cursor-pointer" loading="lazy" />
+        <img src={displayMedia} alt={post.title} onClick={handleMediaTap} onLoad={() => setMediaReady(true)} onError={() => setMediaReady(true)} className="relative z-10 max-w-full max-h-full object-contain cursor-pointer" loading="lazy" />
       ) : (
         <div onClick={handleMediaTap} className="absolute inset-0 bg-gradient-to-br from-primary/80 via-accent/60 to-primary/40 flex items-center justify-center p-8 cursor-pointer">
           <div className="text-center space-y-4 max-w-lg">
             <h2 className="text-2xl md:text-3xl font-black text-white leading-tight">{post.title}</h2>
             <p className="text-white/80 text-base leading-relaxed">{post.body}</p>
           </div>
+        </div>
+      )}
+
+      {/* Loading state - shown until the active video/image has actually
+          finished loading, so a slow connection shows a clear "this is
+          loading" indicator instead of a blank gap before content pops
+          in. Uses the post's own thumbnail (blurred) as the backdrop
+          when available, so it doesn't feel like empty dead space. */}
+      {hasMedia && !mediaReady && (
+        <div className="absolute inset-0 z-10 flex items-center justify-center bg-black">
+          {post.thumbnail_url && (
+            <div className="absolute inset-0 bg-cover bg-center blur-md scale-110 opacity-40" style={{ backgroundImage: `url(${post.thumbnail_url})` }} />
+          )}
+          <div className="relative w-10 h-10 rounded-full border-2 border-white/25 border-t-white animate-spin" />
         </div>
       )}
 
