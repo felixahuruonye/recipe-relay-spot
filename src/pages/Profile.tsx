@@ -325,6 +325,10 @@ const Profile = () => {
           media_type: storyline.media_type,
           caption: storyline.caption,
           expires_at: expiresAt,
+          // Keep crediting whoever first posted this, even through
+          // multiple reshares - falls back to the story's own poster
+          // when this is the first-ever reshare of an original story.
+          original_creator_id: storyline.original_creator_id || storyline.user_id,
         } as any);
 
       if (error) throw error;

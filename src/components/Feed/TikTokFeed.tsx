@@ -244,7 +244,7 @@ const MixedFeedCard: React.FC<{
             onToggleBookmark={onToggleBookmark}
           />
         )}
-        {type === 'trending-stories' && <TrendingStoriesCard />}
+        {type === 'trending-stories' && <TrendingStoriesCard isActive={isActive} isMuted={isMuted} />}
       </div>
     </div>
   );
@@ -911,6 +911,9 @@ const EnhancedShareMenu: React.FC<{
           media_type: isVideo ? 'video' : 'image',
           caption: post.title,
           expires_at: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(),
+          // Attribute this story to the post's original author, not the
+          // person sharing it to their own storyline.
+          original_creator_id: post.user_id,
         } as any);
       if (error) throw error;
       toast({ title: 'Shared to your Storyline!', description: 'Live for the next 24 hours' });

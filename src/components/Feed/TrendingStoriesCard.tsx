@@ -1,8 +1,8 @@
-import { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
+import { motion, AnimatePresence } from 'framer-motion';
 import { supabase } from '@/integrations/supabase/client';
-import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { Sparkles, ChevronLeft, ChevronRight, Eye } from 'lucide-react';
+import { Sparkles, Eye, ChevronRight } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 
 interface TrendingStory {
@@ -14,10 +14,20 @@ interface TrendingStory {
   caption: string | null;
 }
 
-export const TrendingStoriesCard = () => {
+interface TrendingStoriesCardProps {
+  isActive?: boolean;
+  isMuted?: boolean;
+}
+
+const CARD_MS = 5000;
+
+export const TrendingStoriesCard: React.FC<TrendingStoriesCardProps> = ({ isActive, isMuted }) => {
   const navigate = useNavigate();
   const [stories, setStories] = useState<TrendingStory[]>([]);
   const [idx, setIdx] = useState(0);
+  const [direction, setDirection] = useState<1 | -1>(1);
+  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const dragStartX = useRef<number | null>(null);
 
   useEffect(() => {
     (async () => {
@@ -28,91 +38,134 @@ export const TrendingStoriesCard = () => {
         .eq('status', 'active')
         .gte('created_at', since)
         .order('view_count', { ascending: false })
-        .limit(10);
-      // Random shuffle so it differs each render
+        .limit(5); // only the first 5 auto-cycle - a "View More" tile follows
       const shuffled = ((data as any) || []).sort(() => Math.random() - 0.5);
       setStories(shuffled);
     })();
   }, []);
 
-  // Auto-advance every 5s (image) — for video we'd need onEnded; keep simple 5s
+  const lastIndex = stories.length; // "View More Storylines" tile sits right after the last real card
+
+  // Auto-advance every 5s, only while this slide is actually the active
+  // one in the feed - it used to run all the time regardless of whether
+  // the card was even on screen.
   useEffect(() => {
-    if (stories.length === 0) return;
-    const t = setTimeout(() => setIdx((i) => (i + 1) % stories.length), 5000);
-    return () => clearTimeout(t);
-  }, [idx, stories.length]);
+    if (timerRef.current) clearTimeout(timerRef.current);
+    if (!isActive || stories.length === 0 || idx >= lastIndex) return;
+    timerRef.current = setTimeout(() => {
+      setDirection(1);
+      setIdx((i) => Math.min(i + 1, lastIndex));
+    }, CARD_MS);
+    return () => { if (timerRef.current) clearTimeout(timerRef.current); };
+  }, [isActive, idx, stories.length, lastIndex]);
+
+  const goNext = () => { setDirection(1); setIdx((i) => Math.min(i + 1, lastIndex)); };
+  const goPrev = () => { setDirection(-1); setIdx((i) => Math.max(i - 1, 0)); };
+
+  const onPointerDown = (e: React.PointerEvent) => { dragStartX.current = e.clientX; };
+  const onPointerUp = (e: React.PointerEvent) => {
+    if (dragStartX.current === null) return;
+    const delta = e.clientX - dragStartX.current;
+    dragStartX.current = null;
+    if (delta < -50) goNext();
+    else if (delta > 50) goPrev();
+  };
 
   if (stories.length === 0) return null;
 
-  const story = stories[idx];
-  const isVideo = story.media_type?.startsWith('video');
+  const story = idx < stories.length ? stories[idx] : null;
+  const isVideo = story?.media_type?.startsWith('video');
 
   return (
-    <Card className="mx-3 my-2 overflow-hidden border-primary/30 bg-gradient-to-br from-purple-900/20 via-pink-900/10 to-blue-900/20">
-      <CardContent className="p-3 space-y-3">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <Sparkles className="w-4 h-4 text-yellow-400" />
-            <span className="text-sm font-bold">Trending Stories</span>
-          </div>
-          <span className="text-[10px] text-muted-foreground">{idx + 1}/{stories.length}</span>
+    <div className="w-full max-w-md mx-auto space-y-3">
+      <div className="flex items-center justify-between px-1">
+        <div className="flex items-center gap-2">
+          <Sparkles className="w-4 h-4 text-yellow-400" />
+          <span className="text-sm font-bold">Trending Stories</span>
         </div>
+        {story && <span className="text-[10px] text-muted-foreground">{idx + 1}/{stories.length}</span>}
+      </div>
 
-        <div className="relative aspect-[9/16] max-h-[420px] rounded-lg overflow-hidden bg-black">
-          {story.media_url ? (
-            isVideo ? (
-              <video
-                key={story.id}
-                src={story.media_url}
-                className="w-full h-full object-cover"
-                autoPlay
-                muted
-                playsInline
-                onEnded={() => setIdx((i) => (i + 1) % stories.length)}
-              />
-            ) : (
-              <img src={story.media_url} alt="" className="w-full h-full object-cover" />
-            )
+      <div
+        className="relative aspect-[9/16] max-h-[65vh] select-none"
+        onPointerDown={onPointerDown}
+        onPointerUp={onPointerUp}
+      >
+        <AnimatePresence initial={false} custom={direction} mode="popLayout">
+          {story ? (
+            <motion.div
+              key={story.id}
+              custom={direction}
+              initial={{ x: direction === 1 ? 300 : -300, opacity: 0 }}
+              animate={{ x: 0, opacity: 1 }}
+              exit={{ x: direction === 1 ? -300 : 300, opacity: 0 }}
+              transition={{ type: 'spring', stiffness: 300, damping: 30 }}
+              className="absolute inset-0"
+            >
+              <div className="product-card-glow rounded-2xl p-[3px] h-full">
+                <button
+                  onClick={() => navigate(`/storyline?story=${story.id}`)}
+                  className="rounded-2xl h-full w-full overflow-hidden relative bg-black block"
+                >
+                  {story.media_url ? (
+                    isVideo ? (
+                      <video
+                        src={story.media_url}
+                        className="w-full h-full object-cover"
+                        autoPlay={isActive}
+                        muted={isMuted}
+                        playsInline
+                        onEnded={goNext}
+                      />
+                    ) : (
+                      <img src={story.media_url} alt="" className="w-full h-full object-cover" />
+                    )
+                  ) : (
+                    <div className="w-full h-full bg-gradient-to-br from-primary/40 to-accent/40" />
+                  )}
+                  <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/85 to-transparent p-3">
+                    <p className="text-white text-sm line-clamp-2 text-left">{story.caption || 'Trending now'}</p>
+                    <p className="text-white/70 text-xs flex items-center gap-1 mt-1">
+                      <Eye className="w-3.5 h-3.5" /> {story.view_count || 0} views
+                    </p>
+                  </div>
+                </button>
+              </div>
+            </motion.div>
           ) : (
-            <div className="w-full h-full bg-gradient-to-br from-primary/40 to-accent/40" />
+            <motion.div
+              key="view-more-storylines"
+              initial={{ x: 300, opacity: 0 }}
+              animate={{ x: 0, opacity: 1 }}
+              exit={{ x: -300, opacity: 0 }}
+              transition={{ type: 'spring', stiffness: 300, damping: 30 }}
+              className="absolute inset-0"
+            >
+              <div className="product-card-glow rounded-2xl p-[3px] h-full">
+                <button
+                  onClick={() => navigate('/storyline')}
+                  className="rounded-2xl h-full w-full flex flex-col items-center justify-center gap-4 bg-gradient-to-br from-purple-900/40 via-pink-900/30 to-blue-900/40"
+                >
+                  <div className="w-16 h-16 rounded-full bg-white/10 flex items-center justify-center">
+                    <ChevronRight className="w-8 h-8 text-white" />
+                  </div>
+                  <span className="text-white font-bold text-lg">View More Storylines</span>
+                  <span className="text-white/60 text-xs">See everyone's stories</span>
+                </button>
+              </div>
+            </motion.div>
           )}
-          <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/80 to-transparent p-2">
-            <p className="text-white text-xs line-clamp-2">{story.caption || 'Trending now'}</p>
-            <p className="text-white/70 text-[10px] flex items-center gap-1">
-              <Eye className="w-3 h-3" /> {story.view_count || 0} views
-            </p>
-          </div>
+        </AnimatePresence>
+      </div>
 
-          <button
-            className="absolute left-1 top-1/2 -translate-y-1/2 bg-black/40 rounded-full p-1"
-            onClick={() => setIdx((i) => (i - 1 + stories.length) % stories.length)}
-            aria-label="Previous"
-          >
-            <ChevronLeft className="w-4 h-4 text-white" />
-          </button>
-          <button
-            className="absolute right-1 top-1/2 -translate-y-1/2 bg-black/40 rounded-full p-1"
-            onClick={() => setIdx((i) => (i + 1) % stories.length)}
-            aria-label="Next"
-          >
-            <ChevronRight className="w-4 h-4 text-white" />
-          </button>
+      {story && (
+        <div className="flex gap-2 px-1">
+          {stories.map((_, i) => (
+            <div key={i} className={`h-1 flex-1 rounded-full ${i <= idx ? 'bg-primary' : 'bg-muted'}`} />
+          ))}
         </div>
-
-        <div className="flex gap-2">
-          <Button size="sm" variant="outline" className="flex-1" onClick={() => navigate('/?storyline=open')}>
-            View More
-          </Button>
-          <Button
-            size="sm"
-            className="flex-1"
-            onClick={() => alert('Create Video With AI — coming soon!')}
-          >
-            ✨ Create With AI
-          </Button>
-        </div>
-      </CardContent>
-    </Card>
+      )}
+    </div>
   );
 };
 

@@ -4,7 +4,7 @@ import { Button } from '@/components/ui/button';
 import { Switch } from '@/components/ui/switch';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Settings } from 'lucide-react';
+import { Settings, Eye } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { useToast } from '@/hooks/use-toast';
@@ -25,6 +25,7 @@ export const StorySettings: React.FC<StorySettingsProps> = ({ onSettingsChange }
   
   // Story privacy
   const [commentsEnabled, setCommentsEnabled] = useState(true);
+  const [showViewers, setShowViewers] = useState(true);
   
   // Audience control
   const [audienceControlEnabled, setAudienceControlEnabled] = useState(false);
@@ -51,6 +52,7 @@ export const StorySettings: React.FC<StorySettingsProps> = ({ onSettingsChange }
       setShowToFollowers(settings.show_to_followers ?? false);
       setShowOnlyMe(settings.show_only_me ?? false);
       setCommentsEnabled(settings.comments_enabled ?? true);
+      setShowViewers(settings.show_viewers ?? true);
       setAudienceControlEnabled(settings.audience_control ?? false);
       setMinAge(settings.min_age ?? 13);
     }
@@ -69,6 +71,7 @@ export const StorySettings: React.FC<StorySettingsProps> = ({ onSettingsChange }
     const settings = {
       ...visibilitySettings,
       comments_enabled: commentsEnabled,
+      show_viewers: showViewers,
       audience_control: audienceControlEnabled,
       min_age: minAge
     };
@@ -162,6 +165,18 @@ export const StorySettings: React.FC<StorySettingsProps> = ({ onSettingsChange }
                   id="comments"
                   checked={commentsEnabled}
                   onCheckedChange={setCommentsEnabled}
+                />
+              </div>
+
+              <div className="flex items-center justify-between glass-card p-3 rounded-lg">
+                <div>
+                  <Label htmlFor="show-viewers" className="flex items-center gap-1"><Eye className="w-3.5 h-3.5" /> Show Viewers to Others</Label>
+                  <p className="text-xs text-muted-foreground">When off, only you can see who watched your stories - other people won't see the eye icon at all</p>
+                </div>
+                <Switch
+                  id="show-viewers"
+                  checked={showViewers}
+                  onCheckedChange={setShowViewers}
                 />
               </div>
             </div>

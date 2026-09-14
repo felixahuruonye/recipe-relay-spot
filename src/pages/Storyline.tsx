@@ -7,12 +7,14 @@ import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { StorylineCard } from '@/components/Storyline/StorylineCard';
 import { CreateStoryline } from '@/components/Storyline/CreateStoryline';
 import { EnhancedStorylineViewer } from '@/components/Storyline/EnhancedStorylineViewer';
-import { ArrowLeft, Plus, Sparkles, Send } from 'lucide-react';
-import { useNavigate } from 'react-router-dom';
+import { StorySettings } from '@/components/Storyline/StorySettings';
+import { ArrowLeft, Plus, Star, Send } from 'lucide-react';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 
 const Storyline = () => {
   const { user } = useAuth();
   const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
   const [stories, setStories] = useState<any[]>([]);
   const [profile, setProfile] = useState<any>(null);
   const [selectedUserId, setSelectedUserId] = useState<string | null>(null);
@@ -44,18 +46,41 @@ const Storyline = () => {
       : { data: [] as any[] };
     const profileMap = new Map((profiles || []).map((p: any) => [p.id, p]));
     setStories((data || []).map((s: any) => ({ ...s, user_profile: profileMap.get(s.user_id) })));
+    return data || [];
   };
 
   useEffect(() => {
-    loadStories();
+    loadStories().then((data) => {
+      // Deep link from the feed's Trending Stories card: ?story=<id>
+      // opens straight to that specific story instead of just landing
+      // on the general Storyline page.
+      const storyId = searchParams.get('story');
+      if (storyId) {
+        const match = (data || []).find((s: any) => s.id === storyId);
+        if (match) setSelectedUserId(match.user_id);
+        searchParams.delete('story');
+        setSearchParams(searchParams, { replace: true });
+      }
+    });
     if (user) supabase.from('user_profiles').select('username, avatar_url').eq('id', user.id).maybeSingle().then(({ data }) => setProfile(data));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user?.id]);
 
-  const swipeStartRef = React.useRef<{ x: number; y: number } | null>(null);
-  const onSwipeStart = (e: React.TouchEvent) => { const t = e.touches[0]; swipeStartRef.current = { x: t.clientX, y: t.clientY }; };
+  // Swipe-to-switch-page should only fire when the gesture starts on the
+  // page background itself - not inside the horizontally-scrolling
+  // avatar row or the stories grid, both of which need their own
+  // horizontal touch gestures to work for scrolling through cards
+  // without accidentally triggering a full page navigation.
+  const swipeStartRef = React.useRef<{ x: number; y: number; onBackground: boolean } | null>(null);
+  const onSwipeStart = (e: React.TouchEvent) => {
+    const t = e.touches[0];
+    const target = e.target as HTMLElement;
+    const onBackground = !target.closest('[data-swipe-exempt="true"]');
+    swipeStartRef.current = { x: t.clientX, y: t.clientY, onBackground };
+  };
   const onSwipeEnd = (e: React.TouchEvent) => {
     const s = swipeStartRef.current; swipeStartRef.current = null;
-    if (!s) return;
+    if (!s || !s.onBackground) return;
     const t = e.changedTouches[0];
     const dx = t.clientX - s.x; const dy = t.clientY - s.y;
     if (Math.abs(dx) < 45 || Math.abs(dx) < Math.abs(dy)) return;
@@ -74,22 +99,39 @@ const Storyline = () => {
             <p className="text-xs text-muted-foreground">Watch full stories here to earn from Storyline views.</p>
           </div>
         </div>
-        <Button size="sm" className="gap-1" onClick={() => setShowCreate(true)}><Plus className="w-4 h-4" />Add</Button>
+        <div className="flex items-center gap-2">
+          {/* Story Settings used to only be reachable buried inside the
+              Create Story dialog (a dialog nested inside a dialog) -
+              now always reachable from the page itself. */}
+          <StorySettings />
+          <Button size="sm" className="gap-1" onClick={() => setShowCreate(true)}><Plus className="w-4 h-4" />Add</Button>
+        </div>
       </div>
 
-      <button onClick={() => setShowCreate(true)} className="w-full rounded-2xl border border-primary/30 bg-primary/10 p-3 flex items-center gap-3 text-left">
-        <Avatar className="w-12 h-12 ring-2 ring-primary/60"><AvatarImage src={profile?.avatar_url} /><AvatarFallback>{profile?.username?.[0]?.toUpperCase() || 'U'}</AvatarFallback></Avatar>
-        <div className="flex-1 min-w-0"><p className="text-sm font-bold">Add to Storyline</p><p className="text-xs text-muted-foreground">Post photos or videos for 24 hours</p></div>
-        <Sparkles className="w-5 h-5 text-primary" />
-      </button>
+      <div className="w-full rounded-2xl border border-primary/30 bg-primary/10 p-3 flex items-center gap-3">
+        <button onClick={() => setShowCreate(true)} className="flex items-center gap-3 flex-1 min-w-0 text-left">
+          <Avatar className="w-12 h-12 ring-2 ring-primary/60"><AvatarImage src={profile?.avatar_url} /><AvatarFallback>{profile?.username?.[0]?.toUpperCase() || 'U'}</AvatarFallback></Avatar>
+          <div className="flex-1 min-w-0"><p className="text-sm font-bold">Add to Storyline</p><p className="text-xs text-muted-foreground">Post photos or videos for 24 hours</p></div>
+        </button>
+        {/* The Star icon is now its own button (stopPropagation so it
+            doesn't also trigger "Add to Storyline") - will open Lenory
+            AI once that flow is ready; links there now. */}
+        <button
+          onClick={(e) => { e.stopPropagation(); navigate('/connect-lenory-ai'); }}
+          className="p-2 rounded-full bg-primary/20 hover:bg-primary/30 transition-colors flex-shrink-0"
+          aria-label="Lenory AI"
+        >
+          <Star className="w-5 h-5 text-primary" />
+        </button>
+      </div>
 
-      <div className="flex gap-2 overflow-x-auto pb-2">
+      <div data-swipe-exempt="true" className="flex gap-2 overflow-x-auto pb-2">
         {storyUsers.slice(0, 18).map((story) => (
           <StorylineCard key={story.id} type="story" previewUrl={story.preview_url || story.media_url} avatarUrl={story.user_profile?.avatar_url} username={story.user_profile?.username} starPrice={story.star_price} onSelect={() => setSelectedUserId(story.user_id)} />
         ))}
       </div>
 
-      <div className="grid grid-cols-2 gap-3">
+      <div data-swipe-exempt="true" className="grid grid-cols-2 gap-3">
         {stories.map((story) => (
           <button key={`grid-${story.id}`} onClick={() => setSelectedUserId(story.user_id)} className="relative aspect-[9/14] rounded-2xl overflow-hidden border border-border bg-card text-left">
             {story.media_type === 'video' ? <video src={story.media_url} className="h-full w-full object-cover" muted playsInline /> : <img src={story.preview_url || story.media_url} alt={story.caption || 'Story'} className="h-full w-full object-cover" />}
@@ -105,7 +147,19 @@ const Storyline = () => {
         <div className="flex gap-2 overflow-x-auto"><p className="text-xs text-muted-foreground whitespace-nowrap">Open any story, then comment or share it to a friend from the viewer.</p></div>
       </div>
 
-      {selectedUserId && <EnhancedStorylineViewer userId={selectedUserId} open={!!selectedUserId} onClose={() => setSelectedUserId(null)} />}
+      {selectedUserId && (
+        <EnhancedStorylineViewer
+          userId={selectedUserId}
+          open={!!selectedUserId}
+          onClose={() => {
+            setSelectedUserId(null);
+            // Refresh view/reaction counts the moment the viewer closes,
+            // so the grid reflects what just happened without the user
+            // needing to reload the whole page.
+            loadStories();
+          }}
+        />
+      )}
       {showCreate && <CreateStoryline autoOpen userProfile={profile} onCancel={() => setShowCreate(false)} onCreated={() => { setShowCreate(false); loadStories(); }} />}
     </div>
   );

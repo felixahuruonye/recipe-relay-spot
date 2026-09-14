@@ -24,6 +24,11 @@ interface Story {
   view_count: number;
   music_url: string | null;
   music_track_id?: string | null;
+  original_creator_id?: string | null;
+  original_creator?: {
+    username: string;
+    avatar_url: string;
+  };
   user?: {
     username: string;
     avatar_url: string;
@@ -52,6 +57,7 @@ export const EnhancedStorylineViewer: React.FC<StorylineViewerProps> = ({ userId
   const [isBlurred, setIsBlurred] = useState(false);
   const [userStarBalance, setUserStarBalance] = useState(0);
   const [commentsEnabled, setCommentsEnabled] = useState(true);
+  const [showViewersEnabled, setShowViewersEnabled] = useState(true);
   const [imageTimer, setImageTimer] = useState<number | null>(null);
   const [isProcessingPayment, setIsProcessingPayment] = useState(false);
   const [paymentProcessed, setPaymentProcessed] = useState(false);
@@ -292,8 +298,10 @@ export const EnhancedStorylineViewer: React.FC<StorylineViewerProps> = ({ userId
     if (data?.story_settings && typeof data.story_settings === 'object') {
       const settings = data.story_settings as any;
       setCommentsEnabled(settings.comments_enabled !== false);
+      setShowViewersEnabled(settings.show_viewers !== false);
     } else {
       setCommentsEnabled(true);
+      setShowViewersEnabled(true);
     }
   };
 
@@ -321,7 +329,10 @@ export const EnhancedStorylineViewer: React.FC<StorylineViewerProps> = ({ userId
       return;
     }
 
-    const userIds = [...new Set(data?.map(s => s.user_id) || [])];
+    const userIds = [...new Set([
+      ...(data?.map(s => s.user_id) || []),
+      ...(data?.map((s: any) => s.original_creator_id).filter(Boolean) || []),
+    ])];
     const { data: profiles } = await supabase
       .from('user_profiles')
       .select('id, username, avatar_url, story_settings, age')
@@ -332,7 +343,7 @@ export const EnhancedStorylineViewer: React.FC<StorylineViewerProps> = ({ userId
     let filteredStories = data || [];
     
     if (user && userId !== user.id) {
-      const creatorProfile = profileMap.get(userId);
+      const creatorProfile = profileMap.get(userId) as any;
       const viewerProfile = await supabase
         .from('user_profiles')
         .select('age')
@@ -373,9 +384,13 @@ export const EnhancedStorylineViewer: React.FC<StorylineViewerProps> = ({ userId
       }
     }
 
-    const storiesWithUsers = filteredStories.map(story => ({
+    const storiesWithUsers = filteredStories.map((story: any) => ({
       ...story,
-      user: profileMap.get(story.user_id)
+      user: profileMap.get(story.user_id),
+      // Falls back to the story's own poster when it's an original post
+      // (original_creator_id is backfilled to equal user_id for every
+      // pre-existing story, so this is never undefined in practice).
+      original_creator: profileMap.get(story.original_creator_id || story.user_id),
     }));
 
     const musicIds = [...new Set(storiesWithUsers.map((s: any) => s.music_track_id).filter(Boolean))];
@@ -486,12 +501,18 @@ export const EnhancedStorylineViewer: React.FC<StorylineViewerProps> = ({ userId
     
     const followerIds = new Set(followersData?.map(f => f.follower_id) || []);
     
-    // Combine data
-    const viewersWithProfiles = viewData.map(viewer => ({
-      ...viewer,
-      user_profiles: profileMap.get(viewer.viewer_id),
-      isFollower: followerIds.has(viewer.viewer_id)
-    }));
+    // Combine data - excluding the owner themselves from the "who
+    // watched" list. process_story_view records a view row even when
+    // the viewer is the story's own owner (so the owner can preview
+    // their own story), which meant the owner could show up in their
+    // own viewer list.
+    const viewersWithProfiles = viewData
+      .filter(viewer => viewer.viewer_id !== storyOwnerId)
+      .map(viewer => ({
+        ...viewer,
+        user_profiles: profileMap.get(viewer.viewer_id),
+        isFollower: followerIds.has(viewer.viewer_id)
+      }));
     
     // Sort by followers first
     const sortedViewers = [...viewersWithProfiles].sort((a, b) => {
@@ -729,6 +750,22 @@ export const EnhancedStorylineViewer: React.FC<StorylineViewerProps> = ({ userId
               </div>
             )}
 
+            {/* Story By @username - credits whoever originally posted
+                this, which differs from the poster (currentStory.user)
+                once a story has been reshared. Applies to every story,
+                since original_creator_id is backfilled to equal user_id
+                for stories that were never reshared. */}
+            {currentStory.original_creator && (
+              <div className="absolute bottom-16 sm:bottom-20 left-0 right-0 flex justify-center z-10">
+                <button
+                  onClick={() => { onClose(); navigate(`/profile/${currentStory.original_creator_id}`); }}
+                  className="text-white/90 text-xs sm:text-sm bg-black/40 px-3 py-1 rounded-full hover:bg-black/60 transition-colors"
+                >
+                  Story By @{currentStory.original_creator.username}
+                </button>
+              </div>
+            )}
+
             {/* Actions */}
             <div className="absolute bottom-0 left-0 right-0 p-3 sm:p-4 bg-gradient-to-t from-black/90 to-transparent">
               <div className="flex items-center space-x-3 sm:space-x-4 mb-3">
@@ -742,15 +779,22 @@ export const EnhancedStorylineViewer: React.FC<StorylineViewerProps> = ({ userId
                 </Button>
                 <span className="text-white text-sm sm:text-base">{likeCount}</span>
                 
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  onClick={() => setShowViewers(true)}
-                  className="text-white hover:bg-white/20 btn-3d"
-                >
-                  <Eye className="h-5 w-5 sm:h-6 sm:w-6" />
-                </Button>
-                <span className="text-white text-sm sm:text-base">{viewers.length}</span>
+                {/* Owner can always see who watched; other viewers only
+                    see this if the owner hasn't turned it off in Story
+                    Settings. */}
+                {(showViewersEnabled || user?.id === userId) && (
+                  <>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      onClick={() => setShowViewers(true)}
+                      className="text-white hover:bg-white/20 btn-3d"
+                    >
+                      <Eye className="h-5 w-5 sm:h-6 sm:w-6" />
+                    </Button>
+                    <span className="text-white text-sm sm:text-base">{viewers.length}</span>
+                  </>
+                )}
               </div>
 
               {/* Comment input - only show if comments are enabled */}
