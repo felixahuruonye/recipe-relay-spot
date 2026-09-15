@@ -168,6 +168,23 @@ All colors MUST be HSL.
 
   body {
     @apply bg-background text-foreground;
+    /* Feels more like a native app and less like a webpage - text isn't
+       selectable/highlightable by default anywhere in the UI. Specific
+       places that genuinely need it (captions, chat messages, post
+       text) opt back in with .selectable; inputs/textareas/editable
+       fields always work normally regardless. */
+    -webkit-user-select: none;
+    user-select: none;
+    -webkit-touch-callout: none;
+    /* Reduces the "rubber-band" bounce/pull-to-refresh feel that reads
+       as a browser, not an app. */
+    overscroll-behavior-y: contain;
+  }
+
+  input, textarea, [contenteditable="true"], .selectable {
+    -webkit-user-select: text;
+    user-select: text;
+    -webkit-touch-callout: default;
   }
 }
 

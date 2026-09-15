@@ -1266,6 +1266,9 @@ const TikTokPost: React.FC<{
           playsInline
           muted={isMuted}
           preload="auto"
+          controlsList="nodownload noremoteplayback noplaybackrate"
+          disablePictureInPicture
+          onContextMenu={(e) => e.preventDefault()}
           onEnded={onVideoEnd}
           onTimeUpdate={(e) => {
             const video = e.currentTarget;

@@ -19,7 +19,7 @@ interface TrendingStoriesCardProps {
   isMuted?: boolean;
 }
 
-const CARD_MS = 5000;
+const CARD_MS = 15000;
 
 export const TrendingStoriesCard: React.FC<TrendingStoriesCardProps> = ({ isActive, isMuted }) => {
   const navigate = useNavigate();
@@ -27,7 +27,6 @@ export const TrendingStoriesCard: React.FC<TrendingStoriesCardProps> = ({ isActi
   const [idx, setIdx] = useState(0);
   const [direction, setDirection] = useState<1 | -1>(1);
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const dragStartX = useRef<number | null>(null);
 
   useEffect(() => {
     (async () => {
@@ -62,13 +61,33 @@ export const TrendingStoriesCard: React.FC<TrendingStoriesCardProps> = ({ isActi
   const goNext = () => { setDirection(1); setIdx((i) => Math.min(i + 1, lastIndex)); };
   const goPrev = () => { setDirection(-1); setIdx((i) => Math.max(i - 1, 0)); };
 
-  const onPointerDown = (e: React.PointerEvent) => { dragStartX.current = e.clientX; };
-  const onPointerUp = (e: React.PointerEvent) => {
-    if (dragStartX.current === null) return;
-    const delta = e.clientX - dragStartX.current;
-    dragStartX.current = null;
-    if (delta < -50) goNext();
-    else if (delta > 50) goPrev();
+  // Touch events (not Pointer events) - matches the swipe pattern used
+  // elsewhere in this app and is the more reliable choice across mobile
+  // browsers for a deliberate horizontal swipe gesture.
+  const touchStartRef = useRef<{ x: number; y: number } | null>(null);
+  const swipedRef = useRef(false);
+  const onTouchStart = (e: React.TouchEvent) => {
+    const t = e.touches[0];
+    touchStartRef.current = { x: t.clientX, y: t.clientY };
+    swipedRef.current = false;
+  };
+  const onTouchEnd = (e: React.TouchEvent) => {
+    const s = touchStartRef.current;
+    touchStartRef.current = null;
+    if (!s) return;
+    const t = e.changedTouches[0];
+    const dx = t.clientX - s.x;
+    const dy = t.clientY - s.y;
+    if (Math.abs(dx) > 40 && Math.abs(dx) > Math.abs(dy)) {
+      swipedRef.current = true;
+      if (dx < 0) goNext(); else goPrev();
+    }
+  };
+  // If the touch was a genuine swipe, swallow the click that would
+  // otherwise also fire and navigate to the storyline page.
+  const onCardClick = (e: React.MouseEvent) => {
+    if (swipedRef.current) { e.preventDefault(); swipedRef.current = false; return; }
+    navigate(`/storyline?story=${story!.id}`);
   };
 
   if (stories.length === 0) return null;
@@ -88,8 +107,8 @@ export const TrendingStoriesCard: React.FC<TrendingStoriesCardProps> = ({ isActi
 
       <div
         className="relative aspect-[9/16] max-h-[65vh] select-none"
-        onPointerDown={onPointerDown}
-        onPointerUp={onPointerUp}
+        onTouchStart={onTouchStart}
+        onTouchEnd={onTouchEnd}
       >
         <AnimatePresence initial={false} custom={direction} mode="popLayout">
           {story ? (
@@ -104,7 +123,7 @@ export const TrendingStoriesCard: React.FC<TrendingStoriesCardProps> = ({ isActi
             >
               <div className="product-card-glow rounded-2xl p-[3px] h-full">
                 <button
-                  onClick={() => navigate(`/storyline?story=${story.id}`)}
+                  onClick={onCardClick}
                   className="rounded-2xl h-full w-full overflow-hidden relative bg-black block"
                 >
                   {story.media_url ? (
@@ -115,6 +134,9 @@ export const TrendingStoriesCard: React.FC<TrendingStoriesCardProps> = ({ isActi
                         autoPlay={isActive}
                         muted={isMuted}
                         playsInline
+                        controlsList="nodownload noremoteplayback noplaybackrate"
+                        disablePictureInPicture
+                        onContextMenu={(e) => e.preventDefault()}
                         onEnded={goNext}
                       />
                     ) : (

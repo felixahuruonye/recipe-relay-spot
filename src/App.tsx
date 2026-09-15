@@ -33,6 +33,7 @@ import CreatorDashboard from "./pages/CreatorDashboard";
 import ConnectLenoryAI from "./pages/ConnectLenoryAI";
 import AddName from "./pages/AddName";
 import CreatorEarnings from "./pages/CreatorEarnings";
+import InstallPrompt from "./components/InstallPrompt";
 
 import ChatHub from "./pages/ChatHub";
 import Welcome from "./pages/Welcome";
@@ -154,6 +155,7 @@ const App = () => (
             <ReferralCapture />
             <OnboardingGate />
             <RealNameGate />
+            <InstallPrompt />
             <Routes>
             <Route path="/auth" element={<Auth />} />
             <Route path="/welcome" element={<Welcome />} />

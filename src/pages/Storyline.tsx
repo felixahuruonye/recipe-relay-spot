@@ -27,13 +27,21 @@ const Storyline = () => {
 
   useEffect(() => {
     if (!user) return;
-    Promise.all([
-      supabase.from('followers').select('following_id').eq('follower_id', user.id),
-      supabase.from('followers').select('follower_id').eq('following_id', user.id),
-    ]).then(([{ data: following }, { data: followers }]) => {
-      setFollowingSet(new Set((following || []).map((f: any) => f.following_id)));
-      setFollowerSet(new Set((followers || []).map((f: any) => f.follower_id)));
-    });
+    // Fetched independently (not a single Promise.all) with error
+    // handling - previously a failure in either query silently rejected
+    // the combined promise with no .catch(), leaving BOTH sets stuck
+    // empty forever, which is very likely why Friends/Following looked
+    // broken regardless of real follow data.
+    supabase.from('followers').select('following_id').eq('follower_id', user.id)
+      .then(({ data, error }) => {
+        if (error) { console.error('Error loading following list:', error); return; }
+        setFollowingSet(new Set((data || []).map((f: any) => f.following_id)));
+      });
+    supabase.from('followers').select('follower_id').eq('following_id', user.id)
+      .then(({ data, error }) => {
+        if (error) { console.error('Error loading followers list:', error); return; }
+        setFollowerSet(new Set((data || []).map((f: any) => f.follower_id)));
+      });
   }, [user?.id]);
 
   const visibleStories = React.useMemo(() => {
@@ -183,7 +191,7 @@ const Storyline = () => {
       <div data-swipe-exempt="true" className="grid grid-cols-2 gap-3">
         {visibleStories.map((story) => (
           <button key={`grid-${story.id}`} onClick={() => setSelectedUserId(story.user_id)} className="relative aspect-[9/14] rounded-2xl overflow-hidden border border-border bg-card text-left">
-            {story.media_type === 'video' ? <video src={story.media_url} className="h-full w-full object-cover" muted playsInline /> : <img src={story.preview_url || story.media_url} alt={story.caption || 'Story'} className="h-full w-full object-cover" />}
+            {story.media_type === 'video' ? <video src={story.media_url} className="h-full w-full object-cover" muted playsInline controlsList="nodownload noremoteplayback noplaybackrate" disablePictureInPicture onContextMenu={(e) => e.preventDefault()} /> : <img src={story.preview_url || story.media_url} alt={story.caption || 'Story'} className="h-full w-full object-cover" onContextMenu={(e) => e.preventDefault()} />}
             <div className="absolute inset-0 bg-gradient-to-t from-black/85 via-transparent to-black/20" />
             <div className="absolute top-2 left-2 flex items-center gap-1"><Avatar className="w-7 h-7"><AvatarImage src={story.user_profile?.avatar_url} /><AvatarFallback>{story.user_profile?.username?.[0]}</AvatarFallback></Avatar>{story.user_profile?.vip && <Badge className="h-4 text-[9px] bg-yellow-400 text-black">VIP</Badge>}</div>
             <div className="absolute bottom-2 left-2 right-2"><p className="text-white text-xs font-bold truncate">@{story.user_profile?.username || 'user'}</p><p className="text-white/75 text-[10px] line-clamp-2">{story.caption || 'Storyline'}</p><p className="text-white/70 text-[10px] mt-1">👁 {story.view_count || 0}</p></div>
