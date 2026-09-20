@@ -33,6 +33,7 @@ import CreatorDashboard from "./pages/CreatorDashboard";
 import ConnectLenoryAI from "./pages/ConnectLenoryAI";
 import AddName from "./pages/AddName";
 import CreatorEarnings from "./pages/CreatorEarnings";
+import TaskRules from "./pages/TaskRules";
 import InstallPrompt from "./components/InstallPrompt";
 
 import ChatHub from "./pages/ChatHub";
@@ -234,6 +235,11 @@ const App = () => (
             <Route path="/wallet" element={
               <ProtectedRoute>
                 <WalletPage />
+              </ProtectedRoute>
+            } />
+            <Route path="/task-rules" element={
+              <ProtectedRoute>
+                <TaskRules />
               </ProtectedRoute>
             } />
             <Route path="/tasks" element={

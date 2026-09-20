@@ -66,6 +66,15 @@ const Offers: React.FC = () => {
   const startedAt = useRef<Record<string, number>>({});
 
   useEffect(() => {
+    if (!user) return;
+    // Mandatory rules gate - must be accepted before any task can be
+    // clicked. New users (and anyone who hasn't accepted yet) get sent
+    // to the long-scroll rules page first.
+    supabase.from('task_rules_acceptance').select('user_id').eq('user_id', user.id).maybeSingle()
+      .then(({ data }) => { if (!data) navigate('/task-rules', { replace: true }); });
+  }, [user?.id, navigate]);
+
+  useEffect(() => {
     loadTasks();
     loadLiveFeed();
     const channel = supabase
