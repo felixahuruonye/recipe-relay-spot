@@ -25,6 +25,23 @@ const TaskRules: React.FC = () => {
       .then(({ data }) => { if (data) navigate('/tasks', { replace: true }); });
   }, [user, navigate]);
 
+  useEffect(() => {
+    // The bug: if the rules text fits on screen without needing to
+    // scroll at all (larger phones/tablets, or just a taller viewport),
+    // the scroll handler below never fires even once - so reachedEnd
+    // stayed false forever and the checkbox looked permanently broken.
+    // Check right after render (and again on resize) whether there's
+    // actually anything to scroll; if not, unlock immediately.
+    const checkFits = () => {
+      const el = scrollRef.current;
+      if (!el) return;
+      if (el.scrollHeight <= el.clientHeight + 4) setReachedEnd(true);
+    };
+    const t = setTimeout(checkFits, 150); // let fonts/layout settle first
+    window.addEventListener('resize', checkFits);
+    return () => { clearTimeout(t); window.removeEventListener('resize', checkFits); };
+  }, []);
+
   const handleScroll = () => {
     const el = scrollRef.current;
     if (!el) return;
