@@ -1,19 +1,23 @@
-// S2S postback receiver for the Lenory Earn (offerwall) system.
+// S2S postback receiver for LENORY Task System v2
 //
-// Networks call this URL when a user completes an offer. Supports GET or POST.
+// Networks call this URL when a user completes a task. Supports GET or POST.
 //
 //   https://<project>.functions.supabase.co/offer-postback
 //     ?secret=OFFER_POSTBACK_SECRET
-//     &user_id={sub_id}
-//     &network=MONLIX|OGADS|MYLEAD|MONETAG|CPAGRIP
-//     &transaction_id={trans_id}      (used for de-duplication)
-//     &payout={payout}                (USD or network currency, optional)
-//     &stars={points}                 (Stars to credit, optional)
-//     &offer_name={offer_name}
-//     &task_id=<lenory offer_tasks uuid>  (optional)
+//     &click_id={click_uuid}          (from record_task_click_v2 response)
+//     &provider=monlix|mylead|cpagrip|ogads
+//     &transaction_id={trans_id}      (provider's unique transaction ID, for dedup)
+//     &payout={payout_usd}            (USD amount, required)
+//     &status=approved|pending|chargeback|rejected (conversion status)
+//     &offer_name={offer_name}        (optional)
 //
-// Rewards are credited atomically by the credit_offer_completion RPC, which
-// refuses duplicate transaction_ids.
+// Postback calls process_task_postback RPC which:
+// - Validates the click exists
+// - Checks for duplicates (transaction_id)
+// - Calculates user reward stars based on admin config
+// - Logs fraud flags
+// - Updates task_ledger
+// - Credits or holds user's star balance
 
 import { createClient } from 'npm:@supabase/supabase-js@2';
 
@@ -22,9 +26,6 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
   'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
 };
-
-// Fallback conversion when a network reports payout in USD instead of stars.
-const USD_TO_STARS = 200;
 
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response(null, { headers: corsHeaders });
@@ -51,45 +52,56 @@ Deno.serve(async (req) => {
       });
     }
 
-    const userId = params.user_id || params.sub_id || params.subid || params.aff_sub;
-    if (!userId) {
-      return new Response(JSON.stringify({ success: false, error: 'missing_user_id' }), {
+    // Click ID and provider are required for the new system
+    const clickId = params.click_id || params.click_uuid;
+    const provider = (params.provider || '').toLowerCase();
+
+    if (!clickId) {
+      return new Response(JSON.stringify({ success: false, error: 'missing_click_id' }), {
+        status: 400,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
+
+    if (!provider) {
+      return new Response(JSON.stringify({ success: false, error: 'missing_provider' }), {
         status: 400,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
     }
 
     const payoutUsd = Number(params.payout ?? params.amount ?? 0) || 0;
-    const stars = Math.round(
-      Number(params.stars ?? params.points ?? 0) || payoutUsd * USD_TO_STARS,
-    );
+    const status = (params.status || 'approved').toLowerCase();
+    const transactionId = params.transaction_id || params.trans_id || null;
+    const offerName = params.offer_name || params.title || null;
 
     const admin = createClient(
       Deno.env.get('SUPABASE_URL')!,
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!,
     );
 
-    const { data, error } = await admin.rpc('credit_offer_completion', {
-      p_user_id: userId,
-      p_task_id: params.task_id || null,
-      p_provider: (params.network || params.provider || 'CUSTOM').toUpperCase(),
-      p_task_title: params.offer_name || params.title || 'Sponsored offer',
-      p_stars: stars,
-      p_naira: Number(params.naira ?? 0) || 0,
-      p_transaction_id: params.transaction_id || params.trans_id || null,
+    // Call the new v2 postback processor
+    const { data, error } = await admin.rpc('process_task_postback', {
+      p_provider_id: provider,
+      p_click_id: clickId,
+      p_provider_transaction_id: transactionId,
+      p_payout_usd: payoutUsd,
+      p_status: status,
+      p_offer_name: offerName,
     });
 
     if (error) {
-      console.error('credit_offer_completion failed', error);
+      console.error('process_task_postback failed', error);
       return new Response(JSON.stringify({ success: false, error: error.message }), {
         status: 500,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
     }
 
+    const result = (data as any) || {};
     // Most networks expect a plain "1"/"OK" body on success.
-    const ok = (data as any)?.success === true;
-    return new Response(ok ? '1' : JSON.stringify(data), {
+    const ok = result?.success === true;
+    return new Response(ok ? '1' : JSON.stringify(result), {
       status: 200,
       headers: { ...corsHeaders, 'Content-Type': ok ? 'text/plain' : 'application/json' },
     });

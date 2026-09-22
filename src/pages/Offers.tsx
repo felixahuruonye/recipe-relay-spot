@@ -3,35 +3,37 @@ import { useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   Gift, Sparkles, Star, Clock, ArrowUpRight, Zap, Flame, Smartphone,
-  Target, Globe, Lock, ClipboardList, CheckCircle2, Loader2, Wallet,
+  Target, Globe, Lock, ClipboardList, CheckCircle2, Loader2, Wallet, AlertCircle,
 } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { useToast } from '@/hooks/use-toast';
+import { useTaskEligibility } from '@/hooks/useTaskEligibility';
+import { useTaskClick } from '@/hooks/useTaskClick';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 
 interface OfferTask {
   id: string;
-  provider: string;
-  title: string;
-  description: string | null;
-  instructions: string | null;
-  payout_stars: number;
-  payout_naira: number;
+  provider_id: string;
+  offer_id: string;
+  offer_name: string;
+  provider_payout_usd: number;
+  user_reward_stars: number;
   est_minutes: number;
-  url: string | null;
-  image_url: string | null;
+  url?: string;
+  image_url?: string;
   category: string;
-  featured: boolean;
+  featured?: boolean;
 }
 
-interface Completion {
+interface TaskCompletion {
   id: string;
-  username: string | null;
-  provider: string;
-  task_title: string | null;
-  stars_credited: number;
+  user_id: string;
+  provider_id: string;
+  offer_name: string;
+  user_reward_stars: number;
+  status: string;
   created_at: string;
 }
 
@@ -52,6 +54,8 @@ const Offers: React.FC = () => {
   const { user } = useAuth();
   const navigate = useNavigate();
   const { toast } = useToast();
+  const eligibility = useTaskEligibility();
+  const { recordClick } = useTaskClick();
 
   const [tasks, setTasks] = useState<OfferTask[]>([]);
   const [selected, setSelected] = useState('ALL');
@@ -59,20 +63,28 @@ const Offers: React.FC = () => {
   const [stars, setStars] = useState(0);
   const [wallet, setWallet] = useState(0);
   const [todayStars, setTodayStars] = useState(0);
-  const [liveFeed, setLiveFeed] = useState<Completion[]>([]);
+  const [pendingStars, setPendingStars] = useState(0);
+  const [liveFeed, setLiveFeed] = useState<TaskCompletion[]>([]);
   const [tickIndex, setTickIndex] = useState(0);
   const [myStatus, setMyStatus] = useState<Record<string, 'started' | 'completed'>>({});
   const [busy, setBusy] = useState<string | null>(null);
   const startedAt = useRef<Record<string, number>>({});
 
   useEffect(() => {
-    if (!user) return;
-    // Mandatory rules gate - must be accepted before any task can be
-    // clicked. New users (and anyone who hasn't accepted yet) get sent
-    // to the long-scroll rules page first.
+    if (!user || !eligibility || eligibility.isLoading) return;
+    
+    // Check task rules acceptance first
     supabase.from('task_rules_acceptance').select('user_id').eq('user_id', user.id).maybeSingle()
       .then(({ data }) => { if (!data) navigate('/task-rules', { replace: true }); });
-  }, [user?.id, navigate]);
+  }, [user?.id, navigate, eligibility?.isLoading]);
+
+  // If eligibility checks fail, show gate and redirect to settings
+  useEffect(() => {
+    if (!eligibility.isLoading && !eligibility.isReady && eligibility.errors.length > 0) {
+      // User needs to complete profile - but still show the page with gate message
+      // They'll click "Complete Profile" to go to settings
+    }
+  }, [eligibility.isLoading, eligibility.isReady]);
 
   useEffect(() => {
     loadTasks();
@@ -118,61 +130,107 @@ const Offers: React.FC = () => {
   }, [liveFeed.length]);
 
   const loadTasks = async () => {
-    const { data } = await supabase
-      .from('offer_tasks' as any)
-      .select('*')
-      .eq('active', true)
-      .order('featured', { ascending: false })
-      .order('payout_stars', { ascending: false });
-    setTasks(((data as any[]) || []) as OfferTask[]);
-    setLoading(false);
+    try {
+      // Get provider config (available tasks)
+      // For now, return placeholder tasks - these will be populated by provider APIs
+      // In Phase 2, this will query actual offers from Monlix/MyLead APIs
+      const { data: providers } = await supabase
+        .from('task_provider_config')
+        .select('*')
+        .eq('enabled', true)
+        .eq('maintenance_mode', false)
+        .order('sort_order', { ascending: true });
+
+      // Mock tasks based on providers - replace this with real offer fetching in Phase 2
+      const mockTasks: OfferTask[] = (providers || []).map((p) => ({
+        id: `${p.provider_id}-mock-1`,
+        provider_id: p.provider_id,
+        offer_id: 'mock-offer-1',
+        offer_name: `${p.display_name} Offer`,
+        provider_payout_usd: 0.50,
+        user_reward_stars: Math.floor(0.50 * 0.5 * (p.stars_per_usd_user_share || 50)), // rough calc
+        est_minutes: 5,
+        category: p.category || 'offers',
+        featured: p.featured || false,
+      }));
+
+      setTasks(mockTasks);
+      setLoading(false);
+    } catch (error) {
+      console.error('Error loading tasks:', error);
+      setLoading(false);
+    }
   };
 
   const loadLiveFeed = async () => {
-    const { data } = await supabase
-      .from('offer_task_completions' as any)
-      .select('id, username, provider, task_title, stars_credited, created_at')
-      .eq('status', 'completed')
-      .order('created_at', { ascending: false })
-      .limit(20);
-    setLiveFeed(((data as any[]) || []) as Completion[]);
+    try {
+      // Load recent completions from task_ledger
+      const { data } = await supabase
+        .from('task_ledger')
+        .select('id, user_id, provider_id, offer_name, user_reward_stars, status, created_at')
+        .eq('status', 'approved')
+        .order('created_at', { ascending: false })
+        .limit(20);
+      setLiveFeed(((data as any[]) || []) as TaskCompletion[]);
+    } catch (error) {
+      console.error('Error loading live feed:', error);
+    }
   };
 
   const loadBalance = async () => {
     if (!user) return;
     const { data } = await supabase
       .from('user_profiles')
-      .select('star_balance, wallet_balance')
+      .select('star_balance, wallet_balance, task_balance_pending')
       .eq('id', user.id)
       .maybeSingle();
     setStars(data?.star_balance ?? 0);
     setWallet(Number(data?.wallet_balance ?? 0));
+    setPendingStars(data?.task_balance_pending ?? 0);
   };
 
   const loadMyStatus = async () => {
     if (!user) return;
     const since = new Date(Date.now() - 1000 * 60 * 60 * 24).toISOString();
     const { data } = await supabase
-      .from('offer_task_completions' as any)
-      .select('task_id, status, stars_credited, created_at')
+      .from('task_ledger')
+      .select('id, offer_id, status, user_reward_stars, created_at')
       .eq('user_id', user.id)
       .order('created_at', { ascending: false })
       .limit(200);
-    const map: Record<string, 'started' | 'completed'> = {};
+    
+    const map: Record<string, 'started' | 'completed' | 'pending' | 'approved'> = {};
     let today = 0;
+    
     ((data as any[]) || []).forEach((row) => {
-      if (row.task_id && !map[row.task_id]) map[row.task_id] = row.status;
-      if (row.status === 'completed' && row.created_at >= since) today += row.stars_credited || 0;
-      if (row.status === 'started' && row.task_id && !startedAt.current[row.task_id]) {
-        startedAt.current[row.task_id] = new Date(row.created_at).getTime();
+      const offerId = row.offer_id;
+      if (offerId && !map[offerId]) {
+        // Map ledger status to UI status
+        if (row.status === 'approved' || row.status === 'available') {
+          map[offerId] = 'completed';
+        } else if (row.status === 'pending') {
+          map[offerId] = 'pending';
+        } else if (row.status === 'clicked') {
+          map[offerId] = 'started';
+        }
+      }
+      
+      // Count today's earnings (approved/available only)
+      if ((row.status === 'approved' || row.status === 'available') && row.created_at >= since) {
+        today += row.user_reward_stars || 0;
+      }
+      
+      if (row.status === 'clicked' && offerId && !startedAt.current[offerId]) {
+        startedAt.current[offerId] = new Date(row.created_at).getTime();
       }
     });
+    
     setMyStatus(map);
     setTodayStars(today);
   };
 
   const filtered = useMemo(
-    () => (selected === 'ALL' ? tasks : tasks.filter((t) => t.provider === selected)),
+    () => (selected === 'ALL' ? tasks : tasks.filter((t) => t.provider_id.toUpperCase() === selected)),
     [tasks, selected],
   );
 
@@ -183,19 +241,37 @@ const Offers: React.FC = () => {
 
   const handleStart = async (task: OfferTask) => {
     if (!user) return requireLogin();
+    
+    // Check eligibility
+    if (!eligibility.isReady) {
+      toast({
+        title: 'Profile incomplete',
+        description: 'Complete your profile to access tasks',
+        variant: 'destructive',
+      });
+      navigate('/settings');
+      return;
+    }
+
     setBusy(task.id);
     try {
-      const { data, error } = await supabase.rpc('start_offer_task' as any, { p_task_id: task.id });
-      if (error) throw error;
-      const res = data as any;
-      if (!res?.success) throw new Error(res?.error || 'Could not start task');
+      // Record the click first (this logs it to task_ledger)
+      const result = await recordClick(task.provider_id, task.offer_id);
+      if (!result.success) {
+        throw new Error(result.error || 'Could not start task');
+      }
+
       startedAt.current[task.id] = Date.now();
       setMyStatus((prev) => ({ ...prev, [task.id]: 'started' }));
-      const target = res.url || task.url;
+
+      // Open the provider's offerwall/link
+      // In Phase 2, this will be replaced with iframe embeds for each provider
+      const target = task.url || `https://offerwall.example.com?user=${user.id}&provider=${task.provider_id}`;
       if (target) {
         if (target.startsWith('/')) navigate(target);
         else window.open(target, '_blank', 'noopener');
       }
+
       toast({
         title: 'Task started 🚀',
         description:
@@ -241,6 +317,33 @@ const Offers: React.FC = () => {
 
   return (
     <div className="min-h-[100dvh] bg-background pb-28">
+      {/* Eligibility Gate */}
+      {!eligibility.isLoading && !eligibility.isReady && eligibility.errors.length > 0 && (
+        <motion.div
+          initial={{ opacity: 0, y: -10 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="mx-4 mt-4 p-4 rounded-2xl bg-amber-500/10 border border-amber-500/20 flex gap-3"
+        >
+          <AlertCircle className="w-5 h-5 text-amber-500 shrink-0 mt-0.5" />
+          <div className="flex-1 text-sm">
+            <p className="font-semibold text-amber-600 mb-2">Complete your profile to earn</p>
+            <ul className="text-xs text-amber-600/80 space-y-1">
+              {eligibility.errors.map((err, i) => (
+                <li key={i}>• {err}</li>
+              ))}
+            </ul>
+            <Button
+              size="sm"
+              variant="outline"
+              className="mt-3 border-amber-500/30 hover:bg-amber-500/5 text-amber-600"
+              onClick={() => navigate('/settings')}
+            >
+              Complete Profile →
+            </Button>
+          </div>
+        </motion.div>
+      )}
+
       {/* Header */}
       <div className="relative overflow-hidden px-4 pt-6 pb-5">
         <div className="absolute -top-20 -left-10 w-56 h-56 rounded-full bg-primary/25 blur-3xl" />
@@ -263,11 +366,16 @@ const Offers: React.FC = () => {
           <div className="glass-card rounded-2xl p-4 border border-border/60">
             <div className="flex items-start justify-between">
               <div>
-                <p className="text-[11px] text-muted-foreground">Live balance</p>
+                <p className="text-[11px] text-muted-foreground">Available Stars</p>
                 <p className="text-3xl font-black flex items-center gap-1.5">
                   <Star className="w-6 h-6 text-yellow-400 fill-yellow-400" />
                   {stars.toLocaleString()}
                 </p>
+                {pendingStars > 0 && (
+                  <p className="text-xs text-amber-500 mt-0.5">
+                    +{pendingStars.toLocaleString()} pending
+                  </p>
+                )}
                 <p className="text-xs text-primary mt-0.5">
                   ≈ ₦{(stars * 300).toLocaleString()} in Star value
                 </p>
@@ -304,9 +412,9 @@ const Offers: React.FC = () => {
               >
                 <span className="text-base">🎉</span>
                 <p className="truncate">
-                  <span className="font-bold text-primary">@{ticker.username || 'someone'}</span>{' '}
-                  earned <span className="font-bold text-yellow-400">+{ticker.stars_credited}⭐</span>{' '}
-                  on {providerMeta(ticker.provider).label}
+                  <span className="font-bold text-primary">Someone</span>{' '}
+                  earned <span className="font-bold text-yellow-400">+{ticker.user_reward_stars}⭐</span>{' '}
+                  on {providerMeta(ticker.provider_id).label}
                 </p>
               </motion.div>
             ) : (
@@ -353,10 +461,9 @@ const Offers: React.FC = () => {
           </div>
         ) : (
           filtered.map((task, i) => {
-            const meta = providerMeta(task.provider);
+            const meta = providerMeta(task.provider_id);
             const Icon = meta.icon;
             const status = myStatus[task.id];
-            const isCustom = task.provider === 'CUSTOM';
             return (
               <motion.div
                 key={task.id}
@@ -377,13 +484,13 @@ const Offers: React.FC = () => {
                     <Icon className="w-5 h-5 text-white" />
                   </span>
                   <div className="flex-1 min-w-0">
-                    <p className="font-bold text-sm leading-tight truncate">{task.title}</p>
+                    <p className="font-bold text-sm leading-tight truncate">{task.offer_name}</p>
                     <p className="text-[11px] text-muted-foreground line-clamp-2 mt-0.5">
-                      {task.description}
+                      Complete and earn stars directly from {meta.label}
                     </p>
                     <div className="flex items-center gap-2 mt-2 flex-wrap">
                       <Badge className="bg-yellow-400/15 text-yellow-400 border-yellow-400/30 text-[10px] gap-1">
-                        <Star className="w-3 h-3 fill-current" /> +{task.payout_stars}
+                        <Star className="w-3 h-3 fill-current" /> +{Math.floor(task.user_reward_stars)}
                       </Badge>
                       <span className="text-[10px] text-muted-foreground flex items-center gap-1">
                         <Clock className="w-3 h-3" /> ~{task.est_minutes} min
@@ -391,6 +498,11 @@ const Offers: React.FC = () => {
                       <span className="text-[10px] text-muted-foreground uppercase tracking-wide">
                         {meta.label}
                       </span>
+                      {status === 'pending' && (
+                        <Badge className="bg-amber-500/15 text-amber-400 border-amber-500/30 text-[10px]">
+                          ⏳ Pending
+                        </Badge>
+                      )}
                     </div>
                   </div>
                 </div>
@@ -400,33 +512,24 @@ const Offers: React.FC = () => {
                     <Button disabled size="sm" className="flex-1 gap-1.5" variant="secondary">
                       <CheckCircle2 className="w-4 h-4 text-green-500" /> Completed
                     </Button>
+                  ) : status === 'pending' ? (
+                    <Button disabled size="sm" className="flex-1 gap-1.5" variant="secondary">
+                      <Loader2 className="w-4 h-4 animate-spin" /> Pending approval
+                    </Button>
                   ) : (
-                    <>
-                      <Button
-                        size="sm"
-                        className="flex-1 gap-1.5"
-                        disabled={busy === task.id}
-                        onClick={() => handleStart(task)}
-                      >
-                        {busy === task.id ? (
-                          <Loader2 className="w-4 h-4 animate-spin" />
-                        ) : (
-                          <ArrowUpRight className="w-4 h-4" />
-                        )}
-                        {status === 'started' ? 'Open again' : 'Start Task'}
-                      </Button>
-                      {isCustom && status === 'started' && (
-                        <Button
-                          size="sm"
-                          variant="secondary"
-                          className="gap-1.5"
-                          disabled={busy === task.id}
-                          onClick={() => handleClaim(task)}
-                        >
-                          <Sparkles className="w-4 h-4" /> Claim
-                        </Button>
+                    <Button
+                      size="sm"
+                      className="flex-1 gap-1.5"
+                      disabled={busy === task.id || !eligibility.isReady}
+                      onClick={() => handleStart(task)}
+                    >
+                      {busy === task.id ? (
+                        <Loader2 className="w-4 h-4 animate-spin" />
+                      ) : (
+                        <ArrowUpRight className="w-4 h-4" />
                       )}
-                    </>
+                      {status === 'started' ? 'Open again' : 'Start Task'}
+                    </Button>
                   )}
                 </div>
               </motion.div>

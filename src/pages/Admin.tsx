@@ -22,6 +22,7 @@ import { DeleteUsersTab } from '@/components/Admin/DeleteUsersTab';
 import { DeliveriesTab } from '@/components/Admin/DeliveriesTab';
 import { MonetizationTab } from '@/components/Admin/MonetizationTab';
 import { ChatReportsTab } from '@/components/Admin/ChatReportsTab';
+import { TaskAdminTab } from '@/components/Admin/TaskAdminTab';
 import { useAuth } from '@/contexts/AuthContext';
 import { useNavigate } from 'react-router-dom';
 
@@ -162,6 +163,7 @@ const AdminPanel = () => {
             <TabsList className="inline-flex w-max gap-1">
               <TabsTrigger value="overview">Overview</TabsTrigger>
               <TabsTrigger value="balances">Balances</TabsTrigger>
+              <TabsTrigger value="tasks">Tasks</TabsTrigger>
               <TabsTrigger value="monetization">Monetization</TabsTrigger>
               <TabsTrigger value="withdrawals">Withdrawals</TabsTrigger>
               <TabsTrigger value="broadcast">Broadcast</TabsTrigger>
@@ -185,6 +187,7 @@ const AdminPanel = () => {
           </TabsContent>
 
           <TabsContent value="balances"><UserBalancesTab /></TabsContent>
+          <TabsContent value="tasks"><TaskAdminTab /></TabsContent>
           <TabsContent value="monetization"><MonetizationTab /></TabsContent>
           <TabsContent value="withdrawals"><WithdrawalsTab /></TabsContent>
           <TabsContent value="broadcast"><BroadcastTab /></TabsContent>
