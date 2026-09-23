@@ -317,31 +317,38 @@ const Offers: React.FC = () => {
 
   return (
     <div className="min-h-[100dvh] bg-background pb-28">
-      {/* Eligibility Gate */}
+      {/* Eligibility Gate - Centered Modal */}
       {!eligibility.isLoading && !eligibility.isReady && eligibility.errors.length > 0 && (
-        <motion.div
-          initial={{ opacity: 0, y: -10 }}
-          animate={{ opacity: 1, y: 0 }}
-          className="mx-4 mt-4 p-4 rounded-2xl bg-amber-500/10 border border-amber-500/20 flex gap-3"
-        >
-          <AlertCircle className="w-5 h-5 text-amber-500 shrink-0 mt-0.5" />
-          <div className="flex-1 text-sm">
-            <p className="font-semibold text-amber-600 mb-2">Complete your profile to earn</p>
-            <ul className="text-xs text-amber-600/80 space-y-1">
-              {eligibility.errors.map((err, i) => (
-                <li key={i}>• {err}</li>
-              ))}
-            </ul>
-            <Button
-              size="sm"
-              variant="outline"
-              className="mt-3 border-amber-500/30 hover:bg-amber-500/5 text-amber-600"
-              onClick={() => navigate('/settings')}
-            >
-              Complete Profile →
-            </Button>
-          </div>
-        </motion.div>
+        <div className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+          <motion.div
+            initial={{ opacity: 0, scale: 0.95 }}
+            animate={{ opacity: 1, scale: 1 }}
+            className="w-full max-w-md p-6 rounded-3xl bg-gradient-to-br from-amber-500/20 to-orange-500/20 border border-amber-500/40 backdrop-blur-xl"
+          >
+            <div className="flex items-start gap-3">
+              <AlertCircle className="w-6 h-6 text-amber-500 shrink-0 mt-0.5" />
+              <div className="flex-1">
+                <p className="font-bold text-amber-600 text-lg mb-3">Complete Your Profile to Earn</p>
+                <ul className="text-sm text-amber-600/90 space-y-2 mb-4">
+                  {eligibility.errors.map((err, i) => (
+                    <li key={i} className="flex items-center gap-2">
+                      <span className="w-1.5 h-1.5 bg-amber-500 rounded-full" />
+                      {err}
+                    </li>
+                  ))}
+                </ul>
+                <Button
+                  size="lg"
+                  className="w-full border-amber-500/50 hover:bg-amber-500/10 text-amber-600 font-semibold"
+                  variant="outline"
+                  onClick={() => navigate('/settings')}
+                >
+                  Complete Profile →
+                </Button>
+              </div>
+            </div>
+          </motion.div>
+        </div>
       )}
 
       {/* Header */}

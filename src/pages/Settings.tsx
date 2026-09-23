@@ -6,7 +6,7 @@ import { Label } from '@/components/ui/label';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Sun, Moon, Settings as SettingsIcon, MessageSquare, Share2, HelpCircle, LogOut, Lock, Coins, Trash2, Repeat2, MapPin } from 'lucide-react';
+import { Sun, Moon, Settings as SettingsIcon, MessageSquare, Share2, HelpCircle, LogOut, Lock, Coins, Trash2, Repeat2, MapPin, Smartphone } from 'lucide-react';
 import { useTheme } from '@/contexts/ThemeContext';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/integrations/supabase/client';
@@ -35,6 +35,9 @@ const Settings = () => {
   const [country, setCountry] = useState('');
   const [stateRegion, setStateRegion] = useState('');
   const [savingDemographics, setSavingDemographics] = useState(false);
+  const [deviceInfo, setDeviceInfo] = useState<any>(null);
+  const [loadingDevice, setLoadingDevice] = useState(false);
+  const [deviceConsent, setDeviceConsent] = useState(false);
 
   useEffect(() => {
     if (user) {
@@ -48,16 +51,83 @@ const Settings = () => {
     try {
       const { data } = await (supabase as any)
         .from('user_profiles')
-        .select('id, created_at, vip, vip_expires_at, gender, date_of_birth, location_info')
+        .select('id, created_at, vip, vip_expires_at, gender, date_of_birth, device_tracking_consented')
         .eq('id', user.id)
         .single();
       setProfile(data);
       setGender(data?.gender || '');
       setDob(data?.date_of_birth || '');
-      setCountry((data?.location_info as any)?.country || '');
-      setStateRegion((data?.location_info as any)?.state || '');
+      setCountry('Nigeria'); // Default to Nigeria for now
+      setStateRegion('');
+      setDeviceConsent(data?.device_tracking_consented || false);
+      
+      // Load device info if consented
+      if (data?.device_tracking_consented) {
+        loadDeviceInfo();
+      }
     } catch (error) {
       console.error('Error loading profile:', error);
+    }
+  };
+
+  const loadDeviceInfo = async () => {
+    if (!user) return;
+    setLoadingDevice(true);
+    try {
+      const { data } = await (supabase as any)
+        .from('user_devices')
+        .select('*')
+        .eq('user_id', user.id)
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      
+      if (data) {
+        setDeviceInfo(data);
+      }
+    } catch (error) {
+      console.error('Error loading device info:', error);
+    } finally {
+      setLoadingDevice(false);
+    }
+  };
+
+  const pullDeviceInformation = async () => {
+    if (!user) return;
+    setLoadingDevice(true);
+    try {
+      // Register device using the new RPC
+      const { data, error } = await (supabase as any).rpc('register_device', {
+        p_user_id: user.id,
+        p_device_id: localStorage.getItem('device_id') || `device-${user.id.substring(0, 8)}`,
+      });
+
+      if (error) throw error;
+
+      // Now update consent flag
+      const { error: updateError } = await (supabase as any)
+        .from('user_profiles')
+        .update({ device_tracking_consented: true })
+        .eq('id', user.id);
+
+      if (updateError) throw updateError;
+
+      setDeviceConsent(true);
+      await loadDeviceInfo();
+      
+      toast({
+        title: 'Device registered',
+        description: 'Your device information has been securely stored',
+      });
+    } catch (error: any) {
+      console.error('Error pulling device info:', error);
+      toast({
+        title: 'Error',
+        description: error?.message || 'Failed to register device',
+        variant: 'destructive',
+      });
+    } finally {
+      setLoadingDevice(false);
     }
   };
 
@@ -70,7 +140,7 @@ const Settings = () => {
         .update({
           gender: gender || null,
           date_of_birth: dob || null,
-          location_info: { country: country || null, state: stateRegion || null },
+          country_code: country || null,
         })
         .eq('id', user.id);
       if (error) throw error;
@@ -278,6 +348,65 @@ const Settings = () => {
           <Button onClick={saveDemographics} disabled={savingDemographics} className="w-full">
             {savingDemographics ? 'Saving...' : 'Save'}
           </Button>
+        </CardContent>
+      </Card>
+
+      {/* Device Information - For Fraud Detection */}
+      <Card className="glass-card border-blue-500/20">
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <Smartphone className="w-5 h-5 text-blue-500" /> Device Information
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <p className="text-xs text-muted-foreground">
+            Your device is securely registered to prevent fraudulent accounts. This information is only used by our fraud detection system and is never shared. You can only remove this by deleting your account.
+          </p>
+
+          {!deviceConsent ? (
+            <div className="p-4 rounded-lg bg-blue-500/10 border border-blue-500/20">
+              <p className="text-sm text-blue-600 font-medium mb-3">Pull Device Information</p>
+              <p className="text-xs text-blue-600/80 mb-3">
+                Click below to register your device. This helps us detect and block fraudulent accounts trying to access earnings on this device.
+              </p>
+              <Button
+                onClick={pullDeviceInformation}
+                disabled={loadingDevice}
+                className="w-full bg-blue-600 hover:bg-blue-700"
+              >
+                {loadingDevice ? 'Registering device...' : 'Register This Device'}
+              </Button>
+            </div>
+          ) : deviceInfo ? (
+            <div className="space-y-3">
+              <div className="p-3 rounded-lg bg-green-500/10 border border-green-500/20">
+                <p className="text-xs font-semibold text-green-600">✓ Device Registered</p>
+              </div>
+              <div className="space-y-2 text-sm">
+                <div className="flex justify-between items-start">
+                  <span className="text-muted-foreground">Device ID:</span>
+                  <span className="font-mono text-xs text-right break-all max-w-[200px]">{deviceInfo.device_id}</span>
+                </div>
+                <div className="flex justify-between items-start">
+                  <span className="text-muted-foreground">Registered:</span>
+                  <span className="text-right">{new Date(deviceInfo.created_at).toLocaleDateString()}</span>
+                </div>
+                <div className="flex justify-between items-start">
+                  <span className="text-muted-foreground">Status:</span>
+                  <span className="text-green-600 font-medium">Active</span>
+                </div>
+              </div>
+              <p className="text-xs text-muted-foreground pt-2 border-t border-border/50">
+                If you believe this device has been compromised or you no longer use it, delete your account and create a new one from a different device.
+              </p>
+            </div>
+          ) : loadingDevice ? (
+            <div className="flex items-center justify-center py-4">
+              <div className="animate-spin rounded-full h-6 w-6 border-2 border-primary border-t-transparent"></div>
+            </div>
+          ) : (
+            <p className="text-xs text-muted-foreground">Device information not available. Please register again.</p>
+          )}
         </CardContent>
       </Card>
 
