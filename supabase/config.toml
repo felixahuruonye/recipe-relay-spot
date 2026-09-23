@@ -11,3 +11,6 @@ verify_jwt = false
 
 [functions.offer-postback]
 verify_jwt = false
+
+[functions.register-device]
+verify_jwt = true

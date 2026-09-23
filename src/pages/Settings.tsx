@@ -6,11 +6,12 @@ import { Label } from '@/components/ui/label';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Sun, Moon, Settings as SettingsIcon, MessageSquare, Share2, HelpCircle, LogOut, Lock, Coins, Trash2, Repeat2, MapPin, Smartphone } from 'lucide-react';
+import { Sun, Moon, Settings as SettingsIcon, MessageSquare, Share2, HelpCircle, LogOut, Lock, Coins, Trash2, Repeat2, MapPin, Smartphone, ShieldCheck } from 'lucide-react';
 import { useTheme } from '@/contexts/ThemeContext';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
+import { collectDeviceFingerprint } from '@/lib/deviceFingerprint';
 
 interface UserProfile {
   id: string;
@@ -38,20 +39,33 @@ const Settings = () => {
   const [deviceInfo, setDeviceInfo] = useState<any>(null);
   const [loadingDevice, setLoadingDevice] = useState(false);
   const [deviceConsent, setDeviceConsent] = useState(false);
+  const [ageLockedAt, setAgeLockedAt] = useState<string | null>(null);
+  const [isAdmin, setIsAdmin] = useState(false);
 
   useEffect(() => {
     if (user) {
       loadSettings();
       loadProfile();
+      checkAdmin();
     }
   }, [user]);
+
+  const checkAdmin = async () => {
+    if (!user) return;
+    try {
+      const { data } = await (supabase as any).rpc('has_role', { _user_id: user.id, _role: 'admin' });
+      setIsAdmin(!!data);
+    } catch {
+      setIsAdmin(false);
+    }
+  };
 
   const loadProfile = async () => {
     if (!user) return;
     try {
       const { data } = await (supabase as any)
         .from('user_profiles')
-        .select('id, created_at, vip, vip_expires_at, gender, date_of_birth, device_tracking_consented')
+        .select('id, created_at, vip, vip_expires_at, gender, date_of_birth, device_tracking_consented, age_locked_at')
         .eq('id', user.id)
         .single();
       setProfile(data);
@@ -60,7 +74,8 @@ const Settings = () => {
       setCountry('Nigeria'); // Default to Nigeria for now
       setStateRegion('');
       setDeviceConsent(data?.device_tracking_consented || false);
-      
+      setAgeLockedAt(data?.age_locked_at || null);
+
       // Load device info if consented
       if (data?.device_tracking_consented) {
         loadDeviceInfo();
@@ -74,19 +89,19 @@ const Settings = () => {
     if (!user) return;
     setLoadingDevice(true);
     try {
-      const { data } = await (supabase as any)
+      const { data, error } = await (supabase as any)
         .from('user_devices')
         .select('*')
         .eq('user_id', user.id)
-        .order('created_at', { ascending: false })
+        .order('last_seen', { ascending: false })
         .limit(1)
         .maybeSingle();
-      
-      if (data) {
-        setDeviceInfo(data);
-      }
+
+      if (error) throw error;
+      setDeviceInfo(data || null);
     } catch (error) {
       console.error('Error loading device info:', error);
+      setDeviceInfo(null);
     } finally {
       setLoadingDevice(false);
     }
@@ -96,29 +111,45 @@ const Settings = () => {
     if (!user) return;
     setLoadingDevice(true);
     try {
-      // Register device using the new RPC
-      const { data, error } = await (supabase as any).rpc('register_device', {
-        p_user_id: user.id,
-        p_device_id: localStorage.getItem('device_id') || `device-${user.id.substring(0, 8)}`,
+      // Collect REAL browser/hardware signals — not a spoofable localStorage string
+      const fingerprint = await collectDeviceFingerprint();
+
+      const { data: sessionData } = await supabase.auth.getSession();
+      const accessToken = sessionData?.session?.access_token;
+      if (!accessToken) throw new Error('Not authenticated');
+
+      const { data, error } = await supabase.functions.invoke('register-device', {
+        body: {
+          hash: fingerprint.hash,
+          userAgent: fingerprint.userAgent,
+          platform: fingerprint.platform,
+          screenResolution: fingerprint.screenResolution,
+          timezone: fingerprint.timezone,
+          language: fingerprint.language,
+          hardwareConcurrency: fingerprint.hardwareConcurrency,
+          deviceMemory: fingerprint.deviceMemory,
+          touchSupport: fingerprint.touchSupport,
+        },
       });
 
       if (error) throw error;
-
-      // Now update consent flag
-      const { error: updateError } = await (supabase as any)
-        .from('user_profiles')
-        .update({ device_tracking_consented: true })
-        .eq('id', user.id);
-
-      if (updateError) throw updateError;
+      if (!data?.success) throw new Error(data?.error || 'Registration failed');
 
       setDeviceConsent(true);
-      await loadDeviceInfo();
-      
-      toast({
-        title: 'Device registered',
-        description: 'Your device information has been securely stored',
-      });
+      setDeviceInfo(data.device);
+
+      if (data.restricted) {
+        toast({
+          title: 'Device already registered elsewhere',
+          description: 'This device is linked to another account. Earning features are restricted on this account.',
+          variant: 'destructive',
+        });
+      } else {
+        toast({
+          title: 'Device registered',
+          description: 'Your device information has been securely stored',
+        });
+      }
     } catch (error: any) {
       console.error('Error pulling device info:', error);
       toast({
@@ -131,20 +162,43 @@ const Settings = () => {
     }
   };
 
+  const isAgeLocked = !isAdmin && !!ageLockedAt && (Date.now() - new Date(ageLockedAt).getTime()) < 100 * 24 * 60 * 60 * 1000;
+  const ageUnlockDate = ageLockedAt
+    ? new Date(new Date(ageLockedAt).getTime() + 100 * 24 * 60 * 60 * 1000)
+    : null;
+
   const saveDemographics = async () => {
     if (!user) return;
     setSavingDemographics(true);
     try {
+      // Gender + country are freely editable
       const { error } = await (supabase as any)
         .from('user_profiles')
         .update({
           gender: gender || null,
-          date_of_birth: dob || null,
           country_code: country || null,
         })
         .eq('id', user.id);
       if (error) throw error;
+
+      // Date of birth goes through the locking RPC — only actually
+      // calls it if the value changed and isn't currently locked.
+      if (dob && dob !== profile?.date_of_birth && !isAgeLocked) {
+        const { data: dobResult, error: dobError } = await (supabase as any).rpc('set_date_of_birth', {
+          p_user_id: user.id,
+          p_dob: dob,
+        });
+        if (dobError) throw dobError;
+        if (!dobResult?.success) {
+          toast({ title: 'Date of birth not updated', description: dobResult?.error || 'Locked', variant: 'destructive' });
+          setSavingDemographics(false);
+          return;
+        }
+        setAgeLockedAt(new Date().toISOString());
+      }
+
       toast({ title: 'Saved', description: 'Your profile info was updated' });
+      loadProfile();
     } catch (error: any) {
       console.error('Error saving demographics:', error);
       toast({ title: 'Error', description: error?.message || 'Failed to save', variant: 'destructive' });
@@ -333,7 +387,18 @@ const Settings = () => {
           </div>
           <div className="space-y-2">
             <Label>Date of Birth</Label>
-            <Input type="date" value={dob} onChange={(e) => setDob(e.target.value)} max={new Date().toISOString().split('T')[0]} />
+            <Input
+              type="date"
+              value={dob}
+              onChange={(e) => setDob(e.target.value)}
+              max={new Date().toISOString().split('T')[0]}
+              disabled={isAgeLocked}
+            />
+            {isAgeLocked && ageUnlockDate && (
+              <p className="text-xs text-amber-500 flex items-center gap-1">
+                <Lock className="w-3 h-3" /> Locked until {ageUnlockDate.toLocaleDateString()} to prevent age fraud
+              </p>
+            )}
           </div>
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-2">
@@ -377,35 +442,63 @@ const Settings = () => {
                 {loadingDevice ? 'Registering device...' : 'Register This Device'}
               </Button>
             </div>
-          ) : deviceInfo ? (
-            <div className="space-y-3">
-              <div className="p-3 rounded-lg bg-green-500/10 border border-green-500/20">
-                <p className="text-xs font-semibold text-green-600">✓ Device Registered</p>
-              </div>
-              <div className="space-y-2 text-sm">
-                <div className="flex justify-between items-start">
-                  <span className="text-muted-foreground">Device ID:</span>
-                  <span className="font-mono text-xs text-right break-all max-w-[200px]">{deviceInfo.device_id}</span>
-                </div>
-                <div className="flex justify-between items-start">
-                  <span className="text-muted-foreground">Registered:</span>
-                  <span className="text-right">{new Date(deviceInfo.created_at).toLocaleDateString()}</span>
-                </div>
-                <div className="flex justify-between items-start">
-                  <span className="text-muted-foreground">Status:</span>
-                  <span className="text-green-600 font-medium">Active</span>
-                </div>
-              </div>
-              <p className="text-xs text-muted-foreground pt-2 border-t border-border/50">
-                If you believe this device has been compromised or you no longer use it, delete your account and create a new one from a different device.
-              </p>
-            </div>
           ) : loadingDevice ? (
             <div className="flex items-center justify-center py-4">
               <div className="animate-spin rounded-full h-6 w-6 border-2 border-primary border-t-transparent"></div>
             </div>
+          ) : deviceInfo ? (
+            <div className="space-y-3">
+              <div className="p-3 rounded-lg bg-green-500/10 border border-green-500/20 flex items-center gap-2">
+                <ShieldCheck className="w-4 h-4 text-green-600" />
+                <p className="text-xs font-semibold text-green-600">Device Registered — this is exactly what we have on file</p>
+              </div>
+              <div className="space-y-2 text-sm">
+                <div className="flex justify-between items-start gap-3">
+                  <span className="text-muted-foreground shrink-0">Device fingerprint:</span>
+                  <span className="font-mono text-[11px] text-right break-all">{deviceInfo.device_id?.slice(0, 16)}…</span>
+                </div>
+                <div className="flex justify-between items-start gap-3">
+                  <span className="text-muted-foreground shrink-0">Browser/OS:</span>
+                  <span className="text-right text-xs break-all">{deviceInfo.user_agent || '—'}</span>
+                </div>
+                <div className="flex justify-between items-start gap-3">
+                  <span className="text-muted-foreground shrink-0">Platform:</span>
+                  <span className="text-right">{deviceInfo.platform || '—'}</span>
+                </div>
+                <div className="flex justify-between items-start gap-3">
+                  <span className="text-muted-foreground shrink-0">Screen:</span>
+                  <span className="text-right">{deviceInfo.screen_resolution || '—'}</span>
+                </div>
+                <div className="flex justify-between items-start gap-3">
+                  <span className="text-muted-foreground shrink-0">Timezone:</span>
+                  <span className="text-right">{deviceInfo.timezone || '—'}</span>
+                </div>
+                <div className="flex justify-between items-start gap-3">
+                  <span className="text-muted-foreground shrink-0">Language:</span>
+                  <span className="text-right">{deviceInfo.language || '—'}</span>
+                </div>
+                <div className="flex justify-between items-start gap-3">
+                  <span className="text-muted-foreground shrink-0">First registered:</span>
+                  <span className="text-right">{deviceInfo.first_seen ? new Date(deviceInfo.first_seen).toLocaleDateString() : '—'}</span>
+                </div>
+                <div className="flex justify-between items-start gap-3">
+                  <span className="text-muted-foreground shrink-0">Last seen:</span>
+                  <span className="text-right">{deviceInfo.last_seen ? new Date(deviceInfo.last_seen).toLocaleString() : '—'}</span>
+                </div>
+              </div>
+              <p className="text-xs text-muted-foreground pt-2 border-t border-border/50">
+                This is used only to detect the same device opening multiple accounts to farm earnings. You can't edit or remove it yourself — deleting your account is the only way to clear it{isAdmin ? ' (admin accounts can also remove device records from the Admin panel).' : '.'}
+              </p>
+            </div>
           ) : (
-            <p className="text-xs text-muted-foreground">Device information not available. Please register again.</p>
+            <div className="p-4 rounded-lg bg-amber-500/10 border border-amber-500/20">
+              <p className="text-xs text-amber-600 mb-3">
+                Your device consent is on file, but we couldn't load the stored record. This can happen right after switching browsers — try registering again.
+              </p>
+              <Button onClick={pullDeviceInformation} disabled={loadingDevice} variant="outline" className="w-full">
+                Register This Device Again
+              </Button>
+            </div>
           )}
         </CardContent>
       </Card>

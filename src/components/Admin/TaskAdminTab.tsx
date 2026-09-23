@@ -6,7 +6,7 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Loader2, RefreshCw, Save, Power, AlertCircle, TrendingUp } from 'lucide-react';
+import { Loader2, RefreshCw, Save, Power, AlertCircle, TrendingUp, Trash2, ShieldAlert } from 'lucide-react';
 
 interface ProviderConfig {
   provider_id: string;
@@ -163,10 +163,11 @@ export const TaskAdminTab = () => {
 
       {/* Tabs */}
       <Tabs defaultValue="providers" className="w-full">
-        <TabsList className="grid w-full grid-cols-3">
+        <TabsList className="grid w-full grid-cols-4">
           <TabsTrigger value="providers">Providers</TabsTrigger>
           <TabsTrigger value="activity">Activity</TabsTrigger>
           <TabsTrigger value="revenue">Revenue</TabsTrigger>
+          <TabsTrigger value="devices">Devices</TabsTrigger>
         </TabsList>
 
         {/* Providers Tab */}
@@ -504,7 +505,144 @@ export const TaskAdminTab = () => {
             </CardContent>
           </Card>
         </TabsContent>
+
+        {/* Devices Tab — admin-only visibility + delete. Regular users can
+            only VIEW their own device in Settings; they can never delete
+            it themselves (only account deletion clears it). */}
+        <TabsContent value="devices">
+          <DevicesPanel />
+        </TabsContent>
       </Tabs>
     </div>
   );
 };
+
+interface DeviceRow {
+  id: string;
+  user_id: string;
+  username: string | null;
+  device_id: string;
+  user_agent: string | null;
+  platform: string | null;
+  screen_resolution: string | null;
+  timezone: string | null;
+  language: string | null;
+  first_seen: string;
+  last_seen: string;
+  linked_account_count: number;
+}
+
+const DevicesPanel = () => {
+  const { toast } = useToast();
+  const [devices, setDevices] = useState<DeviceRow[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
+
+  useEffect(() => {
+    loadDevices();
+  }, []);
+
+  const loadDevices = async () => {
+    setLoading(true);
+    try {
+      const { data, error } = await supabase.rpc('admin_list_devices' as any);
+      if (error) throw error;
+      setDevices((data as DeviceRow[]) || []);
+    } catch (error: any) {
+      console.error('Error loading devices:', error);
+      toast({ title: 'Error loading devices', description: error.message, variant: 'destructive' });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleDelete = async (row: DeviceRow) => {
+    if (!confirm(`Delete this device record for ${row.username || row.user_id}? This clears the fraud link.`)) return;
+    setDeletingId(row.id);
+    try {
+      const { error } = await supabase.rpc('admin_delete_device' as any, { p_device_row_id: row.id });
+      if (error) throw error;
+      toast({ title: 'Deleted', description: 'Device record removed' });
+      setDevices((prev) => prev.filter((d) => d.id !== row.id));
+    } catch (error: any) {
+      toast({ title: 'Error', description: error.message, variant: 'destructive' });
+    } finally {
+      setDeletingId(null);
+    }
+  };
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center py-12">
+        <Loader2 className="w-6 h-6 animate-spin text-primary" />
+      </div>
+    );
+  }
+
+  const flagged = devices.filter((d) => d.linked_account_count > 1);
+
+  return (
+    <div className="space-y-4">
+      <Card>
+        <CardHeader className="pb-3">
+          <div className="flex items-center justify-between">
+            <CardTitle className="text-base flex items-center gap-2">
+              <ShieldAlert className="w-4 h-4 text-amber-500" /> Registered Devices
+            </CardTitle>
+            <Button size="sm" variant="outline" onClick={loadDevices}>
+              <RefreshCw className="w-4 h-4 mr-1" /> Refresh
+            </Button>
+          </div>
+          <p className="text-xs text-muted-foreground">
+            {flagged.length > 0
+              ? `${flagged.length} device${flagged.length > 1 ? 's are' : ' is'} linked to more than one account — the real fraud signal.`
+              : 'No device is currently linked to more than one account.'}
+          </p>
+        </CardHeader>
+        <CardContent>
+          {devices.length === 0 ? (
+            <p className="text-sm text-muted-foreground text-center py-6">No devices registered yet.</p>
+          ) : (
+            <div className="space-y-3">
+              {devices.map((d) => (
+                <div
+                  key={d.id}
+                  className={`border rounded-lg p-3 text-sm ${d.linked_account_count > 1 ? 'border-amber-500/40 bg-amber-500/5' : 'border-border'}`}
+                >
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="min-w-0">
+                      <p className="font-semibold truncate">{d.username || d.user_id}</p>
+                      <p className="text-[11px] text-muted-foreground font-mono truncate">{d.device_id?.slice(0, 20)}…</p>
+                    </div>
+                    {d.linked_account_count > 1 && (
+                      <Badge className="bg-amber-500/15 text-amber-600 border-amber-500/30 text-[10px] shrink-0">
+                        {d.linked_account_count} accounts
+                      </Badge>
+                    )}
+                  </div>
+                  <div className="grid grid-cols-2 gap-x-3 gap-y-0.5 mt-2 text-[11px] text-muted-foreground">
+                    <span>{d.platform || '—'}</span>
+                    <span>{d.screen_resolution || '—'}</span>
+                    <span>{d.timezone || '—'}</span>
+                    <span>Last seen {new Date(d.last_seen).toLocaleDateString()}</span>
+                  </div>
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    className="mt-2 h-7 text-xs text-destructive hover:text-destructive gap-1"
+                    disabled={deletingId === d.id}
+                    onClick={() => handleDelete(d)}
+                  >
+                    {deletingId === d.id ? <Loader2 className="w-3 h-3 animate-spin" /> : <Trash2 className="w-3 h-3" />}
+                    Delete record
+                  </Button>
+                </div>
+              ))}
+            </div>
+          )}
+        </CardContent>
+      </Card>
+    </div>
+  );
+};
+

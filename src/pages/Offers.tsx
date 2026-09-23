@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   Gift, Sparkles, Star, Clock, ArrowUpRight, Zap, Flame, Smartphone,
-  Target, Globe, Lock, ClipboardList, CheckCircle2, Loader2, Wallet, AlertCircle,
+  Target, Globe, Lock, Unlock, ClipboardList, CheckCircle2, Loader2, Wallet, AlertCircle,
 } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
@@ -13,19 +13,39 @@ import { useTaskClick } from '@/hooks/useTaskClick';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 
-interface OfferTask {
+// A network/offerwall task (Monlix, MyLead, CPAGrip, OGAds) — reward is
+// calculated server-side by the postback + admin config, never fixed here.
+interface NetworkTask {
+  source: 'network';
   id: string;
   provider_id: string;
   offer_id: string;
   offer_name: string;
-  provider_payout_usd: number;
   user_reward_stars: number;
   est_minutes: number;
   url?: string;
-  image_url?: string;
-  category: string;
+  category: 'offers' | 'surveys' | 'content';
   featured?: boolean;
+  eligibility: string;
 }
+
+// A Lenory-created internal task (referrals, follows, etc.) — its own
+// system (offer_tasks / offer_task_completions), untouched by the
+// network provider work.
+interface LenoryTask {
+  source: 'lenory';
+  id: string;
+  title: string;
+  description: string | null;
+  payout_stars: number;
+  payout_naira: number;
+  est_minutes: number;
+  url: string | null;
+  category: 'tasks';
+  featured: boolean;
+}
+
+type UnifiedTask = NetworkTask | LenoryTask;
 
 interface TaskCompletion {
   id: string;
@@ -37,18 +57,33 @@ interface TaskCompletion {
   created_at: string;
 }
 
-const PROVIDERS = [
-  { id: 'ALL', label: 'All Tasks', icon: Zap, tint: 'from-cyan-400 to-blue-500' },
-  { id: 'CUSTOM', label: 'Lenory Tasks', icon: ClipboardList, tint: 'from-primary to-fuchsia-500' },
-  { id: 'MONLIX', label: 'Monlix', icon: Flame, tint: 'from-orange-400 to-red-500' },
-  { id: 'OGADS', label: 'OGAds', icon: Smartphone, tint: 'from-emerald-400 to-teal-500' },
-  { id: 'MYLEAD', label: 'MyLead', icon: Target, tint: 'from-yellow-400 to-amber-500' },
-  { id: 'MONETAG', label: 'Monetag', icon: Globe, tint: 'from-sky-400 to-indigo-500' },
-  { id: 'CPAGRIP', label: 'CPAGrip', icon: Lock, tint: 'from-pink-400 to-rose-500' },
+interface AdNetwork {
+  provider_id: string;
+  display_name: string;
+}
+
+const TABS = [
+  { id: 'ALL', label: 'All', icon: Zap },
+  { id: 'offers', label: 'Offers', icon: Flame },
+  { id: 'surveys', label: 'Surveys', icon: ClipboardList },
+  { id: 'content', label: 'Content', icon: Lock },
+  { id: 'tasks', label: 'Tasks', icon: Target },
 ];
 
+// Branding only — no longer used for navigation, just the little icon/tint
+// on each network task card.
+const PROVIDER_BRANDING: Record<string, { label: string; icon: any; tint: string }> = {
+  monlix: { label: 'Monlix', icon: Flame, tint: 'from-orange-400 to-red-500' },
+  mylead: { label: 'MyLead', icon: ClipboardList, tint: 'from-yellow-400 to-amber-500' },
+  cpagrip: { label: 'CPAGrip', icon: Lock, tint: 'from-pink-400 to-rose-500' },
+  ogads: { label: 'OGAds', icon: Smartphone, tint: 'from-emerald-400 to-teal-500' },
+  monetag: { label: 'Monetag', icon: Globe, tint: 'from-sky-400 to-indigo-500' },
+};
+
 const providerMeta = (id: string) =>
-  PROVIDERS.find((p) => p.id === id.toUpperCase()) || PROVIDERS[0];
+  PROVIDER_BRANDING[id?.toLowerCase()] || { label: id, icon: Gift, tint: 'from-primary to-fuchsia-500' };
+
+type TaskStatus = 'started' | 'pending' | 'completed';
 
 const Offers: React.FC = () => {
   const { user } = useAuth();
@@ -57,7 +92,8 @@ const Offers: React.FC = () => {
   const eligibility = useTaskEligibility();
   const { recordClick } = useTaskClick();
 
-  const [tasks, setTasks] = useState<OfferTask[]>([]);
+  const [tasks, setTasks] = useState<UnifiedTask[]>([]);
+  const [adNetworks, setAdNetworks] = useState<AdNetwork[]>([]);
   const [selected, setSelected] = useState('ALL');
   const [loading, setLoading] = useState(true);
   const [stars, setStars] = useState(0);
@@ -66,25 +102,15 @@ const Offers: React.FC = () => {
   const [pendingStars, setPendingStars] = useState(0);
   const [liveFeed, setLiveFeed] = useState<TaskCompletion[]>([]);
   const [tickIndex, setTickIndex] = useState(0);
-  const [myStatus, setMyStatus] = useState<Record<string, 'started' | 'completed'>>({});
+  const [myStatus, setMyStatus] = useState<Record<string, TaskStatus>>({});
   const [busy, setBusy] = useState<string | null>(null);
   const startedAt = useRef<Record<string, number>>({});
 
   useEffect(() => {
     if (!user || !eligibility || eligibility.isLoading) return;
-    
-    // Check task rules acceptance first
     supabase.from('task_rules_acceptance').select('user_id').eq('user_id', user.id).maybeSingle()
       .then(({ data }) => { if (!data) navigate('/task-rules', { replace: true }); });
   }, [user?.id, navigate, eligibility?.isLoading]);
-
-  // If eligibility checks fail, show gate and redirect to settings
-  useEffect(() => {
-    if (!eligibility.isLoading && !eligibility.isReady && eligibility.errors.length > 0) {
-      // User needs to complete profile - but still show the page with gate message
-      // They'll click "Complete Profile" to go to settings
-    }
-  }, [eligibility.isLoading, eligibility.isReady]);
 
   useEffect(() => {
     loadTasks();
@@ -93,10 +119,10 @@ const Offers: React.FC = () => {
       .channel('offer-live-feed')
       .on(
         'postgres_changes',
-        { event: 'INSERT', schema: 'public', table: 'offer_task_completions' },
+        { event: 'UPDATE', schema: 'public', table: 'task_ledger' },
         (payload: any) => {
-          if (payload.new?.status === 'completed') {
-            setLiveFeed((prev) => [payload.new as Completion, ...prev].slice(0, 20));
+          if (payload.new?.status === 'approved') {
+            setLiveFeed((prev) => [payload.new as TaskCompletion, ...prev].slice(0, 20));
           }
         },
       )
@@ -117,6 +143,7 @@ const Offers: React.FC = () => {
         (payload: any) => {
           setStars(payload.new?.star_balance ?? 0);
           setWallet(Number(payload.new?.wallet_balance ?? 0));
+          setPendingStars(payload.new?.task_balance_pending ?? 0);
         },
       )
       .subscribe();
@@ -131,30 +158,64 @@ const Offers: React.FC = () => {
 
   const loadTasks = async () => {
     try {
-      // Get provider config (available tasks)
-      // For now, return placeholder tasks - these will be populated by provider APIs
-      // In Phase 2, this will query actual offers from Monlix/MyLead APIs
-      const { data: providers } = await supabase
-        .from('task_provider_config')
-        .select('*')
-        .eq('enabled', true)
-        .eq('maintenance_mode', false)
-        .order('sort_order', { ascending: true });
+      const [{ data: providers }, { data: lenoryRaw }] = await Promise.all([
+        supabase
+          .from('task_provider_config')
+          .select('*')
+          .eq('enabled', true)
+          .eq('maintenance_mode', false)
+          .neq('category', 'advertising')
+          .order('sort_order', { ascending: true }),
+        supabase.from('offer_tasks' as any).select('*').eq('active', true).order('featured', { ascending: false }),
+      ]);
 
-      // Mock tasks based on providers - replace this with real offer fetching in Phase 2
-      const mockTasks: OfferTask[] = (providers || []).map((p) => ({
-        id: `${p.provider_id}-mock-1`,
-        provider_id: p.provider_id,
-        offer_id: 'mock-offer-1',
-        offer_name: `${p.display_name} Offer`,
-        provider_payout_usd: 0.50,
-        user_reward_stars: Math.floor(0.50 * 0.5 * (p.stars_per_usd_user_share || 50)), // rough calc
-        est_minutes: 5,
-        category: p.category || 'offers',
-        featured: p.featured || false,
+      // Preview offers per enabled provider. Real per-user offer inventory
+      // (Phase 2) will replace this once each network's API is connected —
+      // the reward math below already matches what the postback will
+      // actually calculate, so numbers shown here won't be misleading.
+      const networkTasks: NetworkTask[] = (providers || []).map((p: any) => {
+        const previewPayoutUsd = 0.5;
+        const stars = Math.max(
+          1,
+          Math.floor(previewPayoutUsd * (p.user_reward_percent / 100) * (p.stars_per_usd_user_share || 50)),
+        );
+        const offerId = `${p.provider_id}-preview-offer`;
+        return {
+          source: 'network',
+          id: offerId,
+          provider_id: p.provider_id,
+          offer_id: offerId,
+          offer_name: `${p.display_name} Offer`,
+          user_reward_stars: stars,
+          est_minutes: 5,
+          category: (p.category || 'offers') as NetworkTask['category'],
+          featured: p.featured || false,
+          eligibility: `${p.min_age}+${p.country_availability?.length ? ' · ' + p.country_availability.join(', ') : ' · Worldwide'}`,
+        };
+      });
+
+      const lenoryTasks: LenoryTask[] = ((lenoryRaw as any[]) || []).map((t) => ({
+        source: 'lenory',
+        id: t.id,
+        title: t.title,
+        description: t.description,
+        payout_stars: t.payout_stars,
+        payout_naira: t.payout_naira,
+        est_minutes: t.est_minutes,
+        url: t.url,
+        category: 'tasks',
+        featured: t.featured,
       }));
 
-      setTasks(mockTasks);
+      setTasks([...networkTasks, ...lenoryTasks]);
+
+      const { data: ads } = await supabase
+        .from('task_provider_config')
+        .select('provider_id, display_name')
+        .eq('category', 'advertising')
+        .eq('enabled', true);
+      setAdNetworks((ads as AdNetwork[]) || []);
+
       setLoading(false);
     } catch (error) {
       console.error('Error loading tasks:', error);
@@ -164,7 +225,6 @@ const Offers: React.FC = () => {
 
   const loadLiveFeed = async () => {
     try {
-      // Load recent completions from task_ledger
       const { data } = await supabase
         .from('task_ledger')
         .select('id, user_id, provider_id, offer_name, user_reward_stars, status, created_at')
@@ -192,45 +252,51 @@ const Offers: React.FC = () => {
   const loadMyStatus = async () => {
     if (!user) return;
     const since = new Date(Date.now() - 1000 * 60 * 60 * 24).toISOString();
-    const { data } = await supabase
-      .from('task_ledger')
-      .select('id, offer_id, status, user_reward_stars, created_at')
-      .eq('user_id', user.id)
-      .order('created_at', { ascending: false })
-      .limit(200);
-    
-    const map: Record<string, 'started' | 'completed' | 'pending' | 'approved'> = {};
+
+    const [{ data: ledgerRows }, { data: lenoryRows }] = await Promise.all([
+      supabase
+        .from('task_ledger')
+        .select('offer_id, status, user_reward_stars, created_at')
+        .eq('user_id', user.id)
+        .order('created_at', { ascending: false })
+        .limit(200),
+      supabase
+        .from('offer_task_completions' as any)
+        .select('task_id, status, stars_credited, created_at')
+        .eq('user_id', user.id)
+        .order('created_at', { ascending: false })
+        .limit(200),
+    ]);
+
+    const map: Record<string, TaskStatus> = {};
     let today = 0;
-    
-    ((data as any[]) || []).forEach((row) => {
-      const offerId = row.offer_id;
-      if (offerId && !map[offerId]) {
-        // Map ledger status to UI status
-        if (row.status === 'approved' || row.status === 'available') {
-          map[offerId] = 'completed';
-        } else if (row.status === 'pending') {
-          map[offerId] = 'pending';
-        } else if (row.status === 'clicked') {
-          map[offerId] = 'started';
-        }
+
+    ((ledgerRows as any[]) || []).forEach((row) => {
+      const key = row.offer_id;
+      if (key && !map[key]) {
+        if (row.status === 'approved' || row.status === 'available') map[key] = 'completed';
+        else if (row.status === 'pending') map[key] = 'pending';
+        else if (row.status === 'clicked') map[key] = 'started';
       }
-      
-      // Count today's earnings (approved/available only)
       if ((row.status === 'approved' || row.status === 'available') && row.created_at >= since) {
         today += row.user_reward_stars || 0;
       }
-      
-      if (row.status === 'clicked' && offerId && !startedAt.current[offerId]) {
-        startedAt.current[offerId] = new Date(row.created_at).getTime();
-      }
     });
-    
+
+    ((lenoryRows as any[]) || []).forEach((row) => {
+      const key = row.task_id;
+      if (key && !map[key] && (row.status === 'started' || row.status === 'completed')) {
+        map[key] = row.status;
+      }
+      if (row.status === 'completed' && row.created_at >= since) today += row.stars_credited || 0;
+    });
+
     setMyStatus(map);
     setTodayStars(today);
   };
 
   const filtered = useMemo(
-    () => (selected === 'ALL' ? tasks : tasks.filter((t) => t.provider_id.toUpperCase() === selected)),
+    () => (selected === 'ALL' ? tasks : tasks.filter((t) => t.category === selected)),
     [tasks, selected],
   );
 
@@ -239,10 +305,9 @@ const Offers: React.FC = () => {
     navigate('/auth');
   };
 
-  const handleStart = async (task: OfferTask) => {
+  const handleStart = async (task: UnifiedTask) => {
     if (!user) return requireLogin();
-    
-    // Check eligibility
+
     if (!eligibility.isReady) {
       toast({
         title: 'Profile incomplete',
@@ -255,30 +320,32 @@ const Offers: React.FC = () => {
 
     setBusy(task.id);
     try {
-      // Record the click first (this logs it to task_ledger)
-      const result = await recordClick(task.provider_id, task.offer_id);
-      if (!result.success) {
-        throw new Error(result.error || 'Could not start task');
-      }
-
-      startedAt.current[task.id] = Date.now();
-      setMyStatus((prev) => ({ ...prev, [task.id]: 'started' }));
-
-      // Open the provider's offerwall/link
-      // In Phase 2, this will be replaced with iframe embeds for each provider
-      const target = task.url || `https://offerwall.example.com?user=${user.id}&provider=${task.provider_id}`;
-      if (target) {
+      if (task.source === 'lenory') {
+        const { data, error } = await supabase.rpc('start_offer_task' as any, { p_task_id: task.id });
+        if (error) throw error;
+        const res = data as any;
+        if (!res?.success) throw new Error(res?.error || 'Could not start task');
+        startedAt.current[task.id] = Date.now();
+        setMyStatus((prev) => ({ ...prev, [task.id]: 'started' }));
+        const target = res.url || task.url;
+        if (target) {
+          if (target.startsWith('/')) navigate(target);
+          else window.open(target, '_blank', 'noopener');
+        }
+        toast({ title: 'Task started 🚀', description: 'Finish it, then come back and tap Claim.' });
+      } else {
+        const result = await recordClick(task.provider_id, task.offer_id);
+        if (!result.success) throw new Error(result.error || 'Could not start task');
+        startedAt.current[task.id] = Date.now();
+        setMyStatus((prev) => ({ ...prev, [task.id]: 'started' }));
+        const target = task.url || `https://offerwall.example.com?user=${user.id}&provider=${task.provider_id}`;
         if (target.startsWith('/')) navigate(target);
         else window.open(target, '_blank', 'noopener');
+        toast({
+          title: task.category === 'content' ? 'Locker opened 🔓' : 'Task started 🚀',
+          description: 'Your reward lands automatically once the network confirms it.',
+        });
       }
-
-      toast({
-        title: 'Task started 🚀',
-        description:
-          task.provider === 'CUSTOM'
-            ? 'Finish it, then come back and tap Claim.'
-            : 'Your reward lands automatically once the network confirms it.',
-      });
     } catch (e: any) {
       toast({ title: 'Could not start', description: e.message, variant: 'destructive' });
     } finally {
@@ -286,7 +353,7 @@ const Offers: React.FC = () => {
     }
   };
 
-  const handleClaim = async (task: OfferTask) => {
+  const handleClaim = async (task: LenoryTask) => {
     if (!user) return requireLogin();
     setBusy(task.id);
     try {
@@ -365,8 +432,8 @@ const Offers: React.FC = () => {
               <Gift className="w-5 h-5 text-primary-foreground" />
             </motion.span>
             <div>
-              <h1 className="text-xl font-black leading-tight">Earn Center</h1>
-              <p className="text-[11px] text-muted-foreground">Complete tasks, stack Stars, cash out</p>
+              <h1 className="text-xl font-black leading-tight">Tasks Center</h1>
+              <p className="text-[11px] text-muted-foreground">Complete eligible opportunities and earn Stars ⭐</p>
             </div>
           </div>
 
@@ -433,23 +500,23 @@ const Offers: React.FC = () => {
         </div>
       </div>
 
-      {/* Provider tabs */}
+      {/* Category tabs */}
       <div className="flex gap-2 overflow-x-auto scrollbar-hide px-4 py-4">
-        {PROVIDERS.map((p) => {
-          const Icon = p.icon;
-          const active = selected === p.id;
+        {TABS.map((t) => {
+          const Icon = t.icon;
+          const active = selected === t.id;
           return (
             <button
-              key={p.id}
-              onClick={() => setSelected(p.id)}
+              key={t.id}
+              onClick={() => setSelected(t.id)}
               className={`shrink-0 flex items-center gap-1.5 px-3.5 py-2 rounded-full text-xs font-semibold transition-all border ${
                 active
-                  ? `bg-gradient-to-r ${p.tint} text-white border-transparent shadow-lg`
+                  ? 'bg-gradient-to-r from-primary to-fuchsia-500 text-white border-transparent shadow-lg'
                   : 'bg-muted/40 text-muted-foreground border-border hover:text-foreground'
               }`}
             >
               <Icon className="w-3.5 h-3.5" />
-              {p.label}
+              {t.label}
             </button>
           );
         })}
@@ -468,9 +535,14 @@ const Offers: React.FC = () => {
           </div>
         ) : (
           filtered.map((task, i) => {
-            const meta = providerMeta(task.provider_id);
-            const Icon = meta.icon;
             const status = myStatus[task.id];
+            const isNetwork = task.source === 'network';
+            const netTask = isNetwork ? (task as NetworkTask) : null;
+            const lenoryTask = !isNetwork ? (task as LenoryTask) : null;
+            const meta = netTask ? providerMeta(netTask.provider_id) : null;
+            const Icon = netTask ? meta!.icon : ClipboardList;
+            const isLocker = !!netTask && netTask.category === 'content';
+
             return (
               <motion.div
                 key={task.id}
@@ -486,25 +558,31 @@ const Offers: React.FC = () => {
                 )}
                 <div className="flex gap-3">
                   <span
-                    className={`w-11 h-11 shrink-0 rounded-xl bg-gradient-to-br ${meta.tint} flex items-center justify-center shadow-lg`}
+                    className={`w-11 h-11 shrink-0 rounded-xl bg-gradient-to-br ${netTask ? meta!.tint : 'from-primary to-fuchsia-500'} flex items-center justify-center shadow-lg`}
                   >
                     <Icon className="w-5 h-5 text-white" />
                   </span>
                   <div className="flex-1 min-w-0">
-                    <p className="font-bold text-sm leading-tight truncate">{task.offer_name}</p>
+                    <p className="font-bold text-sm leading-tight truncate">
+                      {netTask ? netTask.offer_name : lenoryTask!.title}
+                    </p>
                     <p className="text-[11px] text-muted-foreground line-clamp-2 mt-0.5">
-                      Complete and earn stars directly from {meta.label}
+                      {netTask
+                        ? `Provider: ${meta!.label}${isLocker ? ' · Unlocks after completing an eligible offer' : ''}`
+                        : lenoryTask!.description || 'Complete this Lenory task to earn Stars'}
                     </p>
                     <div className="flex items-center gap-2 mt-2 flex-wrap">
                       <Badge className="bg-yellow-400/15 text-yellow-400 border-yellow-400/30 text-[10px] gap-1">
-                        <Star className="w-3 h-3 fill-current" /> +{Math.floor(task.user_reward_stars)}
+                        <Star className="w-3 h-3 fill-current" /> +{netTask ? netTask.user_reward_stars : lenoryTask!.payout_stars}
                       </Badge>
                       <span className="text-[10px] text-muted-foreground flex items-center gap-1">
                         <Clock className="w-3 h-3" /> ~{task.est_minutes} min
                       </span>
-                      <span className="text-[10px] text-muted-foreground uppercase tracking-wide">
-                        {meta.label}
-                      </span>
+                      {netTask && (
+                        <span className="text-[10px] text-muted-foreground">
+                          Eligibility: {netTask.eligibility}
+                        </span>
+                      )}
                       {status === 'pending' && (
                         <Badge className="bg-amber-500/15 text-amber-400 border-amber-500/30 text-[10px]">
                           ⏳ Pending
@@ -524,19 +602,40 @@ const Offers: React.FC = () => {
                       <Loader2 className="w-4 h-4 animate-spin" /> Pending approval
                     </Button>
                   ) : (
-                    <Button
-                      size="sm"
-                      className="flex-1 gap-1.5"
-                      disabled={busy === task.id || !eligibility.isReady}
-                      onClick={() => handleStart(task)}
-                    >
-                      {busy === task.id ? (
-                        <Loader2 className="w-4 h-4 animate-spin" />
-                      ) : (
-                        <ArrowUpRight className="w-4 h-4" />
+                    <>
+                      <Button
+                        size="sm"
+                        className="flex-1 gap-1.5"
+                        disabled={busy === task.id || !eligibility.isReady}
+                        onClick={() => handleStart(task)}
+                      >
+                        {busy === task.id ? (
+                          <Loader2 className="w-4 h-4 animate-spin" />
+                        ) : isLocker ? (
+                          <Unlock className="w-4 h-4" />
+                        ) : (
+                          <ArrowUpRight className="w-4 h-4" />
+                        )}
+                        {status === 'started'
+                          ? 'Open again'
+                          : isLocker
+                          ? 'Unlock'
+                          : isNetwork
+                          ? 'View Task'
+                          : 'Start Task'}
+                      </Button>
+                      {!isNetwork && status === 'started' && (
+                        <Button
+                          size="sm"
+                          variant="secondary"
+                          className="gap-1.5"
+                          disabled={busy === task.id}
+                          onClick={() => handleClaim(task as LenoryTask)}
+                        >
+                          <Sparkles className="w-4 h-4" /> Claim
+                        </Button>
                       )}
-                      {status === 'started' ? 'Open again' : 'Start Task'}
-                    </Button>
+                    </>
                   )}
                 </div>
               </motion.div>
@@ -544,6 +643,35 @@ const Offers: React.FC = () => {
           })
         )}
       </div>
+
+      {/* Advertising strip — Monetag etc. Separate from the earn tabs on
+          purpose (spec #23): it funds the platform but never converts
+          to Stars, so it's never mixed in with Offers/Surveys/Content. */}
+      {adNetworks.length > 0 && (
+        <div className="px-4 pt-5">
+          <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide mb-2 px-1">
+            Advertising
+          </p>
+          {adNetworks.map((p) => {
+            const meta = providerMeta(p.provider_id);
+            const Icon = meta.icon;
+            return (
+              <div
+                key={p.provider_id}
+                className="glass-card rounded-xl p-3 border border-border/60 flex items-center gap-3 mb-2 opacity-80"
+              >
+                <span className={`w-9 h-9 shrink-0 rounded-lg bg-gradient-to-br ${meta.tint} flex items-center justify-center`}>
+                  <Icon className="w-4 h-4 text-white" />
+                </span>
+                <div className="flex-1">
+                  <p className="text-sm font-semibold">{p.display_name}</p>
+                  <p className="text-[11px] text-muted-foreground">Supports Lenory through ads — doesn't earn Stars</p>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
 
       <p className="text-[10px] text-muted-foreground text-center px-8 mt-6">
         Network offers credit automatically once the partner confirms your completion (usually
