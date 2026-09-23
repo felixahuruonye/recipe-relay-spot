@@ -83,6 +83,14 @@ const PROVIDER_BRANDING: Record<string, { label: string; icon: any; tint: string
 const providerMeta = (id: string) =>
   PROVIDER_BRANDING[id?.toLowerCase()] || { label: id, icon: Gift, tint: 'from-primary to-fuchsia-500' };
 
+// Matches the spec's own examples verbatim: Monlix (offers) -> "Complete a
+// task", MyLead (surveys) -> "Complete an opportunity", lockers -> "Unlock Content".
+const categoryActionTitle = (category: string) => {
+  if (category === 'surveys') return 'Complete an opportunity';
+  if (category === 'content') return 'Unlock Content';
+  return 'Complete a task';
+};
+
 type TaskStatus = 'started' | 'pending' | 'completed';
 
 const Offers: React.FC = () => {
@@ -104,6 +112,9 @@ const Offers: React.FC = () => {
   const [tickIndex, setTickIndex] = useState(0);
   const [myStatus, setMyStatus] = useState<Record<string, TaskStatus>>({});
   const [busy, setBusy] = useState<string | null>(null);
+  const [showHistory, setShowHistory] = useState(false);
+  const [historyRows, setHistoryRows] = useState<any[]>([]);
+  const [historyLoading, setHistoryLoading] = useState(false);
   const startedAt = useRef<Record<string, number>>({});
 
   useEffect(() => {
@@ -158,35 +169,23 @@ const Offers: React.FC = () => {
 
   const loadTasks = async () => {
     try {
-      const [{ data: providers }, { data: lenoryRaw }] = await Promise.all([
-        supabase
-          .from('task_provider_config')
-          .select('*')
-          .eq('enabled', true)
-          .eq('maintenance_mode', false)
-          .neq('category', 'advertising')
-          .order('sort_order', { ascending: true }),
+      const [{ data: previewTasks, error: previewError }, { data: lenoryRaw }] = await Promise.all([
+        // Server-calculated preview — the browser never does reward math
+        // itself. Same formula process_task_postback() uses for real.
+        supabase.rpc('get_available_tasks' as any),
         supabase.from('offer_tasks' as any).select('*').eq('active', true).order('featured', { ascending: false }),
       ]);
+      if (previewError) throw previewError;
 
-      // Preview offers per enabled provider. Real per-user offer inventory
-      // (Phase 2) will replace this once each network's API is connected —
-      // the reward math below already matches what the postback will
-      // actually calculate, so numbers shown here won't be misleading.
-      const networkTasks: NetworkTask[] = (providers || []).map((p: any) => {
-        const previewPayoutUsd = 0.5;
-        const stars = Math.max(
-          1,
-          Math.floor(previewPayoutUsd * (p.user_reward_percent / 100) * (p.stars_per_usd_user_share || 50)),
-        );
+      const networkTasks: NetworkTask[] = ((previewTasks as any[]) || []).map((p) => {
         const offerId = `${p.provider_id}-preview-offer`;
         return {
           source: 'network',
           id: offerId,
           provider_id: p.provider_id,
           offer_id: offerId,
-          offer_name: `${p.display_name} Offer`,
-          user_reward_stars: stars,
+          offer_name: categoryActionTitle(p.category),
+          user_reward_stars: p.preview_reward_stars,
           est_minutes: 5,
           category: (p.category || 'offers') as NetworkTask['category'],
           featured: p.featured || false,
@@ -295,9 +294,46 @@ const Offers: React.FC = () => {
     setTodayStars(today);
   };
 
+  const loadTaskHistory = async () => {
+    if (!user) return;
+    setHistoryLoading(true);
+    try {
+      // RLS already scopes this to the caller's own rows.
+      const { data, error } = await supabase
+        .from('task_ledger')
+        .select('id, provider_id, offer_name, provider_payout_usd, user_reward_stars, status, created_at, approved_at, reversed_at, reversal_reason')
+        .eq('user_id', user.id)
+        .order('created_at', { ascending: false })
+        .limit(25);
+      if (error) throw error;
+      setHistoryRows(data || []);
+    } catch (error) {
+      console.error('Error loading task balance history:', error);
+    } finally {
+      setHistoryLoading(false);
+    }
+  };
+
+  const toggleHistory = () => {
+    const next = !showHistory;
+    setShowHistory(next);
+    if (next) loadTaskHistory();
+  };
+
   const filtered = useMemo(
     () => (selected === 'ALL' ? tasks : tasks.filter((t) => t.category === selected)),
     [tasks, selected],
+  );
+
+  // Spec's "🔥 Available for You" / "More opportunities" split — featured
+  // network tasks (and all Lenory tasks) lead, the rest trail below.
+  const featuredList = useMemo(
+    () => filtered.filter((t) => t.featured || t.source === 'lenory'),
+    [filtered],
+  );
+  const moreList = useMemo(
+    () => filtered.filter((t) => !(t.featured || t.source === 'lenory')),
+    [filtered],
   );
 
   const requireLogin = () => {
@@ -382,6 +418,114 @@ const Offers: React.FC = () => {
 
   const ticker = liveFeed[tickIndex];
 
+  const renderCard = (task: UnifiedTask, i: number) => {
+    const status = myStatus[task.id];
+    const isNetwork = task.source === 'network';
+    const netTask = isNetwork ? (task as NetworkTask) : null;
+    const lenoryTask = !isNetwork ? (task as LenoryTask) : null;
+    const meta = netTask ? providerMeta(netTask.provider_id) : null;
+    const Icon = netTask ? meta!.icon : ClipboardList;
+    const isLocker = !!netTask && netTask.category === 'content';
+
+    return (
+      <motion.div
+        key={task.id}
+        initial={{ opacity: 0, y: 16 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ delay: Math.min(i * 0.04, 0.4) }}
+        className="glass-card rounded-2xl p-4 border border-border/60 relative overflow-hidden"
+      >
+        {task.featured && (
+          <span className="absolute top-0 right-0 text-[9px] font-bold px-2 py-1 rounded-bl-lg bg-gradient-to-r from-yellow-400 to-orange-500 text-black">
+            HOT
+          </span>
+        )}
+        <div className="flex gap-3">
+          <span
+            className={`w-11 h-11 shrink-0 rounded-xl bg-gradient-to-br ${netTask ? meta!.tint : 'from-primary to-fuchsia-500'} flex items-center justify-center shadow-lg`}
+          >
+            <Icon className="w-5 h-5 text-white" />
+          </span>
+          <div className="flex-1 min-w-0">
+            <p className="font-bold text-sm leading-tight truncate">
+              {netTask ? netTask.offer_name : lenoryTask!.title}
+            </p>
+            <p className="text-[11px] text-muted-foreground line-clamp-2 mt-0.5">
+              {netTask
+                ? `Provider: ${meta!.label}${isLocker ? ' · Unlocks after completing an eligible offer' : ''}`
+                : lenoryTask!.description || 'Complete this Lenory task to earn Stars'}
+            </p>
+            <div className="flex items-center gap-2 mt-2 flex-wrap">
+              <Badge className="bg-yellow-400/15 text-yellow-400 border-yellow-400/30 text-[10px] gap-1">
+                <Star className="w-3 h-3 fill-current" /> +{netTask ? netTask.user_reward_stars : lenoryTask!.payout_stars}
+              </Badge>
+              <span className="text-[10px] text-muted-foreground flex items-center gap-1">
+                <Clock className="w-3 h-3" /> Estimated completion: ~{task.est_minutes} min
+              </span>
+              {netTask && (
+                <span className="text-[10px] text-muted-foreground">
+                  Eligibility: {netTask.eligibility}
+                </span>
+              )}
+              {status === 'pending' && (
+                <Badge className="bg-amber-500/15 text-amber-400 border-amber-500/30 text-[10px]">
+                  ⏳ Pending
+                </Badge>
+              )}
+            </div>
+          </div>
+        </div>
+
+        <div className="flex gap-2 mt-3">
+          {status === 'completed' ? (
+            <Button disabled size="sm" className="flex-1 gap-1.5" variant="secondary">
+              <CheckCircle2 className="w-4 h-4 text-green-500" /> Completed
+            </Button>
+          ) : status === 'pending' ? (
+            <Button disabled size="sm" className="flex-1 gap-1.5" variant="secondary">
+              <Loader2 className="w-4 h-4 animate-spin" /> Pending approval
+            </Button>
+          ) : (
+            <>
+              <Button
+                size="sm"
+                className="flex-1 gap-1.5"
+                disabled={busy === task.id || !eligibility.isReady}
+                onClick={() => handleStart(task)}
+              >
+                {busy === task.id ? (
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                ) : isLocker ? (
+                  <Unlock className="w-4 h-4" />
+                ) : (
+                  <ArrowUpRight className="w-4 h-4" />
+                )}
+                {status === 'started'
+                  ? 'Open again'
+                  : isLocker
+                  ? 'Unlock'
+                  : isNetwork
+                  ? 'View Task'
+                  : 'Start Task'}
+              </Button>
+              {!isNetwork && status === 'started' && (
+                <Button
+                  size="sm"
+                  variant="secondary"
+                  className="gap-1.5"
+                  disabled={busy === task.id}
+                  onClick={() => handleClaim(task as LenoryTask)}
+                >
+                  <Sparkles className="w-4 h-4" /> Claim
+                </Button>
+              )}
+            </>
+          )}
+        </div>
+      </motion.div>
+    );
+  };
+
   return (
     <div className="min-h-[100dvh] bg-background pb-28">
       {/* Eligibility Gate - Centered Modal */}
@@ -445,11 +589,6 @@ const Offers: React.FC = () => {
                   <Star className="w-6 h-6 text-yellow-400 fill-yellow-400" />
                   {stars.toLocaleString()}
                 </p>
-                {pendingStars > 0 && (
-                  <p className="text-xs text-amber-500 mt-0.5">
-                    +{pendingStars.toLocaleString()} pending
-                  </p>
-                )}
                 <p className="text-xs text-primary mt-0.5">
                   ≈ ₦{(stars * 300).toLocaleString()} in Star value
                 </p>
@@ -467,7 +606,77 @@ const Offers: React.FC = () => {
                 </button>
               </div>
             </div>
+
+            {/* Task Balance — deliberately separate from Star Balance.
+                Pending here means a network hasn't confirmed the
+                conversion yet; it only becomes Star Balance once
+                approved. */}
+            <button
+              onClick={toggleHistory}
+              className="w-full mt-3 pt-3 border-t border-border/50 flex items-center justify-between text-left"
+            >
+              <div>
+                <p className="text-[10px] text-muted-foreground uppercase tracking-wide">Task Balance</p>
+                <p className="text-sm font-bold text-amber-500">
+                  {pendingStars > 0 ? `${pendingStars.toLocaleString()} ⭐ pending` : 'Nothing pending'}
+                </p>
+              </div>
+              <span className="text-[11px] text-primary flex items-center gap-1">
+                {showHistory ? 'Hide history' : 'View history'}
+                <ArrowUpRight className={`w-3 h-3 transition-transform ${showHistory ? 'rotate-90' : ''}`} />
+              </span>
+            </button>
           </div>
+
+          {/* Task Balance history — every ledger entry for this user:
+              what a network paid, what it converted to in Stars, and
+              its current status (spec #4/#17: full auditable history). */}
+          <AnimatePresence>
+            {showHistory && (
+              <motion.div
+                initial={{ opacity: 0, height: 0 }}
+                animate={{ opacity: 1, height: 'auto' }}
+                exit={{ opacity: 0, height: 0 }}
+                className="glass-card rounded-2xl mt-2 border border-border/60 overflow-hidden"
+              >
+                <div className="p-3 max-h-72 overflow-y-auto space-y-2">
+                  {historyLoading ? (
+                    <div className="flex justify-center py-4">
+                      <Loader2 className="w-4 h-4 animate-spin text-muted-foreground" />
+                    </div>
+                  ) : historyRows.length === 0 ? (
+                    <p className="text-xs text-muted-foreground text-center py-3">No task activity yet.</p>
+                  ) : (
+                    historyRows.map((row) => {
+                      const statusStyle: Record<string, string> = {
+                        clicked: 'bg-blue-500/15 text-blue-400 border-blue-500/30',
+                        pending: 'bg-amber-500/15 text-amber-400 border-amber-500/30',
+                        approved: 'bg-green-500/15 text-green-400 border-green-500/30',
+                        available: 'bg-green-500/15 text-green-400 border-green-500/30',
+                        reversed: 'bg-red-500/15 text-red-400 border-red-500/30',
+                        rejected: 'bg-red-500/15 text-red-400 border-red-500/30',
+                      };
+                      return (
+                        <div key={row.id} className="flex items-center justify-between gap-2 text-xs py-1.5 border-b border-border/30 last:border-0">
+                          <div className="min-w-0">
+                            <p className="font-semibold truncate">{row.offer_name || providerMeta(row.provider_id).label}</p>
+                            <p className="text-[10px] text-muted-foreground">
+                              {new Date(row.created_at).toLocaleDateString()} · ${Number(row.provider_payout_usd || 0).toFixed(2)} payout
+                              {row.status === 'reversed' && row.reversal_reason ? ` · ${row.reversal_reason}` : ''}
+                            </p>
+                          </div>
+                          <div className="text-right shrink-0">
+                            <p className="font-bold text-yellow-400">+{row.user_reward_stars}⭐</p>
+                            <Badge className={`text-[9px] ${statusStyle[row.status] || ''}`}>{row.status}</Badge>
+                          </div>
+                        </div>
+                      );
+                    })
+                  )}
+                </div>
+              </motion.div>
+            )}
+          </AnimatePresence>
         </div>
       </div>
 
@@ -534,113 +743,24 @@ const Offers: React.FC = () => {
             <p className="text-sm text-muted-foreground">No tasks here yet — check back soon.</p>
           </div>
         ) : (
-          filtered.map((task, i) => {
-            const status = myStatus[task.id];
-            const isNetwork = task.source === 'network';
-            const netTask = isNetwork ? (task as NetworkTask) : null;
-            const lenoryTask = !isNetwork ? (task as LenoryTask) : null;
-            const meta = netTask ? providerMeta(netTask.provider_id) : null;
-            const Icon = netTask ? meta!.icon : ClipboardList;
-            const isLocker = !!netTask && netTask.category === 'content';
-
-            return (
-              <motion.div
-                key={task.id}
-                initial={{ opacity: 0, y: 16 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: Math.min(i * 0.04, 0.4) }}
-                className="glass-card rounded-2xl p-4 border border-border/60 relative overflow-hidden"
-              >
-                {task.featured && (
-                  <span className="absolute top-0 right-0 text-[9px] font-bold px-2 py-1 rounded-bl-lg bg-gradient-to-r from-yellow-400 to-orange-500 text-black">
-                    HOT
-                  </span>
-                )}
-                <div className="flex gap-3">
-                  <span
-                    className={`w-11 h-11 shrink-0 rounded-xl bg-gradient-to-br ${netTask ? meta!.tint : 'from-primary to-fuchsia-500'} flex items-center justify-center shadow-lg`}
-                  >
-                    <Icon className="w-5 h-5 text-white" />
-                  </span>
-                  <div className="flex-1 min-w-0">
-                    <p className="font-bold text-sm leading-tight truncate">
-                      {netTask ? netTask.offer_name : lenoryTask!.title}
-                    </p>
-                    <p className="text-[11px] text-muted-foreground line-clamp-2 mt-0.5">
-                      {netTask
-                        ? `Provider: ${meta!.label}${isLocker ? ' · Unlocks after completing an eligible offer' : ''}`
-                        : lenoryTask!.description || 'Complete this Lenory task to earn Stars'}
-                    </p>
-                    <div className="flex items-center gap-2 mt-2 flex-wrap">
-                      <Badge className="bg-yellow-400/15 text-yellow-400 border-yellow-400/30 text-[10px] gap-1">
-                        <Star className="w-3 h-3 fill-current" /> +{netTask ? netTask.user_reward_stars : lenoryTask!.payout_stars}
-                      </Badge>
-                      <span className="text-[10px] text-muted-foreground flex items-center gap-1">
-                        <Clock className="w-3 h-3" /> ~{task.est_minutes} min
-                      </span>
-                      {netTask && (
-                        <span className="text-[10px] text-muted-foreground">
-                          Eligibility: {netTask.eligibility}
-                        </span>
-                      )}
-                      {status === 'pending' && (
-                        <Badge className="bg-amber-500/15 text-amber-400 border-amber-500/30 text-[10px]">
-                          ⏳ Pending
-                        </Badge>
-                      )}
-                    </div>
-                  </div>
-                </div>
-
-                <div className="flex gap-2 mt-3">
-                  {status === 'completed' ? (
-                    <Button disabled size="sm" className="flex-1 gap-1.5" variant="secondary">
-                      <CheckCircle2 className="w-4 h-4 text-green-500" /> Completed
-                    </Button>
-                  ) : status === 'pending' ? (
-                    <Button disabled size="sm" className="flex-1 gap-1.5" variant="secondary">
-                      <Loader2 className="w-4 h-4 animate-spin" /> Pending approval
-                    </Button>
-                  ) : (
-                    <>
-                      <Button
-                        size="sm"
-                        className="flex-1 gap-1.5"
-                        disabled={busy === task.id || !eligibility.isReady}
-                        onClick={() => handleStart(task)}
-                      >
-                        {busy === task.id ? (
-                          <Loader2 className="w-4 h-4 animate-spin" />
-                        ) : isLocker ? (
-                          <Unlock className="w-4 h-4" />
-                        ) : (
-                          <ArrowUpRight className="w-4 h-4" />
-                        )}
-                        {status === 'started'
-                          ? 'Open again'
-                          : isLocker
-                          ? 'Unlock'
-                          : isNetwork
-                          ? 'View Task'
-                          : 'Start Task'}
-                      </Button>
-                      {!isNetwork && status === 'started' && (
-                        <Button
-                          size="sm"
-                          variant="secondary"
-                          className="gap-1.5"
-                          disabled={busy === task.id}
-                          onClick={() => handleClaim(task as LenoryTask)}
-                        >
-                          <Sparkles className="w-4 h-4" /> Claim
-                        </Button>
-                      )}
-                    </>
-                  )}
-                </div>
-              </motion.div>
-            );
-          })
+          <>
+            {featuredList.length > 0 && (
+              <>
+                <p className="text-xs font-bold text-foreground/80 px-1 flex items-center gap-1.5">
+                  🔥 Available for You
+                </p>
+                {featuredList.map((task, i) => renderCard(task, i))}
+              </>
+            )}
+            {moreList.length > 0 && (
+              <>
+                <p className="text-xs font-bold text-foreground/80 px-1 pt-2 flex items-center gap-1.5">
+                  More opportunities
+                </p>
+                {moreList.map((task, i) => renderCard(task, i))}
+              </>
+            )}
+          </>
         )}
       </div>
 

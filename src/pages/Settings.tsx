@@ -114,22 +114,16 @@ const Settings = () => {
       // Collect REAL browser/hardware signals — not a spoofable localStorage string
       const fingerprint = await collectDeviceFingerprint();
 
-      const { data: sessionData } = await supabase.auth.getSession();
-      const accessToken = sessionData?.session?.access_token;
-      if (!accessToken) throw new Error('Not authenticated');
-
-      const { data, error } = await supabase.functions.invoke('register-device', {
-        body: {
-          hash: fingerprint.hash,
-          userAgent: fingerprint.userAgent,
-          platform: fingerprint.platform,
-          screenResolution: fingerprint.screenResolution,
-          timezone: fingerprint.timezone,
-          language: fingerprint.language,
-          hardwareConcurrency: fingerprint.hardwareConcurrency,
-          deviceMemory: fingerprint.deviceMemory,
-          touchSupport: fingerprint.touchSupport,
-        },
+      const { data, error } = await (supabase as any).rpc('register_device_v2', {
+        p_device_hash: fingerprint.hash,
+        p_user_agent: fingerprint.userAgent,
+        p_platform: fingerprint.platform,
+        p_screen_resolution: fingerprint.screenResolution,
+        p_timezone: fingerprint.timezone,
+        p_language: fingerprint.language,
+        p_hardware_concurrency: fingerprint.hardwareConcurrency,
+        p_device_memory: fingerprint.deviceMemory,
+        p_touch_support: fingerprint.touchSupport,
       });
 
       if (error) throw error;
