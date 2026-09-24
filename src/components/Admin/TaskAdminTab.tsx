@@ -6,7 +6,7 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Loader2, RefreshCw, Save, Power, AlertCircle, TrendingUp, Trash2, ShieldAlert } from 'lucide-react';
+import { Loader2, RefreshCw, Save, Power, AlertCircle, TrendingUp, Trash2, ShieldAlert, Bot, ChevronDown, ChevronUp } from 'lucide-react';
 
 interface ProviderConfig {
   provider_id: string;
@@ -517,19 +517,35 @@ export const TaskAdminTab = () => {
   );
 };
 
+interface OtherAccount {
+  user_id: string;
+  username: string | null;
+}
+
 interface DeviceRow {
   id: string;
   user_id: string;
   username: string | null;
+  earning_restricted: boolean;
+  earning_restricted_reason: string | null;
   device_id: string;
   user_agent: string | null;
   platform: string | null;
   screen_resolution: string | null;
   timezone: string | null;
   language: string | null;
+  hardware_concurrency: number | null;
+  device_memory: number | null;
+  touch_support: boolean | null;
+  ip_address: string | null;
+  isp: string | null;
+  city: string | null;
+  region: string | null;
+  connection_type: string | null;
   first_seen: string;
   last_seen: string;
   linked_account_count: number;
+  other_accounts: OtherAccount[];
 }
 
 const DevicesPanel = () => {
@@ -537,26 +553,49 @@ const DevicesPanel = () => {
   const [devices, setDevices] = useState<DeviceRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [expandedId, setExpandedId] = useState<string | null>(null);
+  const [live, setLive] = useState(false);
 
   useEffect(() => {
     loadDevices();
+
+    // Realtime: any device registration, update, or deletion refreshes
+    // the list automatically — admin never has to hit Refresh to see
+    // what the bots just flagged.
+    const channel = supabase
+      .channel('admin-devices-live')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'user_devices' }, () => {
+        setLive(true);
+        loadDevices(true);
+      })
+      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'user_profiles' }, (payload: any) => {
+        // Only care about restriction status flips (bot actions)
+        if ('earning_restricted' in (payload.new || {})) {
+          setLive(true);
+          loadDevices(true);
+        }
+      })
+      .subscribe();
+
+    return () => { supabase.removeChannel(channel); };
   }, []);
 
-  const loadDevices = async () => {
-    setLoading(true);
+  const loadDevices = async (silent = false) => {
+    if (!silent) setLoading(true);
     try {
       const { data, error } = await supabase.rpc('admin_list_devices' as any);
       if (error) throw error;
       setDevices((data as DeviceRow[]) || []);
     } catch (error: any) {
       console.error('Error loading devices:', error);
-      toast({ title: 'Error loading devices', description: error.message, variant: 'destructive' });
+      if (!silent) toast({ title: 'Error loading devices', description: error.message, variant: 'destructive' });
     } finally {
-      setLoading(false);
+      if (!silent) setLoading(false);
     }
   };
 
-  const handleDelete = async (row: DeviceRow) => {
+  const handleDelete = async (row: DeviceRow, e: React.MouseEvent) => {
+    e.stopPropagation();
     if (!confirm(`Delete this device record for ${row.username || row.user_id}? This clears the fraud link.`)) return;
     setDeletingId(row.id);
     try {
@@ -588,15 +627,20 @@ const DevicesPanel = () => {
           <div className="flex items-center justify-between">
             <CardTitle className="text-base flex items-center gap-2">
               <ShieldAlert className="w-4 h-4 text-amber-500" /> Registered Devices
+              {live && (
+                <Badge className="bg-green-500/15 text-green-500 border-green-500/30 text-[9px] gap-1">
+                  <span className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse" /> Live
+                </Badge>
+              )}
             </CardTitle>
-            <Button size="sm" variant="outline" onClick={loadDevices}>
+            <Button size="sm" variant="outline" onClick={() => loadDevices()}>
               <RefreshCw className="w-4 h-4 mr-1" /> Refresh
             </Button>
           </div>
           <p className="text-xs text-muted-foreground">
             {flagged.length > 0
-              ? `${flagged.length} device${flagged.length > 1 ? 's are' : ' is'} linked to more than one account — the real fraud signal.`
-              : 'No device is currently linked to more than one account.'}
+              ? `${flagged.length} device${flagged.length > 1 ? 's are' : ' is'} linked to more than one account — the real fraud signal. Tap a card for full details.`
+              : 'No device is currently linked to more than one account. Tap a card for full details.'}
           </p>
         </CardHeader>
         <CardContent>
@@ -604,40 +648,108 @@ const DevicesPanel = () => {
             <p className="text-sm text-muted-foreground text-center py-6">No devices registered yet.</p>
           ) : (
             <div className="space-y-3">
-              {devices.map((d) => (
-                <div
-                  key={d.id}
-                  className={`border rounded-lg p-3 text-sm ${d.linked_account_count > 1 ? 'border-amber-500/40 bg-amber-500/5' : 'border-border'}`}
-                >
-                  <div className="flex items-start justify-between gap-2">
-                    <div className="min-w-0">
-                      <p className="font-semibold truncate">{d.username || d.user_id}</p>
-                      <p className="text-[11px] text-muted-foreground font-mono truncate">{d.device_id?.slice(0, 20)}…</p>
+              {devices.map((d) => {
+                const isOpen = expandedId === d.id;
+                return (
+                  <div
+                    key={d.id}
+                    onClick={() => setExpandedId(isOpen ? null : d.id)}
+                    className={`border rounded-lg p-3 text-sm cursor-pointer transition-colors ${
+                      d.linked_account_count > 1 ? 'border-amber-500/40 bg-amber-500/5' : 'border-border'
+                    } ${isOpen ? 'ring-1 ring-primary/40' : ''}`}
+                  >
+                    {/* Collapsed summary row — always visible */}
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="min-w-0">
+                        <p className="font-semibold truncate flex items-center gap-1.5">
+                          {d.username || d.user_id}
+                          {d.earning_restricted && (
+                            <Bot className="w-3.5 h-3.5 text-red-500 shrink-0" />
+                          )}
+                        </p>
+                        <p className="text-[11px] text-muted-foreground font-mono truncate">{d.device_id}</p>
+                      </div>
+                      <div className="flex items-center gap-1.5 shrink-0">
+                        {d.linked_account_count > 1 && (
+                          <Badge className="bg-amber-500/15 text-amber-600 border-amber-500/30 text-[10px]">
+                            {d.linked_account_count} accounts
+                          </Badge>
+                        )}
+                        {isOpen ? <ChevronUp className="w-4 h-4 text-muted-foreground" /> : <ChevronDown className="w-4 h-4 text-muted-foreground" />}
+                      </div>
                     </div>
-                    {d.linked_account_count > 1 && (
-                      <Badge className="bg-amber-500/15 text-amber-600 border-amber-500/30 text-[10px] shrink-0">
-                        {d.linked_account_count} accounts
-                      </Badge>
+
+                    <div className="grid grid-cols-2 gap-x-3 gap-y-0.5 mt-2 text-[11px] text-muted-foreground">
+                      <span>{d.platform || '—'}</span>
+                      <span>{d.screen_resolution || '—'}</span>
+                      <span>{d.connection_type || '—'}{d.isp ? ` · ${d.isp}` : ''}</span>
+                      <span>Last seen {new Date(d.last_seen).toLocaleString()}</span>
+                    </div>
+
+                    {/* Fully expanded detail — everything we have */}
+                    {isOpen && (
+                      <div className="mt-3 pt-3 border-t border-border/50 space-y-3" onClick={(e) => e.stopPropagation()}>
+                        {/* Bot / fraud monitoring status */}
+                        <div className={`p-2.5 rounded-lg flex items-start gap-2 ${d.earning_restricted ? 'bg-red-500/10 border border-red-500/20' : 'bg-green-500/10 border border-green-500/20'}`}>
+                          <Bot className={`w-4 h-4 shrink-0 mt-0.5 ${d.earning_restricted ? 'text-red-500' : 'text-green-500'}`} />
+                          <div>
+                            <p className={`text-xs font-semibold ${d.earning_restricted ? 'text-red-500' : 'text-green-600'}`}>
+                              {d.earning_restricted ? 'Bot restricted this account' : 'No bot restriction — account in good standing'}
+                            </p>
+                            {d.earning_restricted_reason && (
+                              <p className="text-[11px] text-red-500/80 mt-0.5">{d.earning_restricted_reason}</p>
+                            )}
+                          </div>
+                        </div>
+
+                        {/* Full raw fingerprint */}
+                        <div className="grid grid-cols-1 gap-1.5 text-xs">
+                          <Row label="Full device hash" value={d.device_id} mono />
+                          <Row label="User agent" value={d.user_agent} mono />
+                          <Row label="Platform" value={d.platform} />
+                          <Row label="Screen" value={d.screen_resolution} />
+                          <Row label="Timezone" value={d.timezone} />
+                          <Row label="Language" value={d.language} />
+                          <Row label="CPU cores" value={d.hardware_concurrency?.toString()} />
+                          <Row label="Device memory" value={d.device_memory ? `${d.device_memory} GB` : null} />
+                          <Row label="Touch support" value={d.touch_support === null ? null : d.touch_support ? 'Yes' : 'No'} />
+                          <Row label="Connection type" value={d.connection_type} />
+                          <Row label="ISP / Network" value={d.isp} />
+                          <Row label="IP address" value={d.ip_address} mono />
+                          <Row label="Approx. location" value={[d.city, d.region].filter(Boolean).join(', ') || null} />
+                          <Row label="First registered" value={new Date(d.first_seen).toLocaleString()} />
+                          <Row label="Last seen" value={new Date(d.last_seen).toLocaleString()} />
+                        </div>
+
+                        {/* Other accounts on this exact device */}
+                        {d.other_accounts?.length > 0 && (
+                          <div>
+                            <p className="text-[11px] font-semibold text-amber-600 mb-1">Also used by:</p>
+                            <div className="flex flex-wrap gap-1.5">
+                              {d.other_accounts.map((a) => (
+                                <Badge key={a.user_id} variant="outline" className="text-[10px]">
+                                  {a.username || a.user_id}
+                                </Badge>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          className="h-7 text-xs text-destructive hover:text-destructive gap-1"
+                          disabled={deletingId === d.id}
+                          onClick={(e) => handleDelete(d, e)}
+                        >
+                          {deletingId === d.id ? <Loader2 className="w-3 h-3 animate-spin" /> : <Trash2 className="w-3 h-3" />}
+                          Delete record
+                        </Button>
+                      </div>
                     )}
                   </div>
-                  <div className="grid grid-cols-2 gap-x-3 gap-y-0.5 mt-2 text-[11px] text-muted-foreground">
-                    <span>{d.platform || '—'}</span>
-                    <span>{d.screen_resolution || '—'}</span>
-                    <span>{d.timezone || '—'}</span>
-                    <span>Last seen {new Date(d.last_seen).toLocaleDateString()}</span>
-                  </div>
-                  <Button
-                    size="sm"
-                    variant="ghost"
-                    className="mt-2 h-7 text-xs text-destructive hover:text-destructive gap-1"
-                    disabled={deletingId === d.id}
-                    onClick={() => handleDelete(d)}
-                  >
-                    {deletingId === d.id ? <Loader2 className="w-3 h-3 animate-spin" /> : <Trash2 className="w-3 h-3" />}
-                    Delete record
-                  </Button>
-                </div>
-              ))}
+                );
+              })}
             </div>
           )}
         </CardContent>
@@ -646,3 +758,9 @@ const DevicesPanel = () => {
   );
 };
 
+const Row = ({ label, value, mono }: { label: string; value: string | null | undefined; mono?: boolean }) => (
+  <div className="flex justify-between items-start gap-3">
+    <span className="text-muted-foreground shrink-0">{label}:</span>
+    <span className={`text-right break-all ${mono ? 'font-mono text-[10px]' : ''}`}>{value || '—'}</span>
+  </div>
+);

@@ -23,6 +23,11 @@ export interface DeviceFingerprint {
   hardwareConcurrency: number | null;
   deviceMemory: number | null;
   touchSupport: boolean;
+  connectionType: string | null;
+  ipAddress: string | null;
+  isp: string | null;
+  city: string | null;
+  region: string | null;
 }
 
 async function sha256(input: string): Promise<string> {
@@ -68,6 +73,45 @@ function getWebGLSignature(): string {
   }
 }
 
+function getConnectionType(): string | null {
+  try {
+    const nav = navigator as any;
+    const conn = nav.connection || nav.mozConnection || nav.webkitConnection;
+    if (!conn) return null;
+    // effectiveType: '4g' | '3g' | '2g' | 'slow-2g'; type when available: 'wifi' | 'cellular' | etc.
+    return conn.type || conn.effectiveType || null;
+  } catch {
+    return null;
+  }
+}
+
+interface NetworkInfo {
+  ip: string | null;
+  isp: string | null;
+  city: string | null;
+  region: string | null;
+}
+
+async function getNetworkInfo(): Promise<NetworkInfo> {
+  // Free, no-key IP/ISP lookup. This is the only real way to learn the
+  // actual network/ISP a device is on — the browser has no API for it.
+  // Best-effort: if it fails (offline, ad-blocker, rate limit) we just
+  // continue without it rather than blocking registration.
+  try {
+    const res = await fetch('https://ipapi.co/json/', { signal: AbortSignal.timeout(4000) });
+    if (!res.ok) throw new Error('lookup failed');
+    const data = await res.json();
+    return {
+      ip: data.ip || null,
+      isp: data.org || null,
+      city: data.city || null,
+      region: data.region || null,
+    };
+  } catch {
+    return { ip: null, isp: null, city: null, region: null };
+  }
+}
+
 export async function collectDeviceFingerprint(): Promise<DeviceFingerprint> {
   const nav = navigator as any;
 
@@ -79,6 +123,7 @@ export async function collectDeviceFingerprint(): Promise<DeviceFingerprint> {
   const hardwareConcurrency = navigator.hardwareConcurrency ?? null;
   const deviceMemory = nav.deviceMemory ?? null;
   const touchSupport = 'ontouchstart' in window || navigator.maxTouchPoints > 0;
+  const connectionType = getConnectionType();
 
   const canvasSig = getCanvasSignature();
   const webglSig = getWebGLSignature();
@@ -97,6 +142,7 @@ export async function collectDeviceFingerprint(): Promise<DeviceFingerprint> {
   ].join('|||');
 
   const hash = await sha256(raw);
+  const network = await getNetworkInfo();
 
   return {
     hash,
@@ -108,5 +154,10 @@ export async function collectDeviceFingerprint(): Promise<DeviceFingerprint> {
     hardwareConcurrency,
     deviceMemory,
     touchSupport,
+    connectionType,
+    ipAddress: network.ip,
+    isp: network.isp,
+    city: network.city,
+    region: network.region,
   };
 }

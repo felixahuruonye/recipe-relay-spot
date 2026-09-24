@@ -124,6 +124,11 @@ const Settings = () => {
         p_hardware_concurrency: fingerprint.hardwareConcurrency,
         p_device_memory: fingerprint.deviceMemory,
         p_touch_support: fingerprint.touchSupport,
+        p_ip_address: fingerprint.ipAddress,
+        p_isp: fingerprint.isp,
+        p_city: fingerprint.city,
+        p_region: fingerprint.region,
+        p_connection_type: fingerprint.connectionType,
       });
 
       if (error) throw error;
@@ -471,6 +476,18 @@ const Settings = () => {
                   <span className="text-muted-foreground shrink-0">Language:</span>
                   <span className="text-right">{deviceInfo.language || '—'}</span>
                 </div>
+                <div className="flex justify-between items-start gap-3">
+                  <span className="text-muted-foreground shrink-0">Network:</span>
+                  <span className="text-right">
+                    {deviceInfo.connection_type || '—'}{deviceInfo.isp ? ` · ${deviceInfo.isp}` : ''}
+                  </span>
+                </div>
+                {(deviceInfo.city || deviceInfo.region) && (
+                  <div className="flex justify-between items-start gap-3">
+                    <span className="text-muted-foreground shrink-0">Approx. location:</span>
+                    <span className="text-right">{[deviceInfo.city, deviceInfo.region].filter(Boolean).join(', ')}</span>
+                  </div>
+                )}
                 <div className="flex justify-between items-start gap-3">
                   <span className="text-muted-foreground shrink-0">First registered:</span>
                   <span className="text-right">{deviceInfo.first_seen ? new Date(deviceInfo.first_seen).toLocaleDateString() : '—'}</span>
