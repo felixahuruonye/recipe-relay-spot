@@ -12,6 +12,8 @@ import { useTaskEligibility } from '@/hooks/useTaskEligibility';
 import { useTaskClick } from '@/hooks/useTaskClick';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
+import { getProviderAdapter, EmbedType } from '@/lib/providerAdapters';
+import { OfferwallModal } from '@/components/OfferwallModal';
 
 // A network/offerwall task (Monlix, MyLead, CPAGrip, OGAds) — reward is
 // calculated server-side by the postback + admin config, never fixed here.
@@ -27,6 +29,9 @@ interface NetworkTask {
   category: 'offers' | 'surveys' | 'content';
   featured?: boolean;
   eligibility: string;
+  embedType: EmbedType;
+  launchUrlTemplate: string | null;
+  isConfigured: boolean;
 }
 
 // A Lenory-created internal task (referrals, follows, etc.) — its own
@@ -115,6 +120,7 @@ const Offers: React.FC = () => {
   const [showHistory, setShowHistory] = useState(false);
   const [historyRows, setHistoryRows] = useState<any[]>([]);
   const [historyLoading, setHistoryLoading] = useState(false);
+  const [activeOfferwall, setActiveOfferwall] = useState<{ url: string; label: string; isLocker: boolean } | null>(null);
   const startedAt = useRef<Record<string, number>>({});
 
   useEffect(() => {
@@ -190,6 +196,9 @@ const Offers: React.FC = () => {
           category: (p.category || 'offers') as NetworkTask['category'],
           featured: p.featured || false,
           eligibility: `${p.min_age}+${p.country_availability?.length ? ' · ' + p.country_availability.join(', ') : ' · Worldwide'}`,
+          embedType: (p.embed_type || 'link') as EmbedType,
+          launchUrlTemplate: p.launch_url_template || null,
+          isConfigured: !!p.launch_url_template,
         };
       });
 
@@ -370,13 +379,51 @@ const Offers: React.FC = () => {
         }
         toast({ title: 'Task started 🚀', description: 'Finish it, then come back and tap Claim.' });
       } else {
+        // Never record a click (or fake a link) for a provider the
+        // admin hasn't actually connected yet — that would be an
+        // earning event with no real economic source behind it.
+        if (!task.isConfigured) {
+          toast({
+            title: `${providerMeta(task.provider_id).label} isn't connected yet`,
+            description: 'The admin hasn\'t added this network\'s account details yet. Check back soon.',
+          });
+          setBusy(null);
+          return;
+        }
+
         const result = await recordClick(task.provider_id, task.offer_id);
         if (!result.success) throw new Error(result.error || 'Could not start task');
         startedAt.current[task.id] = Date.now();
         setMyStatus((prev) => ({ ...prev, [task.id]: 'started' }));
-        const target = task.url || `https://offerwall.example.com?user=${user.id}&provider=${task.provider_id}`;
-        if (target.startsWith('/')) navigate(target);
-        else window.open(target, '_blank', 'noopener');
+
+        const adapter = getProviderAdapter(task.provider_id);
+        const launchUrl = adapter.getLaunchUrl(
+          {
+            providerId: task.provider_id,
+            displayName: providerMeta(task.provider_id).label,
+            category: task.category,
+            embedType: task.embedType,
+            launchUrlTemplate: task.launchUrlTemplate,
+            siteId: null,
+          },
+          { userId: user.id, clickId: result.clickId!, offerId: task.offer_id },
+        );
+
+        if (!launchUrl) {
+          toast({ title: 'Could not build offer link', variant: 'destructive' });
+          return;
+        }
+
+        if (task.embedType === 'link') {
+          window.open(launchUrl, '_blank', 'noopener');
+        } else {
+          setActiveOfferwall({
+            url: launchUrl,
+            label: providerMeta(task.provider_id).label,
+            isLocker: task.embedType === 'locker',
+          });
+        }
+
         toast({
           title: task.category === 'content' ? 'Locker opened 🔓' : 'Task started 🚀',
           description: 'Your reward lands automatically once the network confirms it.',
@@ -472,6 +519,11 @@ const Offers: React.FC = () => {
                   ⏳ Pending
                 </Badge>
               )}
+              {netTask && !netTask.isConfigured && (
+                <Badge className="bg-muted text-muted-foreground border-border text-[10px]">
+                  Not connected yet
+                </Badge>
+              )}
             </div>
           </div>
         </div>
@@ -490,6 +542,7 @@ const Offers: React.FC = () => {
               <Button
                 size="sm"
                 className="flex-1 gap-1.5"
+                variant={netTask && !netTask.isConfigured ? 'secondary' : 'default'}
                 disabled={busy === task.id || !eligibility.isReady}
                 onClick={() => handleStart(task)}
               >
@@ -500,7 +553,9 @@ const Offers: React.FC = () => {
                 ) : (
                   <ArrowUpRight className="w-4 h-4" />
                 )}
-                {status === 'started'
+                {netTask && !netTask.isConfigured
+                  ? 'Coming soon'
+                  : status === 'started'
                   ? 'Open again'
                   : isLocker
                   ? 'Unlock'
@@ -797,6 +852,20 @@ const Offers: React.FC = () => {
         Network offers credit automatically once the partner confirms your completion (usually
         within a few minutes). Lenory tasks are claimed here.
       </p>
+
+      {activeOfferwall && (
+        <OfferwallModal
+          url={activeOfferwall.url}
+          providerLabel={activeOfferwall.label}
+          isLocker={activeOfferwall.isLocker}
+          onClose={() => {
+            setActiveOfferwall(null);
+            // Re-check status in case the user finished and the
+            // network already fired its postback while the modal was open.
+            loadMyStatus();
+          }}
+        />
+      )}
     </div>
   );
 };

@@ -24,6 +24,7 @@ interface ProviderConfig {
   min_age: number;
   featured: boolean;
   sort_order: number;
+  api_credentials?: { launch_url_template?: string; embed_type?: string; site_id?: string };
 }
 
 interface DashboardData {
@@ -93,6 +94,9 @@ export const TaskAdminTab = () => {
         p_min_age: editValues.min_age,
         p_featured: editValues.featured,
         p_sort_order: editValues.sort_order,
+        p_launch_url_template: editValues.api_credentials?.launch_url_template || null,
+        p_embed_type: editValues.api_credentials?.embed_type || null,
+        p_site_id: editValues.api_credentials?.site_id || null,
       });
 
       if (error) throw error;
@@ -337,6 +341,66 @@ export const TaskAdminTab = () => {
                                 }
                               />
                             </div>
+                          </div>
+
+                          {/* Phase 2: real network integration. Once you
+                              have an account with this network, paste
+                              its details here — nothing else in the app
+                              needs to change. */}
+                          <div className="border-t border-border pt-3 mt-1 space-y-2">
+                            <p className="text-xs font-semibold text-primary">Network Integration (Phase 2)</p>
+                            <div>
+                              <label className="text-xs font-semibold block mb-1">Embed Type</label>
+                              <select
+                                className="w-full h-9 rounded-md border border-input bg-background px-3 text-sm"
+                                value={editValues.api_credentials?.embed_type || 'link'}
+                                onChange={(e) =>
+                                  setEditValues({
+                                    ...editValues,
+                                    api_credentials: { ...editValues.api_credentials, embed_type: e.target.value },
+                                  })
+                                }
+                              >
+                                <option value="link">Link (opens in new tab)</option>
+                                <option value="iframe">Iframe (embedded offerwall)</option>
+                                <option value="locker">Locker (embedded content locker)</option>
+                              </select>
+                            </div>
+                            <div>
+                              <label className="text-xs font-semibold block mb-1">Launch URL Template</label>
+                              <Input
+                                placeholder="https://network.com/offerwall?site_id=XXXX&sub_id={CLICK_ID}"
+                                value={editValues.api_credentials?.launch_url_template || ''}
+                                onChange={(e) =>
+                                  setEditValues({
+                                    ...editValues,
+                                    api_credentials: { ...editValues.api_credentials, launch_url_template: e.target.value },
+                                  })
+                                }
+                              />
+                              <p className="text-[10px] text-muted-foreground mt-1">
+                                Use {'{USER_ID}'}, {'{CLICK_ID}'}, {'{OFFER_ID}'} — LENORY substitutes them automatically.
+                              </p>
+                            </div>
+                            <div>
+                              <label className="text-xs font-semibold block mb-1">Site / Locker ID (reference only)</label>
+                              <Input
+                                placeholder="e.g. 12345"
+                                value={editValues.api_credentials?.site_id || ''}
+                                onChange={(e) =>
+                                  setEditValues({
+                                    ...editValues,
+                                    api_credentials: { ...editValues.api_credentials, site_id: e.target.value },
+                                  })
+                                }
+                              />
+                            </div>
+                            {editValues.provider_id && (
+                              <div className="p-2 rounded-lg bg-muted/50 text-[10px] font-mono break-all">
+                                Postback URL to paste into {editValues.display_name}'s dashboard:<br />
+                                {`https://YOUR-SUPABASE-PROJECT.functions.supabase.co/offer-postback?secret=YOUR_SECRET&provider=${editValues.provider_id}&click_id={CLICK_ID}&transaction_id={TRANSACTION_ID}&payout={PAYOUT}&status={STATUS}`}
+                              </div>
+                            )}
                           </div>
 
                           <div className="flex gap-2 pt-2">
