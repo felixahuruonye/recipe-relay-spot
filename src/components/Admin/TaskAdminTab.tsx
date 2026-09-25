@@ -6,7 +6,7 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Loader2, RefreshCw, Save, Power, AlertCircle, TrendingUp, Trash2, ShieldAlert, Bot, ChevronDown, ChevronUp } from 'lucide-react';
+import { Loader2, RefreshCw, Save, Power, AlertCircle, TrendingUp, Trash2, ShieldAlert, Bot, ChevronDown, ChevronUp, Eye, EyeOff, Search } from 'lucide-react';
 
 interface ProviderConfig {
   provider_id: string;
@@ -167,11 +167,12 @@ export const TaskAdminTab = () => {
 
       {/* Tabs */}
       <Tabs defaultValue="providers" className="w-full">
-        <TabsList className="grid w-full grid-cols-4">
+        <TabsList className="grid w-full grid-cols-5">
           <TabsTrigger value="providers">Providers</TabsTrigger>
           <TabsTrigger value="activity">Activity</TabsTrigger>
           <TabsTrigger value="revenue">Revenue</TabsTrigger>
           <TabsTrigger value="devices">Devices</TabsTrigger>
+          <TabsTrigger value="visibility">Visibility</TabsTrigger>
         </TabsList>
 
         {/* Providers Tab */}
@@ -576,6 +577,10 @@ export const TaskAdminTab = () => {
         <TabsContent value="devices">
           <DevicesPanel />
         </TabsContent>
+
+        <TabsContent value="visibility">
+          <TaskVisibilityPanel />
+        </TabsContent>
       </Tabs>
     </div>
   );
@@ -828,3 +833,126 @@ const Row = ({ label, value, mono }: { label: string; value: string | null | und
     <span className={`text-right break-all ${mono ? 'font-mono text-[10px]' : ''}`}>{value || '—'}</span>
   </div>
 );
+
+interface TaskVisibilityRow {
+  id: string;
+  source: 'lenory' | 'network';
+  title: string;
+  visible: boolean;
+  payout_stars: number | null;
+}
+
+const TaskVisibilityPanel = () => {
+  const { toast } = useToast();
+  const [rows, setRows] = useState<TaskVisibilityRow[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [query, setQuery] = useState('');
+  const [togglingId, setTogglingId] = useState<string | null>(null);
+
+  useEffect(() => {
+    load();
+  }, []);
+
+  const load = async () => {
+    setLoading(true);
+    try {
+      const { data, error } = await supabase.rpc('admin_list_all_tasks' as any);
+      if (error) throw error;
+      setRows((data as TaskVisibilityRow[]) || []);
+    } catch (error: any) {
+      toast({ title: 'Error loading tasks', description: error.message, variant: 'destructive' });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const toggle = async (row: TaskVisibilityRow) => {
+    setTogglingId(row.id);
+    try {
+      const { error } = await supabase.rpc('admin_set_task_visibility' as any, {
+        p_id: row.id,
+        p_source: row.source,
+        p_visible: !row.visible,
+      });
+      if (error) throw error;
+      setRows((prev) => prev.map((r) => (r.id === row.id && r.source === row.source ? { ...r, visible: !r.visible } : r)));
+      toast({ title: !row.visible ? 'Task shown' : 'Task hidden', description: row.title });
+    } catch (error: any) {
+      toast({ title: 'Error', description: error.message, variant: 'destructive' });
+    } finally {
+      setTogglingId(null);
+    }
+  };
+
+  const filtered = rows.filter(
+    (r) => r.title.toLowerCase().includes(query.toLowerCase()) || r.id.toLowerCase().includes(query.toLowerCase()),
+  );
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center py-12">
+        <Loader2 className="w-6 h-6 animate-spin text-primary" />
+      </div>
+    );
+  }
+
+  return (
+    <Card>
+      <CardHeader className="pb-3">
+        <div className="flex items-center justify-between">
+          <CardTitle className="text-base">Task Visibility</CardTitle>
+          <Button size="sm" variant="outline" onClick={load}>
+            <RefreshCw className="w-4 h-4 mr-1" /> Refresh
+          </Button>
+        </div>
+        <p className="text-xs text-muted-foreground">
+          Every task shown on the Tasks page — Lenory-made or a network — has an ID here. Paste an ID or title to find it, then hide or unhide.
+        </p>
+        <div className="relative mt-2">
+          <Search className="w-3.5 h-3.5 absolute left-2.5 top-2.5 text-muted-foreground" />
+          <Input
+            className="pl-8 h-8 text-xs"
+            placeholder="Search by ID or title…"
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+          />
+        </div>
+      </CardHeader>
+      <CardContent>
+        {filtered.length === 0 ? (
+          <p className="text-sm text-muted-foreground text-center py-6">No matching tasks.</p>
+        ) : (
+          <div className="space-y-2">
+            {filtered.map((r) => (
+              <div key={`${r.source}-${r.id}`} className="flex items-center justify-between gap-2 border border-border rounded-lg p-2.5">
+                <div className="min-w-0">
+                  <p className="text-sm font-semibold truncate flex items-center gap-1.5">
+                    {r.title}
+                    <Badge variant="outline" className="text-[9px]">{r.source}</Badge>
+                  </p>
+                  <p className="text-[10px] text-muted-foreground font-mono truncate">{r.id}</p>
+                </div>
+                <Button
+                  size="sm"
+                  variant={r.visible ? 'secondary' : 'outline'}
+                  className="gap-1.5 shrink-0"
+                  disabled={togglingId === r.id}
+                  onClick={() => toggle(r)}
+                >
+                  {togglingId === r.id ? (
+                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                  ) : r.visible ? (
+                    <Eye className="w-3.5 h-3.5" />
+                  ) : (
+                    <EyeOff className="w-3.5 h-3.5" />
+                  )}
+                  {r.visible ? 'Visible' : 'Hidden'}
+                </Button>
+              </div>
+            ))}
+          </div>
+        )}
+      </CardContent>
+    </Card>
+  );
+};
