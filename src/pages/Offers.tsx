@@ -15,15 +15,16 @@ import { Badge } from '@/components/ui/badge';
 import { getProviderAdapter, EmbedType } from '@/lib/providerAdapters';
 import { OfferwallModal } from '@/components/OfferwallModal';
 
-// A network/offerwall task (Monlix, MyLead, CPAGrip, OGAds) — reward is
-// calculated server-side by the postback + admin config, never fixed here.
+// A network/offerwall task (Monlix, MyLead, CPAGrip, OGAds). Only ever
+// populated for a provider an admin has actually connected — no guessed
+// reward number, since the real payout varies per offer and is only
+// known once the network's postback arrives.
 interface NetworkTask {
   source: 'network';
   id: string;
   provider_id: string;
   offer_id: string;
   offer_name: string;
-  user_reward_stars: number;
   est_minutes: number;
   url?: string;
   category: 'offers' | 'surveys' | 'content';
@@ -31,7 +32,6 @@ interface NetworkTask {
   eligibility: string;
   embedType: EmbedType;
   launchUrlTemplate: string | null;
-  isConfigured: boolean;
 }
 
 // A Lenory-created internal task (referrals, follows, etc.) — its own
@@ -67,12 +67,13 @@ interface AdNetwork {
   display_name: string;
 }
 
+// 'tasks' (Lenory-internal) intentionally omitted — paused for now,
+// revisited later under content/advertise.
 const TABS = [
   { id: 'ALL', label: 'All', icon: Zap },
   { id: 'offers', label: 'Offers', icon: Flame },
   { id: 'surveys', label: 'Surveys', icon: ClipboardList },
   { id: 'content', label: 'Content', icon: Lock },
-  { id: 'tasks', label: 'Tasks', icon: Target },
 ];
 
 // Branding only — no longer used for navigation, just the little icon/tint
@@ -175,47 +176,31 @@ const Offers: React.FC = () => {
 
   const loadTasks = async () => {
     try {
-      const [{ data: previewTasks, error: previewError }, { data: lenoryRaw }] = await Promise.all([
-        // Server-calculated preview — the browser never does reward math
-        // itself. Same formula process_task_postback() uses for real.
-        supabase.rpc('get_available_tasks' as any),
-        supabase.from('offer_tasks' as any).select('*').eq('active', true).order('featured', { ascending: false }),
-      ]);
+      // Only returns providers an admin has actually connected (real
+      // launch_url_template set) — nothing guessed, nothing placeholder.
+      // Lenory-internal tasks (offer_tasks) are paused for now, not
+      // queried here — revisited later under content/advertise.
+      const { data: previewTasks, error: previewError } = await supabase.rpc('get_available_tasks' as any);
       if (previewError) throw previewError;
 
       const networkTasks: NetworkTask[] = ((previewTasks as any[]) || []).map((p) => {
-        const offerId = `${p.provider_id}-preview-offer`;
+        const offerId = `${p.provider_id}-offer`;
         return {
           source: 'network',
           id: offerId,
           provider_id: p.provider_id,
           offer_id: offerId,
           offer_name: categoryActionTitle(p.category),
-          user_reward_stars: p.preview_reward_stars,
           est_minutes: 5,
           category: (p.category || 'offers') as NetworkTask['category'],
           featured: p.featured || false,
           eligibility: `${p.min_age}+${p.country_availability?.length ? ' · ' + p.country_availability.join(', ') : ' · Worldwide'}`,
           embedType: (p.embed_type || 'link') as EmbedType,
           launchUrlTemplate: p.launch_url_template || null,
-          isConfigured: !!p.launch_url_template,
         };
       });
 
-      const lenoryTasks: LenoryTask[] = ((lenoryRaw as any[]) || []).map((t) => ({
-        source: 'lenory',
-        id: t.id,
-        title: t.title,
-        description: t.description,
-        payout_stars: t.payout_stars,
-        payout_naira: t.payout_naira,
-        est_minutes: t.est_minutes,
-        url: t.url,
-        category: 'tasks',
-        featured: t.featured,
-      }));
-
-      setTasks([...networkTasks, ...lenoryTasks]);
+      setTasks(networkTasks);
 
       const { data: ads } = await supabase
         .from('task_provider_config')
@@ -379,18 +364,9 @@ const Offers: React.FC = () => {
         }
         toast({ title: 'Task started 🚀', description: 'Finish it, then come back and tap Claim.' });
       } else {
-        // Never record a click (or fake a link) for a provider the
-        // admin hasn't actually connected yet — that would be an
-        // earning event with no real economic source behind it.
-        if (!task.isConfigured) {
-          toast({
-            title: `${providerMeta(task.provider_id).label} isn't connected yet`,
-            description: 'The admin hasn\'t added this network\'s account details yet. Check back soon.',
-          });
-          setBusy(null);
-          return;
-        }
-
+        // get_available_tasks() only ever returns providers that are
+        // already connected (real launch_url_template set), so no
+        // "not configured" branch is needed here anymore.
         const result = await recordClick(task.provider_id, task.offer_id);
         if (!result.success) throw new Error(result.error || 'Could not start task');
         startedAt.current[task.id] = Date.now();
@@ -503,8 +479,8 @@ const Offers: React.FC = () => {
                 : lenoryTask!.description || 'Complete this Lenory task to earn Stars'}
             </p>
             <div className="flex items-center gap-2 mt-2 flex-wrap">
-              <Badge className="bg-yellow-400/15 text-yellow-400 border-yellow-400/30 text-[10px] gap-1">
-                <Star className="w-3 h-3 fill-current" /> +{netTask ? netTask.user_reward_stars : lenoryTask!.payout_stars}
+              <Badge className="bg-muted text-muted-foreground border-border text-[10px] gap-1">
+                <Star className="w-3 h-3" /> Reward set after completion
               </Badge>
               <span className="text-[10px] text-muted-foreground flex items-center gap-1">
                 <Clock className="w-3 h-3" /> Estimated completion: ~{task.est_minutes} min
@@ -517,11 +493,6 @@ const Offers: React.FC = () => {
               {status === 'pending' && (
                 <Badge className="bg-amber-500/15 text-amber-400 border-amber-500/30 text-[10px]">
                   ⏳ Pending
-                </Badge>
-              )}
-              {netTask && !netTask.isConfigured && (
-                <Badge className="bg-muted text-muted-foreground border-border text-[10px]">
-                  Not connected yet
                 </Badge>
               )}
             </div>
@@ -542,7 +513,6 @@ const Offers: React.FC = () => {
               <Button
                 size="sm"
                 className="flex-1 gap-1.5"
-                variant={netTask && !netTask.isConfigured ? 'secondary' : 'default'}
                 disabled={busy === task.id || !eligibility.isReady}
                 onClick={() => handleStart(task)}
               >
@@ -553,9 +523,7 @@ const Offers: React.FC = () => {
                 ) : (
                   <ArrowUpRight className="w-4 h-4" />
                 )}
-                {netTask && !netTask.isConfigured
-                  ? 'Coming soon'
-                  : status === 'started'
+                {status === 'started'
                   ? 'Open again'
                   : isLocker
                   ? 'Unlock'
