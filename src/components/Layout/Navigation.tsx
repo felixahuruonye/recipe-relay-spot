@@ -68,11 +68,10 @@ const Navigation = () => {
       <div className="flex justify-around items-center h-16 px-1 max-w-[480px] mx-auto">
         {tabs.slice(0, 2).map(({ icon: Icon, label, path, badge }) => {
           const isActive = location.pathname === path || (path === '/' && location.pathname === '/index');
-          const isWatch = path === '/';
           return (
             <button
               key={path}
-              onClick={() => { if (isWatch && isActive) window.location.reload(); else navigate(path); }}
+              onClick={() => { if (isActive) window.location.reload(); else navigate(path); }}
               className={`flex flex-col items-center justify-center flex-1 py-2 transition-colors relative ${isActive ? 'text-white' : 'text-white/50 hover:text-white'}`}
             >
               <div className="relative">
@@ -104,7 +103,7 @@ const Navigation = () => {
           return (
             <button
               key={path}
-              onClick={() => navigate(path)}
+              onClick={() => { if (isActive) window.location.reload(); else navigate(path); }}
               className={`flex flex-col items-center justify-center flex-1 py-2 transition-colors relative ${isActive ? 'text-white' : isEarn ? 'text-yellow-400' : 'text-white/50 hover:text-white'}`}
             >
               <div className="relative">

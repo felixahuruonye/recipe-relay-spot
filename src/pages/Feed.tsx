@@ -147,6 +147,9 @@ const hasCheckedGateRef = useRef(false);
 const videoRef = useRef<HTMLVideoElement>(null); 
 const cardRef = useRef<HTMLDivElement>(null); 
 const navigate = useNavigate(); 
+const [mediaKey, setMediaKey] = useState(0); 
+const retryAttemptsRef = useRef(0); 
+const retryTimeoutRef = useRef<NodeJS.Timeout | null>(null); 
 const hasMedia = post.media_urls && post.media_urls.length > 0; 
 const isVideo = hasMedia && (post.media_urls[0]?.match(/\.(mp4|webm|ogg|mov)$/i) || post.media_urls[0]?.includes('video')); const viewDuration = 30; 
 const starPrice = post.star_price || 0; 
@@ -194,6 +197,39 @@ if (timerRef.current) clearInterval(timerRef.current);
 ); 
 observer.observe(el); 
 return () => { observer.disconnect(); if (timerRef.current) clearInterval(timerRef.current); }; }, [isProcessed, isMuted, showStarGate, needsStars]); 
+// Network self-heal: if connection drops mid-play/load and comes back,
+// the browser never auto-retries a stalled/failed <video>/<img> on its
+// own. Remounting the element (fresh key) and replaying is what makes
+// this feel like TikTok instead of a frozen, dead post card. 
+useEffect(() => { 
+const handleOnline = () => { 
+if (isInView) { 
+retryAttemptsRef.current = 0; 
+setMediaKey((k) => k + 1); 
+} 
+}; 
+window.addEventListener('online', handleOnline); 
+return () => window.removeEventListener('online', handleOnline); 
+}, [isInView]); 
+// After any remount (network-recovery or error-retry), resume playback
+// if this card is still the one in view. 
+useEffect(() => { 
+if (mediaKey === 0) return; 
+if (isInView && isVideo && videoRef.current) { 
+videoRef.current.muted = isMuted; 
+videoRef.current.play().catch(() => {}); 
+} 
+}, [mediaKey]); 
+const handleMediaError = () => { 
+if (retryTimeoutRef.current) clearTimeout(retryTimeoutRef.current); 
+// Cap retries so a genuinely broken/deleted media file doesn't loop forever. 
+if (retryAttemptsRef.current >= 3) return; 
+retryAttemptsRef.current += 1; 
+retryTimeoutRef.current = setTimeout(() => { 
+setMediaKey((k) => k + 1); 
+}, 1500); 
+}; 
+useEffect(() => () => { if (retryTimeoutRef.current) clearTimeout(retryTimeoutRef.current); }, []); 
 useEffect(() => { 
 hasProcessedRef.current = isProcessed; 
 hasCheckedGateRef.current = false; 
@@ -291,13 +327,15 @@ onDismiss={() => setShowEarnings(null)}
 <div className="relative w-full" style={{ aspectRatio: isVideo ? '9/16' : '4/5', maxHeight: '70vh' }}> {isVideo ? ( 
 <> 
 <video 
+key={mediaKey} 
 ref={videoRef} 
-src={post.media_urls[0]} 
+src={mediaKey > 0 ? `${post.media_urls[0]}${post.media_urls[0].includes('?') ? '&' : '?'}retry=${mediaKey}` : post.media_urls[0]} 
 className="w-full h-full object-cover bg-black" 
 loop={false} 
 playsInline 
 muted={isMuted} 
 onEnded={handleVideoEnded} 
+onError={handleMediaError} 
 onClick={() => { 
 if (videoRef.current?.paused) videoRef.current.play().catch(() => {}); 
 else videoRef.current?.pause(); 
@@ -313,10 +351,12 @@ className="absolute bottom-3 right-3 w-8 h-8 rounded-full bg-black/50 flex items
 </> 
 ) : ( 
 <img 
-src={post.media_urls[0]} 
+key={mediaKey} 
+src={mediaKey > 0 ? `${post.media_urls[0]}${post.media_urls[0].includes('?') ? '&' : '?'}retry=${mediaKey}` : post.media_urls[0]} 
 alt={post.title} 
 className="w-full h-full object-cover cursor-pointer"
 loading="lazy" 
+onError={handleMediaError} 
 onClick={() => navigate(`/profile/${post.user_id}`)} 
 /> 
 )} 
@@ -406,6 +446,10 @@ const [followingUsers, setFollowingUsers] = useState<Set<string>>(new Set());
 const [autoScroll, setAutoScroll] = useState(false); 
 const [products, setProducts] = useState<any[]>([]); 
 const feedRef = useRef<HTMLDivElement>(null); 
+const [pullDistance, setPullDistance] = useState(0); 
+const [isRefreshing, setIsRefreshing] = useState(false); 
+const pullStartY = useRef<number | null>(null); 
+const PULL_THRESHOLD = 70; 
 const postCardsRef = useRef<HTMLDivElement[]>([]); 
 const currentPostIndexRef = useRef(0); 
 const scrollTimestamps = useRef<number[]>([]); 
@@ -526,6 +570,32 @@ setUserProfile(data);
 setNeedsProfileSetup(false); 
 const storySettings = data?.story_settings as any; 
 if (!storySettings?.onboarding_complete) setNeedsOnboarding(true); 
+}; 
+const handlePullStart = (e: React.TouchEvent) => { 
+if (feedRef.current && feedRef.current.scrollTop <= 0) { 
+pullStartY.current = e.touches[0].clientY; 
+} 
+}; 
+const handlePullMove = (e: React.TouchEvent) => { 
+if (pullStartY.current === null || isRefreshing) return; 
+const delta = e.touches[0].clientY - pullStartY.current; 
+if (delta > 0 && feedRef.current && feedRef.current.scrollTop <= 0) { 
+setPullDistance(Math.min(delta * 0.5, 100)); 
+} else { 
+pullStartY.current = null; 
+setPullDistance(0); 
+} 
+}; 
+const handlePullEnd = async () => { 
+if (pullStartY.current === null) return; 
+pullStartY.current = null; 
+if (pullDistance > PULL_THRESHOLD && !isRefreshing) { 
+setIsRefreshing(true); 
+setPullDistance(PULL_THRESHOLD); 
+await fetchPosts(); 
+setIsRefreshing(false); 
+} 
+setPullDistance(0); 
 }; 
 const fetchPosts = async () => { 
 try { 
@@ -656,7 +726,25 @@ Past Posts
 </Button> 
 </div> 
 </div> 
-<div ref={feedRef} className="px-3 py-3 space-y-3 pb-20 overflow-y-auto" style={{ maxHeight: 'calc(100vh - 7.5rem)' }}> <div className="px-1"><NewSearchBar /></div> 
+<div 
+ref={feedRef} 
+className="px-3 py-3 space-y-3 pb-20 overflow-y-auto" 
+style={{ maxHeight: 'calc(100vh - 7.5rem)' }} 
+onTouchStart={handlePullStart} 
+onTouchMove={handlePullMove} 
+onTouchEnd={handlePullEnd} 
+> 
+<div 
+className="flex items-center justify-center overflow-hidden transition-[height] duration-200" 
+style={{ height: pullDistance }} 
+> 
+{pullDistance > 10 && ( 
+<div className={`w-6 h-6 border-2 border-primary border-t-transparent rounded-full ${isRefreshing || pullDistance >= PULL_THRESHOLD ? 'animate-spin' : ''}`} 
+style={{ transform: isRefreshing || pullDistance >= PULL_THRESHOLD ? undefined : `rotate(${pullDistance * 3}deg)` }} 
+/> 
+)} 
+</div> 
+<div className="px-1"><NewSearchBar /></div> 
 <div className="overflow-x-auto -mx-1 px-1"> 
 <div className="flex items-start gap-2.5 min-w-min"> 
 <StorylineCard type="create" avatarUrl={currentUserProfile?.avatar_url} onSelect={() => setShowCreateStory(true)} /> {stories.map((story: any) => ( 
