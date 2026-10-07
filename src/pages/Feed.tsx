@@ -571,32 +571,56 @@ setNeedsProfileSetup(false);
 const storySettings = data?.story_settings as any; 
 if (!storySettings?.onboarding_complete) setNeedsOnboarding(true); 
 }; 
-const handlePullStart = (e: React.TouchEvent) => { 
-if (feedRef.current && feedRef.current.scrollTop <= 0) { 
-pullStartY.current = e.touches[0].clientY; 
-} 
+// Pull-to-refresh must use real (non-React-synthetic) touch listeners
+// with { passive: false }. React 18 attaches touchstart/touchmove as
+// PASSIVE by default for scroll performance, which silently makes
+// preventDefault() a no-op — without it, Chrome/the installed PWA's
+// own native overscroll-refresh fights our gesture and swallows it,
+// which is why this didn't reliably do anything on a real device. 
+const isRefreshingRef = useRef(false); 
+const liveDistanceRef = useRef(0); 
+useEffect(() => { isRefreshingRef.current = isRefreshing; }, [isRefreshing]); 
+useEffect(() => { 
+const el = feedRef.current; 
+if (!el) return; 
+const onStart = (e: TouchEvent) => { 
+if (el.scrollTop <= 0) pullStartY.current = e.touches[0].clientY; 
 }; 
-const handlePullMove = (e: React.TouchEvent) => { 
-if (pullStartY.current === null || isRefreshing) return; 
+const onMove = (e: TouchEvent) => { 
+if (pullStartY.current === null || isRefreshingRef.current) return; 
 const delta = e.touches[0].clientY - pullStartY.current; 
-if (delta > 0 && feedRef.current && feedRef.current.scrollTop <= 0) { 
-setPullDistance(Math.min(delta * 0.5, 100)); 
+if (delta > 0 && el.scrollTop <= 0) { 
+e.preventDefault(); 
+const dist = Math.min(delta * 0.5, 100); 
+liveDistanceRef.current = dist; 
+setPullDistance(dist); 
 } else { 
 pullStartY.current = null; 
+liveDistanceRef.current = 0; 
 setPullDistance(0); 
 } 
 }; 
-const handlePullEnd = async () => { 
+const onEnd = async () => { 
 if (pullStartY.current === null) return; 
 pullStartY.current = null; 
-if (pullDistance > PULL_THRESHOLD && !isRefreshing) { 
+if (liveDistanceRef.current > PULL_THRESHOLD && !isRefreshingRef.current) { 
 setIsRefreshing(true); 
 setPullDistance(PULL_THRESHOLD); 
 await fetchPosts(); 
 setIsRefreshing(false); 
 } 
+liveDistanceRef.current = 0; 
 setPullDistance(0); 
 }; 
+el.addEventListener('touchstart', onStart, { passive: true }); 
+el.addEventListener('touchmove', onMove, { passive: false }); 
+el.addEventListener('touchend', onEnd, { passive: true }); 
+return () => { 
+el.removeEventListener('touchstart', onStart); 
+el.removeEventListener('touchmove', onMove); 
+el.removeEventListener('touchend', onEnd); 
+}; 
+}, []); 
 const fetchPosts = async () => { 
 try { 
 let query = supabase.from('posts').select('*').eq('status', 'approved').eq('disabled', false); 
@@ -730,9 +754,6 @@ Past Posts
 ref={feedRef} 
 className="px-3 py-3 space-y-3 pb-20 overflow-y-auto" 
 style={{ maxHeight: 'calc(100vh - 7.5rem)' }} 
-onTouchStart={handlePullStart} 
-onTouchMove={handlePullMove} 
-onTouchEnd={handlePullEnd} 
 > 
 <div 
 className="flex items-center justify-center overflow-hidden transition-[height] duration-200" 

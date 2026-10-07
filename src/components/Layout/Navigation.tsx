@@ -8,6 +8,18 @@ import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 
+// This app is an installed PWA with a service worker. A plain
+// window.location.reload() can still be answered from the SW's cache
+// for a short window right after a new deploy (the new SW has to
+// finish installing + activating first). Appending a changing query
+// string forces the browser to treat this as a genuinely new request
+// rather than reusing whatever's already resolved for the bare URL.
+const hardReload = () => {
+  const url = new URL(window.location.href);
+  url.searchParams.set('_r', Date.now().toString());
+  window.location.href = url.toString();
+};
+
 const Navigation = () => {
   const location = useLocation();
   const navigate = useNavigate();
@@ -71,7 +83,7 @@ const Navigation = () => {
           return (
             <button
               key={path}
-              onClick={() => { if (isActive) window.location.reload(); else navigate(path); }}
+              onClick={() => { if (isActive) hardReload(); else navigate(path); }}
               className={`flex flex-col items-center justify-center flex-1 py-2 transition-colors relative ${isActive ? 'text-white' : 'text-white/50 hover:text-white'}`}
             >
               <div className="relative">
@@ -103,7 +115,7 @@ const Navigation = () => {
           return (
             <button
               key={path}
-              onClick={() => { if (isActive) window.location.reload(); else navigate(path); }}
+              onClick={() => { if (isActive) hardReload(); else navigate(path); }}
               className={`flex flex-col items-center justify-center flex-1 py-2 transition-colors relative ${isActive ? 'text-white' : isEarn ? 'text-yellow-400' : 'text-white/50 hover:text-white'}`}
             >
               <div className="relative">

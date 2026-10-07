@@ -4,7 +4,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
-import { TrendingUp, Flame, Clock, Calendar, Eye, Heart, Plus, Users, MessageCircle, Music2, DollarSign, Sparkles, Hash } from 'lucide-react';
+import { TrendingUp, Flame, Clock, Calendar, Eye, Heart, Plus, Users, MessageCircle, Hash } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { useToast } from '@/hooks/use-toast';
@@ -293,9 +293,7 @@ const Explore = () => {
             <TabsTrigger value="posts" className="whitespace-nowrap">🔥 Hot</TabsTrigger>
             <TabsTrigger value="creators" className="whitespace-nowrap">👑 Creators</TabsTrigger>
             <TabsTrigger value="keywords" className="whitespace-nowrap">🔍 Trending</TabsTrigger>
-            <TabsTrigger value="musicians" className="whitespace-nowrap">🎵 Music</TabsTrigger>
-            <TabsTrigger value="earning" className="whitespace-nowrap">💰 Earn</TabsTrigger>
-            <TabsTrigger value="ideas" className="whitespace-nowrap">✨ AI</TabsTrigger>
+
           </TabsList>
         </div>
 
@@ -461,15 +459,6 @@ const Explore = () => {
               </CardContent>
             </Card>
           )}
-        </TabsContent>
-        <TabsContent value="musicians" className="space-y-3">
-          {['Lenory Free sounds', 'Community sounds', 'Spotify discovery', 'YouTube remixes'].map((item) => <Card key={item}><CardContent className="p-4 flex items-center gap-3"><Music2 className="w-5 h-5 text-primary" /><span className="font-medium">{item}</span></CardContent></Card>)}
-        </TabsContent>
-        <TabsContent value="earning" className="space-y-3">
-          {hotTopics.slice(0, 8).map((post, i) => <Card key={post.id} onClick={() => navigate(`/?post=${post.id}`)} className="cursor-pointer"><CardContent className="p-4 flex items-center gap-3"><DollarSign className="w-5 h-5 text-primary" /><div className="flex-1 min-w-0"><p className="text-sm font-semibold truncate">#{i + 1} {post.title}</p><p className="text-xs text-muted-foreground">{post.view_count || 0} views · {post.likes_count || 0} likes</p></div></CardContent></Card>)}
-        </TabsContent>
-        <TabsContent value="ideas" className="space-y-3">
-          {['Create a 15-second wealth tip', 'React to a trending music sound', 'Show your tech workflow', 'Tell a Lifestyle story'].map((idea) => <Card key={idea}><CardContent className="p-4 flex items-center gap-3"><Sparkles className="w-5 h-5 text-primary" /><span className="text-sm font-medium">{idea}</span></CardContent></Card>)}
         </TabsContent>
       </Tabs>
     </div>
