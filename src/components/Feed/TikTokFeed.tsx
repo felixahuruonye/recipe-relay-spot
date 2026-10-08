@@ -10,7 +10,7 @@ import {
   Heart, MessageCircle, Share2, Star, Volume2, VolumeX,
   Plus, Music2, Eye, Send, Copy, Disc,
   Home, Search, MessageSquare, X, Clock, Trash2, Edit, Flag, EyeOff, ChevronLeft, ChevronRight, ExternalLink,
-  Wallet, ShoppingBag, User, Bookmark, Zap, Users, Lock, Loader2, PlayCircle
+  Wallet, ShoppingBag, User, Bookmark, Zap, Users, Lock, Loader2, PlayCircle, RefreshCw
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { useToast } from '@/hooks/use-toast';
@@ -1150,6 +1150,30 @@ const TikTokPost: React.FC<{
   const activeMedia = mediaItems[Math.min(mediaIndex, Math.max(mediaItems.length - 1, 0))];
   const displayMedia = post.thumbnail_url && activeMedia?.match(/\.(mp4|webm|ogg|mov)$/i) ? post.thumbnail_url : activeMedia;
   const isVideo = hasMedia && (activeMedia?.match(/\.(mp4|webm|ogg|mov)$/i) || activeMedia?.includes('video'));
+  // Network self-heal: a dropped connection mid-load used to fire
+  // onError, which just set mediaReady=true and gave up forever — the
+  // media stayed blank/frozen even once the connection came back,
+  // because nothing was ever listening for that. mediaRetryKey forces
+  // a real remount (fresh fetch) both on an explicit error and when the
+  // browser's 'online' event fires for whichever post is active.
+  const [mediaRetryKey, setMediaRetryKey] = useState(0);
+  const mediaRetryTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const mediaRetryAttemptsRef = useRef(0);
+  const isPausedRef = useRef(isPaused);
+  useEffect(() => { isPausedRef.current = isPaused; }, [isPaused]);
+  const [showCaptionSheet, setShowCaptionSheet] = useState(false);
+  const fullCaption = [post.title, post.body].filter(Boolean).join(' ');
+  const captionNeedsExpand = fullCaption.length > 90;
+  const openCaption = () => {
+    setShowCaptionSheet(true);
+    if (isVideo) videoRef.current?.pause();
+    else setIsPaused(true);
+  };
+  const closeCaption = () => {
+    setShowCaptionSheet(false);
+    if (isVideo) { if (isActive) videoRef.current?.play().catch(() => {}); }
+    else setIsPaused(false);
+  };
 
   // Track whether the active media has actually finished loading, so a
   // slow connection shows a clear loading state instead of a blank gap
@@ -1161,7 +1185,33 @@ const TikTokPost: React.FC<{
     setMediaIndex(0);
     setIsPaused(false);
     viewQualifiedRef.current = false;
+    mediaRetryAttemptsRef.current = 0;
+    setMediaRetryKey(0);
   }, [post.id]);
+
+  // Reconnect handling: when the connection comes back, force a fresh
+  // load for whichever post is actually on screen right now.
+  useEffect(() => {
+    const handleOnline = () => {
+      if (isActive) {
+        mediaRetryAttemptsRef.current = 0;
+        setMediaRetryKey((k) => k + 1);
+      }
+    };
+    window.addEventListener('online', handleOnline);
+    return () => window.removeEventListener('online', handleOnline);
+  }, [isActive]);
+
+  const handleMediaError = () => {
+    if (mediaRetryTimeoutRef.current) clearTimeout(mediaRetryTimeoutRef.current);
+    // Still offline? Don't burn retries hammering a dead connection —
+    // the 'online' listener above will fire the moment it's back.
+    if (!navigator.onLine) return;
+    if (mediaRetryAttemptsRef.current >= 3) { setMediaReady(true); return; }
+    mediaRetryAttemptsRef.current += 1;
+    mediaRetryTimeoutRef.current = setTimeout(() => setMediaRetryKey((k) => k + 1), 1500);
+  };
+  useEffect(() => () => { if (mediaRetryTimeoutRef.current) clearTimeout(mediaRetryTimeoutRef.current); }, []);
 
   // Background music — supports both audio_url (community) and youtube_id (Lenory Free)
   useEffect(() => {
@@ -1193,7 +1243,11 @@ const TikTokPost: React.FC<{
     }
   }, [isActive, isMuted]);
 
-  // Image timer
+  // Image timer — ticks every second regardless, but checks isPausedRef
+  // each tick and simply skips the decrement while paused. This is a
+  // real pause/resume (picking up where it left off), not a reset —
+  // tearing the interval down and rebuilding it on every isPaused
+  // toggle would restart the countdown from 5 each time instead.
   useEffect(() => {
     if (!isActive || isVideo) {
       setImageTimer(5);
@@ -1202,6 +1256,7 @@ const TikTokPost: React.FC<{
     }
     setImageTimer(5);
     imageTimerRef.current = setInterval(() => {
+      if (isPausedRef.current) return;
       setImageTimer(prev => {
         if (prev <= 1) {
           clearInterval(imageTimerRef.current!);
@@ -1257,9 +1312,9 @@ const TikTokPost: React.FC<{
 
       {hasMedia && isVideo ? (
         <video
-          key={activeMedia}
+          key={`${activeMedia}-${mediaRetryKey}`}
           ref={videoRef}
-          src={activeMedia}
+          src={mediaRetryKey > 0 ? `${activeMedia}${activeMedia.includes('?') ? '&' : '?'}retry=${mediaRetryKey}` : activeMedia}
           poster={post.thumbnail_url || undefined}
           className="absolute inset-0 w-full h-full object-cover"
           loop={!autoScroll}
@@ -1282,11 +1337,20 @@ const TikTokPost: React.FC<{
           onPlay={() => setIsPaused(false)}
           onPause={() => setIsPaused(true)}
           onLoadedData={() => setMediaReady(true)}
-          onError={() => setMediaReady(true)}
+          onError={handleMediaError}
           onClick={handleMediaTap}
         />
       ) : hasMedia ? (
-        <img src={displayMedia} alt={post.title} onClick={handleMediaTap} onLoad={() => setMediaReady(true)} onError={() => setMediaReady(true)} className="relative z-10 max-w-full max-h-full object-contain cursor-pointer" loading="lazy" />
+        <img
+          key={`${displayMedia}-${mediaRetryKey}`}
+          src={mediaRetryKey > 0 && displayMedia ? `${displayMedia}${displayMedia.includes('?') ? '&' : '?'}retry=${mediaRetryKey}` : displayMedia}
+          alt={post.title}
+          onClick={handleMediaTap}
+          onLoad={() => setMediaReady(true)}
+          onError={handleMediaError}
+          className="relative z-10 max-w-full max-h-full object-contain cursor-pointer"
+          loading="lazy"
+        />
       ) : (
         <div onClick={handleMediaTap} className="absolute inset-0 bg-gradient-to-br from-primary/80 via-accent/60 to-primary/40 flex items-center justify-center p-8 cursor-pointer">
           <div className="text-center space-y-4 max-w-lg">
@@ -1428,6 +1492,14 @@ const TikTokPost: React.FC<{
           <p className="text-white text-sm leading-relaxed line-clamp-2 drop-shadow-lg">
             {post.title}
             {post.body && hasMedia && <span className="text-white/70"> {post.body.slice(0, 80)}</span>}
+            {captionNeedsExpand && (
+              <button
+                onClick={(e) => { e.stopPropagation(); openCaption(); }}
+                className="ml-1 font-semibold text-white/90 underline underline-offset-2"
+              >
+                View More
+              </button>
+            )}
           </p>
           <div className="flex items-center gap-2 flex-wrap">
             <Badge
@@ -1474,6 +1546,24 @@ const TikTokPost: React.FC<{
           )}
         </div>
       </div>
+
+      {showCaptionSheet && createPortal(
+        <div className="fixed inset-0 z-[70] bg-black/80 backdrop-blur-sm flex items-end" onClick={closeCaption}>
+          <div
+            className="w-full bg-background rounded-t-3xl p-5 max-h-[70vh] overflow-y-auto"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between mb-3">
+              <p className="font-bold text-sm">@{postUser?.username || 'user'}</p>
+              <button onClick={closeCaption} className="w-8 h-8 rounded-full bg-muted flex items-center justify-center">
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+            <p className="text-sm leading-relaxed whitespace-pre-wrap">{fullCaption}</p>
+          </div>
+        </div>,
+        document.body
+      )}
     </div>
   );
 };
@@ -1544,6 +1634,11 @@ const TikTokFeed: React.FC = () => {
   const [rewardBox, setRewardBox] = useState<RewardBoxData | null>(null);
   const processingRef = useRef<Set<string>>(new Set());
   const feedRef = useRef<HTMLDivElement>(null);
+  const [pullDistance, setPullDistance] = useState(0);
+  const [isPullRefreshing, setIsPullRefreshing] = useState(false);
+  const pullStartYRef = useRef<number | null>(null);
+  const pullLiveDistanceRef = useRef(0);
+  const PULL_THRESHOLD = 70;
   const swipeStartRef = useRef<{ x: number; y: number; t: number } | null>(null);
   const shellRef = useRef<HTMLDivElement>(null);
   const viewCooldownRef = useRef<number>(0);
@@ -2417,11 +2512,76 @@ const TikTokFeed: React.FC = () => {
     );
   }
 
+  // Pull-to-refresh: must use real (non-React-synthetic) touch listeners
+  // with { passive: false }. React attaches touchstart/touchmove as
+  // passive by default for scroll performance, which silently makes
+  // preventDefault() a no-op — without it, the browser/installed PWA's
+  // own native overscroll just fights (and usually wins against) a
+  // custom gesture. This also does a genuine window reload on release,
+  // cache-busted so an installed PWA's service worker can't serve a
+  // stale bundle right after a fresh deploy.
+  useEffect(() => {
+    const el = feedRef.current;
+    if (!el) return;
+    const onStart = (e: TouchEvent) => {
+      if (el.scrollTop <= 0) pullStartYRef.current = e.touches[0].clientY;
+    };
+    const onMove = (e: TouchEvent) => {
+      if (pullStartYRef.current === null || isPullRefreshing) return;
+      const delta = e.touches[0].clientY - pullStartYRef.current;
+      if (delta > 0 && el.scrollTop <= 0) {
+        e.preventDefault();
+        const dist = Math.min(delta * 0.5, 100);
+        pullLiveDistanceRef.current = dist;
+        setPullDistance(dist);
+      } else {
+        pullStartYRef.current = null;
+        pullLiveDistanceRef.current = 0;
+        setPullDistance(0);
+      }
+    };
+    const onEnd = () => {
+      if (pullStartYRef.current === null) return;
+      pullStartYRef.current = null;
+      if (pullLiveDistanceRef.current > PULL_THRESHOLD && !isPullRefreshing) {
+        setIsPullRefreshing(true);
+        setPullDistance(PULL_THRESHOLD);
+        const url = new URL(window.location.href);
+        url.searchParams.set('_r', Date.now().toString());
+        window.location.href = url.toString();
+        return;
+      }
+      pullLiveDistanceRef.current = 0;
+      setPullDistance(0);
+    };
+    el.addEventListener('touchstart', onStart, { passive: true });
+    el.addEventListener('touchmove', onMove, { passive: false });
+    el.addEventListener('touchend', onEnd, { passive: true });
+    return () => {
+      el.removeEventListener('touchstart', onStart);
+      el.removeEventListener('touchmove', onMove);
+      el.removeEventListener('touchend', onEnd);
+    };
+  }, [isPullRefreshing]);
+
   return (
     <>
       <div ref={shellRef} className="h-[100dvh] bg-black flex justify-center">
         <div className="relative w-full max-w-[480px] h-full">
           <RewardBoxPopup data={rewardBox} onClose={() => setRewardBox(null)} />
+          <div
+            className="absolute top-0 left-1/2 -translate-x-1/2 z-40 flex items-center justify-center overflow-hidden transition-[height] duration-150 pointer-events-none"
+            style={{ height: pullDistance }}
+          >
+            {pullDistance > 10 && (
+              <div className="bg-black/60 backdrop-blur-sm rounded-full p-2 mt-2">
+                <RefreshCw
+                  className={`w-5 h-5 text-white ${isPullRefreshing || pullDistance >= PULL_THRESHOLD ? 'animate-spin' : ''}`}
+                  style={{ transform: isPullRefreshing || pullDistance >= PULL_THRESHOLD ? undefined : `rotate(${pullDistance * 3}deg)` }}
+                />
+              </div>
+            )}
+          </div>
           <AnimatePresence>
             {newPostsAvailable > 0 && (
               <motion.button
