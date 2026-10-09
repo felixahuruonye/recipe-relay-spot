@@ -33,6 +33,19 @@ if (typeof window !== "undefined" && !localStorage.getItem(CACHE_BUSTER_KEY)) {
   }
 }
 
+// A service worker that hasn't finished switching to the latest deploy
+// yet can still try to serve an old index.html that points at a JS
+// chunk hash the NEW deploy already replaced. That fetch just fails —
+// no visible error, the React root never mounts, the page is simply
+// blank. This is Vite's own documented recovery for that failure mode:
+// catch the event it fires when a dynamically-imported chunk 404s, and
+// force a real reload instead of leaving the user on a dead page.
+if (typeof window !== "undefined") {
+  window.addEventListener("vite:preloadError", () => {
+    window.location.reload();
+  });
+}
+
 createRoot(document.getElementById("root")!).render(
   <React.StrictMode>
     <App />
