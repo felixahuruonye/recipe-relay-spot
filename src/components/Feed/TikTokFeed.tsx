@@ -569,7 +569,7 @@ const SendToFriend: React.FC<{
     <motion.div className="fixed inset-0 z-50" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
       <div className="absolute inset-0 bg-black/50" onClick={onClose} />
       <motion.div
-        className="absolute bottom-0 left-0 right-0 max-w-[480px] mx-auto bg-card rounded-t-2xl max-h-[60vh] overflow-hidden"
+        className="absolute bottom-0 left-0 right-0 max-w-[480px] mx-auto bg-card rounded-t-2xl max-h-[75vh] overflow-hidden flex flex-col"
         initial={{ y: '100%' }} animate={{ y: 0 }} exit={{ y: '100%' }}
       >
         <div className="p-4 border-b border-border flex items-center justify-between">
@@ -2056,6 +2056,8 @@ const TikTokFeed: React.FC = () => {
 
   const scrollToNext = useCallback(() => {
     if (!feedRef.current || !autoScroll) return;
+    // Freeze while user is interacting with comments / share / tip / sound menus
+    if (showComments || showShareMenu || showSendToFriend || showSoundDrilldown || showTipDialog) return;
     const nextIndex = activeIndex + 1;
     if (nextIndex < feedSlides.length) {
       feedRef.current.scrollTo({ top: nextIndex * window.innerHeight, behavior: 'smooth' });
@@ -2853,8 +2855,15 @@ const TikTokFeed: React.FC = () => {
                 <h3 className="font-bold text-sm">Comments</h3>
                 <button onClick={() => setShowComments(false)} className="text-muted-foreground text-sm">✕</button>
               </div>
-              <div className="p-4 overflow-y-auto max-h-[calc(60vh-60px)]">
-                <CommentSection postId={activeCommentPostId} />
+              <div className="flex-1 overflow-hidden flex flex-col min-h-0">
+                <CommentSection
+                  postId={activeCommentPostId}
+                  onCountChange={(n) => {
+                    if (activeCommentPostId) {
+                      setPostCommentCounts(prev => ({ ...prev, [activeCommentPostId]: n }));
+                    }
+                  }}
+                />
               </div>
             </motion.div>
           </motion.div>
