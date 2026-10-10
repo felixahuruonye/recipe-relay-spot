@@ -546,6 +546,10 @@ const SendToFriend: React.FC<{
       from_user_id: user.id, to_user_id: toUserId, message: shareMsg,
       media_url: postThumbnail || null,
     });
+    // Track send count so the side icon updates for everyone
+    await supabase.from('post_shares').insert({
+      post_id: postId, user_id: user.id, share_type: 'send',
+    } as any);
     toast({ title: 'Sent!', description: 'Post shared to friend' });
     onClose();
   };
