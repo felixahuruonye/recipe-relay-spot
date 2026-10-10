@@ -1,11 +1,12 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { Send, Heart, Flag, Trash2, Edit2, EyeOff, ChevronDown, ChevronUp, Plus, Smile, X, Image as ImageIcon, Camera, AtSign } from 'lucide-react';
+import { Send, Heart, Flag, Trash2, Edit2, EyeOff, X, Smile, Camera, AtSign } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { useToast } from '@/hooks/use-toast';
+import { useNavigate } from 'react-router-dom';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -16,7 +17,6 @@ import {
 const STICKERS = ['❤️','🔥','👏','😂','😮','😍','😢','🙌','💯','⭐','🎉','👍','💔','🙏','✨','🤔'];
 const QUICK_REACTIONS = ['❤️', '😍', '😂', '😭', '🔥', '🙏', '😊'];
 
-// Deterministic pastel color from username for Snapchat-style avatars
 const avatarColor = (name: string) => {
   const colors = [
     'bg-blue-500', 'bg-teal-400', 'bg-purple-500', 'bg-pink-500',
@@ -56,7 +56,7 @@ interface Comment {
   is_hidden: boolean;
   is_edited: boolean;
   user_profile?: { username: string; avatar_url?: string };
-  reactions?: any[];
+  reactions?: { user_id: string }[];
   replies?: Reply[];
 }
 
@@ -71,71 +71,91 @@ export const CommentSection = ({ postId, onCountChange }: CommentSectionProps) =
   const [newComment, setNewComment] = useState('');
   const [newCommentImage, setNewCommentImage] = useState<File | null>(null);
   const [showStickers, setShowStickers] = useState(false);
-  const [replyTo, setReplyTo] = useState<{ commentId: string; parentReplyId?: string; toUsername?: string } | null>(null);
-  const [replyContent, setReplyContent] = useState('');
-  const [replyImage, setReplyImage] = useState<File | null>(null);
+  // Single reply target – drives the MAIN input only (no nested boxes)
+  const [replyTo, setReplyTo] = useState<{
+    commentId: string;
+    parentReplyId?: string;
+    toUsername: string;
+  } | null>(null);
   const [editingComment, setEditingComment] = useState<string | null>(null);
   const [editContent, setEditContent] = useState('');
   const [showReplies, setShowReplies] = useState<Record<string, boolean>>({});
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const replyFileRef = useRef<HTMLInputElement>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
   const listRef = useRef<HTMLDivElement>(null);
   const { user } = useAuth();
   const { toast } = useToast();
+  const navigate = useNavigate();
+
+  const goToProfile = (userId: string) => {
+    if (!userId) return;
+    navigate(`/profile/${userId}`);
+  };
 
   const fetchComments = useCallback(async () => {
-    const { data: commentsData } = await supabase
-      .from('post_comments')
-      .select('*')
-      .eq('post_id', postId)
-      .eq('is_hidden', false)
-      .order('created_at', { ascending: true });
+    // Parallel fetch for speed
+    const [commentsRes, reactionsRes, repliesRes] = await Promise.all([
+      supabase
+        .from('post_comments')
+        .select('id, user_id, content, image_url, created_at, is_hidden, is_edited')
+        .eq('post_id', postId)
+        .eq('is_hidden', false)
+        .order('created_at', { ascending: true }),
+      supabase
+        .from('comment_reactions')
+        .select('comment_id, user_id'),
+      supabase
+        .from('comment_replies')
+        .select('id, comment_id, user_id, content, image_url, parent_reply_id, created_at')
+        .order('created_at', { ascending: true }),
+    ]);
 
-    if (!commentsData) {
+    const commentsData = commentsRes.data || [];
+    if (commentsData.length === 0) {
+      setComments([]);
+      onCountChange?.(0);
       setLoading(false);
       return;
     }
 
-    const userIds = [...new Set(commentsData.map((c: any) => c.user_id))];
+    const commentIds = new Set(commentsData.map((c: any) => c.id));
+    const allReactions = (reactionsRes.data || []).filter((r: any) => commentIds.has(r.comment_id));
+    const allReplies = (repliesRes.data || []).filter((r: any) => commentIds.has(r.comment_id));
+
+    // Collect every user id we need profiles for
+    const userIds = new Set<string>();
+    commentsData.forEach((c: any) => userIds.add(c.user_id));
+    allReplies.forEach((r: any) => userIds.add(r.user_id));
+
     const { data: profiles } = await supabase
       .from('user_profiles')
       .select('id, username, avatar_url')
-      .in('id', userIds);
-    const profilesMap = new Map(profiles?.map((p: any) => [p.id, p]) || []);
+      .in('id', [...userIds]);
+    const profilesMap = new Map((profiles || []).map((p: any) => [p.id, p]));
 
-    // Batch reactions + replies in fewer round-trips
-    const commentIds = commentsData.map((c: any) => c.id);
-    const [{ data: allReactions }, { data: allReplies }] = await Promise.all([
-      supabase.from('comment_reactions').select('comment_id, user_id').in('comment_id', commentIds),
-      supabase.from('comment_replies').select('*').in('comment_id', commentIds).order('created_at', { ascending: true }),
-    ]);
-
-    const replyUserIds = [...new Set((allReplies || []).map((r: any) => r.user_id))];
-    const { data: rprof } = replyUserIds.length
-      ? await supabase.from('user_profiles').select('id, username, avatar_url').in('id', replyUserIds)
-      : { data: [] as any[] };
-    const rpMap = new Map((rprof || []).map((p: any) => [p.id, p]));
-
-    const reactionsByComment: Record<string, any[]> = {};
-    (allReactions || []).forEach((r: any) => {
+    const reactionsByComment: Record<string, { user_id: string }[]> = {};
+    allReactions.forEach((r: any) => {
       if (!reactionsByComment[r.comment_id]) reactionsByComment[r.comment_id] = [];
-      reactionsByComment[r.comment_id].push(r);
+      reactionsByComment[r.comment_id].push({ user_id: r.user_id });
     });
 
     const repliesByComment: Record<string, Reply[]> = {};
-    (allReplies || []).forEach((r: any) => {
+    allReplies.forEach((r: any) => {
       if (!repliesByComment[r.comment_id]) repliesByComment[r.comment_id] = [];
-      repliesByComment[r.comment_id].push({ ...r, user_profile: rpMap.get(r.user_id) });
+      repliesByComment[r.comment_id].push({
+        ...r,
+        user_profile: profilesMap.get(r.user_id),
+      });
     });
 
-    const result = commentsData.map((comment: any) => ({
-      ...comment,
-      user_profile: profilesMap.get(comment.user_id),
-      reactions: reactionsByComment[comment.id] || [],
-      replies: repliesByComment[comment.id] || [],
+    const result: Comment[] = commentsData.map((c: any) => ({
+      ...c,
+      user_profile: profilesMap.get(c.user_id),
+      reactions: reactionsByComment[c.id] || [],
+      replies: repliesByComment[c.id] || [],
     }));
 
-    setComments(result as Comment[]);
+    setComments(result);
     onCountChange?.(result.length);
     setLoading(false);
   }, [postId, onCountChange]);
@@ -144,7 +164,7 @@ export const CommentSection = ({ postId, onCountChange }: CommentSectionProps) =
     setLoading(true);
     fetchComments();
     const channel = supabase
-      .channel(`comments-${postId}`)
+      .channel(`comments-fast-${postId}`)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'post_comments', filter: `post_id=eq.${postId}` }, () => fetchComments())
       .on('postgres_changes', { event: '*', schema: 'public', table: 'comment_replies' }, () => fetchComments())
       .on('postgres_changes', { event: '*', schema: 'public', table: 'comment_reactions' }, () => fetchComments())
@@ -164,52 +184,66 @@ export const CommentSection = ({ postId, onCountChange }: CommentSectionProps) =
     return supabase.storage.from('post-media').getPublicUrl(path).data.publicUrl;
   };
 
-  const handleAddComment = async () => {
+  const startReply = (commentId: string, toUsername: string, parentReplyId?: string) => {
+    setReplyTo({ commentId, toUsername, parentReplyId });
+    // Focus main input so user can type immediately
+    setTimeout(() => inputRef.current?.focus(), 50);
+  };
+
+  const cancelReply = () => setReplyTo(null);
+
+  const handleSend = async () => {
     if ((!newComment.trim() && !newCommentImage) || !user) return;
+
     let image_url: string | null = null;
     if (newCommentImage) image_url = await uploadImage(newCommentImage);
 
-    const { error } = await supabase.from('post_comments').insert({
-      post_id: postId, user_id: user.id, content: newComment.trim(), image_url,
-    } as any);
-    if (error) {
-      toast({ title: 'Error', description: 'Failed to add comment', variant: 'destructive' });
-      return;
+    if (replyTo) {
+      // This is a reply (to a comment or to a sub-reply)
+      const { error } = await supabase.from('comment_replies').insert({
+        comment_id: replyTo.commentId,
+        user_id: user.id,
+        content: newComment.trim(),
+        image_url,
+        parent_reply_id: replyTo.parentReplyId || null,
+      } as any);
+      if (error) {
+        toast({ title: 'Error', description: 'Failed to add reply', variant: 'destructive' });
+        return;
+      }
+      // Expand replies for that comment so the new one is visible
+      setShowReplies(prev => ({ ...prev, [replyTo.commentId]: true }));
+    } else {
+      // Top-level comment
+      const { error } = await supabase.from('post_comments').insert({
+        post_id: postId,
+        user_id: user.id,
+        content: newComment.trim(),
+        image_url,
+      } as any);
+      if (error) {
+        toast({ title: 'Error', description: 'Failed to add comment', variant: 'destructive' });
+        return;
+      }
+      onCountChange?.(comments.length + 1);
     }
-    // Optimistic local count bump – real data arrives via realtime
-    onCountChange?.(comments.length + 1);
+
     setNewComment('');
     setNewCommentImage(null);
     setShowStickers(false);
-    // Soft scroll to bottom after post
-    setTimeout(() => listRef.current?.scrollTo({ top: listRef.current.scrollHeight, behavior: 'smooth' }), 300);
+    setReplyTo(null);
+    setTimeout(() => listRef.current?.scrollTo({ top: listRef.current.scrollHeight, behavior: 'smooth' }), 250);
   };
 
   const handleQuickReaction = (emoji: string) => {
     setNewComment(prev => prev + emoji);
-  };
-
-  const handleReply = async (commentId: string, parentReplyId?: string) => {
-    if ((!replyContent.trim() && !replyImage) || !user) return;
-    let image_url: string | null = null;
-    if (replyImage) image_url = await uploadImage(replyImage);
-    const { error } = await supabase.from('comment_replies').insert({
-      comment_id: commentId, user_id: user.id, content: replyContent.trim(),
-      image_url, parent_reply_id: parentReplyId || null,
-    } as any);
-    if (error) {
-      toast({ title: 'Error', description: 'Failed to add reply', variant: 'destructive' });
-      return;
-    }
-    setReplyContent('');
-    setReplyImage(null);
-    setReplyTo(null);
+    inputRef.current?.focus();
   };
 
   const handleReaction = async (commentId: string) => {
     if (!user) return;
     const c = comments.find(x => x.id === commentId);
-    const has = c?.reactions?.some((r: any) => r.user_id === user.id);
+    const has = c?.reactions?.some(r => r.user_id === user.id);
     if (has) {
       await supabase.from('comment_reactions').delete().eq('comment_id', commentId).eq('user_id', user.id);
     } else {
@@ -237,7 +271,7 @@ export const CommentSection = ({ postId, onCountChange }: CommentSectionProps) =
 
   return (
     <div className="flex flex-col h-full min-h-0">
-      {/* Comments list – Snapchat style */}
+      {/* Comments list */}
       <div ref={listRef} className="flex-1 overflow-y-auto px-3 pt-1 pb-2 space-y-4">
         {loading && comments.length === 0 && (
           <div className="py-8 text-center text-sm text-muted-foreground">Loading comments…</div>
@@ -248,22 +282,32 @@ export const CommentSection = ({ postId, onCountChange }: CommentSectionProps) =
 
         {comments.map(comment => {
           const isOwner = user?.id === comment.user_id;
-          const hasReacted = comment.reactions?.some((r: any) => r.user_id === user?.id);
+          const hasReacted = comment.reactions?.some(r => r.user_id === user?.id);
           const uname = comment.user_profile?.username || 'user';
           const color = avatarColor(uname);
+          const replies = comment.replies || [];
 
           return (
             <div key={comment.id} className="space-y-1">
               <div className="flex gap-2.5">
-                <Avatar className={`h-9 w-9 shrink-0 ${color}`}>
-                  <AvatarImage src={comment.user_profile?.avatar_url} />
-                  <AvatarFallback className="text-white text-sm font-semibold bg-transparent">
-                    {uname[0]?.toUpperCase()}
-                  </AvatarFallback>
-                </Avatar>
+                {/* Real avatar – clickable → profile */}
+                <button onClick={() => goToProfile(comment.user_id)} className="shrink-0">
+                  <Avatar className={`h-9 w-9 ${color}`}>
+                    <AvatarImage src={comment.user_profile?.avatar_url || undefined} />
+                    <AvatarFallback className="text-white text-sm font-semibold bg-transparent">
+                      {uname[0]?.toUpperCase()}
+                    </AvatarFallback>
+                  </Avatar>
+                </button>
+
                 <div className="flex-1 min-w-0">
                   <div className="flex items-baseline gap-1.5 flex-wrap">
-                    <span className="font-semibold text-[13px] text-foreground">{uname}</span>
+                    <button
+                      onClick={() => goToProfile(comment.user_id)}
+                      className="font-semibold text-[13px] text-foreground hover:underline"
+                    >
+                      {uname}
+                    </button>
                     <span className="text-[11px] text-muted-foreground">· {timeAgo(comment.created_at)}</span>
                     {comment.is_edited && <span className="text-[10px] text-muted-foreground">(edited)</span>}
                   </div>
@@ -296,28 +340,22 @@ export const CommentSection = ({ postId, onCountChange }: CommentSectionProps) =
                     >
                       <Heart className={`h-3.5 w-3.5 ${hasReacted ? 'fill-current' : ''}`} />
                       {(comment.reactions?.length || 0) > 0 && (
-                        <span className="tabular-nums">{comment.reactions?.length}</span>
+                        <span className="tabular-nums">{comment.reactions.length}</span>
                       )}
                     </button>
                     <button
-                      onClick={() =>
-                        setReplyTo(
-                          replyTo?.commentId === comment.id && !replyTo?.parentReplyId
-                            ? null
-                            : { commentId: comment.id, toUsername: uname }
-                        )
-                      }
+                      onClick={() => startReply(comment.id, uname)}
                       className="text-muted-foreground font-medium hover:text-foreground"
                     >
                       Reply
                     </button>
-                    {comment.replies && comment.replies.length > 0 && (
+                    {replies.length > 0 && (
                       <button
                         onClick={() => setShowReplies(p => ({ ...p, [comment.id]: !p[comment.id] }))}
                         className="text-blue-500 font-medium"
                       >
-                        {showReplies[comment.id] ? 'Hide' : 'Show'} {comment.replies.length}{' '}
-                        {comment.replies.length === 1 ? 'reply' : 'replies'}
+                        {showReplies[comment.id] ? 'Hide' : 'Show'} {replies.length}{' '}
+                        {replies.length === 1 ? 'reply' : 'replies'}
                       </button>
                     )}
                     <DropdownMenu>
@@ -346,37 +384,30 @@ export const CommentSection = ({ postId, onCountChange }: CommentSectionProps) =
                     </DropdownMenu>
                   </div>
 
-                  {/* Nested reply composer */}
-                  {replyTo?.commentId === comment.id && !replyTo?.parentReplyId && (
-                    <ReplyComposer
-                      replyImage={replyImage}
-                      setReplyImage={setReplyImage}
-                      replyContent={replyContent}
-                      setReplyContent={setReplyContent}
-                      onSend={() => handleReply(comment.id)}
-                      onCancel={() => setReplyTo(null)}
-                      toUsername={replyTo.toUsername}
-                      fileRef={replyFileRef}
-                    />
-                  )}
-
-                  {/* Replies */}
-                  {showReplies[comment.id] && comment.replies && comment.replies.length > 0 && (
-                    <div className="mt-2 ml-1 space-y-3 border-l-2 border-border/60 pl-3">
-                      {comment.replies.map(reply => {
+                  {/* Nested replies – clean indentation, no extra input boxes */}
+                  {showReplies[comment.id] && replies.length > 0 && (
+                    <div className="mt-2 ml-1 space-y-3 border-l-2 border-border/50 pl-3">
+                      {replies.map(reply => {
                         const rname = reply.user_profile?.username || 'user';
                         const rcolor = avatarColor(rname);
                         return (
                           <div key={reply.id} className="flex gap-2">
-                            <Avatar className={`h-7 w-7 shrink-0 ${rcolor}`}>
-                              <AvatarImage src={reply.user_profile?.avatar_url} />
-                              <AvatarFallback className="text-white text-xs font-semibold bg-transparent">
-                                {rname[0]?.toUpperCase()}
-                              </AvatarFallback>
-                            </Avatar>
+                            <button onClick={() => goToProfile(reply.user_id)} className="shrink-0">
+                              <Avatar className={`h-7 w-7 ${rcolor}`}>
+                                <AvatarImage src={reply.user_profile?.avatar_url || undefined} />
+                                <AvatarFallback className="text-white text-xs font-semibold bg-transparent">
+                                  {rname[0]?.toUpperCase()}
+                                </AvatarFallback>
+                              </Avatar>
+                            </button>
                             <div className="flex-1 min-w-0">
                               <div className="flex items-baseline gap-1.5">
-                                <span className="font-semibold text-[12px]">{rname}</span>
+                                <button
+                                  onClick={() => goToProfile(reply.user_id)}
+                                  className="font-semibold text-[12px] hover:underline"
+                                >
+                                  {rname}
+                                </button>
                                 <span className="text-[10px] text-muted-foreground">· {timeAgo(reply.created_at)}</span>
                               </div>
                               {reply.content && (
@@ -389,28 +420,10 @@ export const CommentSection = ({ postId, onCountChange }: CommentSectionProps) =
                               )}
                               <button
                                 className="text-[11px] text-muted-foreground font-medium mt-0.5 hover:text-foreground"
-                                onClick={() =>
-                                  setReplyTo(
-                                    replyTo?.parentReplyId === reply.id
-                                      ? null
-                                      : { commentId: comment.id, parentReplyId: reply.id, toUsername: rname }
-                                  )
-                                }
+                                onClick={() => startReply(comment.id, rname, reply.id)}
                               >
                                 Reply
                               </button>
-                              {replyTo?.commentId === comment.id && replyTo?.parentReplyId === reply.id && (
-                                <ReplyComposer
-                                  replyImage={replyImage}
-                                  setReplyImage={setReplyImage}
-                                  replyContent={replyContent}
-                                  setReplyContent={setReplyContent}
-                                  onSend={() => handleReply(comment.id, reply.id)}
-                                  onCancel={() => setReplyTo(null)}
-                                  toUsername={replyTo.toUsername}
-                                  fileRef={replyFileRef}
-                                />
-                              )}
                             </div>
                           </div>
                         );
@@ -424,7 +437,7 @@ export const CommentSection = ({ postId, onCountChange }: CommentSectionProps) =
         })}
       </div>
 
-      {/* Quick emoji reaction bar (Snapchat style) */}
+      {/* Quick emoji bar */}
       <div className="flex items-center justify-around px-2 py-2 border-t border-border/50 bg-background/95">
         {QUICK_REACTIONS.map(e => (
           <button
@@ -437,8 +450,20 @@ export const CommentSection = ({ postId, onCountChange }: CommentSectionProps) =
         ))}
       </div>
 
-      {/* Composer */}
+      {/* Main composer – used for both new comments AND all replies */}
       <div className="px-3 pb-3 pt-1 border-t border-border/40 bg-background">
+        {/* "Replying to @user" chip */}
+        {replyTo && (
+          <div className="flex items-center gap-2 mb-2 text-xs text-muted-foreground">
+            <span>
+              Replying to <span className="font-semibold text-foreground">@{replyTo.toUsername}</span>
+            </span>
+            <button onClick={cancelReply} className="p-0.5 rounded-full hover:bg-muted">
+              <X className="h-3.5 w-3.5" />
+            </button>
+          </div>
+        )}
+
         {newCommentImage && (
           <div className="relative inline-block mb-2">
             <img src={URL.createObjectURL(newCommentImage)} alt="" className="h-16 rounded-lg" />
@@ -459,79 +484,59 @@ export const CommentSection = ({ postId, onCountChange }: CommentSectionProps) =
             ))}
           </div>
         )}
+
         <div className="flex items-center gap-2">
-          <Avatar className="h-8 w-8 shrink-0">
-            <AvatarFallback className="bg-orange-400 text-white text-xs">
-              {user?.email?.[0]?.toUpperCase() || '?'}
-            </AvatarFallback>
-          </Avatar>
+          <button onClick={() => user && goToProfile(user.id)} className="shrink-0">
+            <Avatar className="h-8 w-8">
+              <AvatarFallback className="bg-orange-400 text-white text-xs">
+                {user?.email?.[0]?.toUpperCase() || '?'}
+              </AvatarFallback>
+            </Avatar>
+          </button>
+
           <div className="flex-1 flex items-center gap-1 bg-muted/60 rounded-full px-3 py-1.5 min-h-[36px]">
             <input
+              ref={inputRef}
               value={newComment}
               onChange={e => setNewComment(e.target.value)}
-              onKeyDown={e => e.key === 'Enter' && !e.shiftKey && (e.preventDefault(), handleAddComment())}
-              placeholder="Add a comment..."
+              onKeyDown={e => {
+                if (e.key === 'Enter' && !e.shiftKey) {
+                  e.preventDefault();
+                  handleSend();
+                }
+              }}
+              placeholder={
+                replyTo
+                  ? `Reply to @${replyTo.toUsername}...`
+                  : 'Add a comment...'
+              }
               className="flex-1 bg-transparent text-sm outline-none placeholder:text-muted-foreground min-w-0"
             />
-            <button className="text-muted-foreground p-0.5" title="Mention">
+            <button type="button" className="text-muted-foreground p-0.5" title="Mention">
               <AtSign className="h-4 w-4" />
             </button>
-            <input ref={fileInputRef} type="file" accept="image/*" hidden onChange={e => setNewCommentImage(e.target.files?.[0] || null)} />
-            <button onClick={() => fileInputRef.current?.click()} className="text-muted-foreground p-0.5" title="Photo">
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept="image/*"
+              hidden
+              onChange={e => setNewCommentImage(e.target.files?.[0] || null)}
+            />
+            <button type="button" onClick={() => fileInputRef.current?.click()} className="text-muted-foreground p-0.5" title="Photo">
               <Camera className="h-4 w-4" />
             </button>
-            <button onClick={() => setShowStickers(s => !s)} className="text-muted-foreground p-0.5" title="Stickers">
+            <button type="button" onClick={() => setShowStickers(s => !s)} className="text-muted-foreground p-0.5" title="Stickers">
               <Smile className="h-4 w-4" />
             </button>
           </div>
-          {(newComment.trim() || newCommentImage) && (
-            <Button size="icon" className="h-8 w-8 rounded-full shrink-0" onClick={handleAddComment}>
+
+          {/* Always show send when there is content or when replying */}
+          {(newComment.trim() || newCommentImage || replyTo) && (
+            <Button size="icon" className="h-8 w-8 rounded-full shrink-0" onClick={handleSend}>
               <Send className="h-3.5 w-3.5" />
             </Button>
           )}
         </div>
-      </div>
-    </div>
-  );
-};
-
-interface ReplyComposerProps {
-  replyContent: string;
-  setReplyContent: (v: string) => void;
-  replyImage: File | null;
-  setReplyImage: (f: File | null) => void;
-  onSend: () => void;
-  onCancel: () => void;
-  toUsername?: string;
-  fileRef: React.RefObject<HTMLInputElement>;
-}
-
-const ReplyComposer: React.FC<ReplyComposerProps> = ({
-  replyContent, setReplyContent, replyImage, setReplyImage, onSend, onCancel, toUsername, fileRef,
-}) => {
-  return (
-    <div className="mt-2 space-y-1.5">
-      {replyImage && (
-        <div className="relative inline-block">
-          <img src={URL.createObjectURL(replyImage)} alt="" className="h-14 rounded-md" />
-          <button onClick={() => setReplyImage(null)} className="absolute -top-1 -right-1 bg-destructive text-destructive-foreground rounded-full p-0.5">
-            <X className="w-3 h-3" />
-          </button>
-        </div>
-      )}
-      <div className="flex gap-1.5 items-center">
-        <input ref={fileRef} type="file" accept="image/*" hidden onChange={e => setReplyImage(e.target.files?.[0] || null)} />
-        <input
-          value={replyContent}
-          onChange={e => setReplyContent(e.target.value)}
-          onKeyDown={e => e.key === 'Enter' && !e.shiftKey && (e.preventDefault(), onSend())}
-          placeholder={toUsername ? `Reply to @${toUsername}...` : 'Write a reply...'}
-          className="flex-1 text-sm bg-muted/50 rounded-full px-3 py-1.5 outline-none"
-        />
-        <Button onClick={onSend} size="sm" className="h-7 px-3 rounded-full text-xs">Send</Button>
-        <Button onClick={onCancel} size="sm" variant="ghost" className="h-7 w-7 p-0 rounded-full">
-          <X className="h-3.5 w-3.5" />
-        </Button>
       </div>
     </div>
   );
