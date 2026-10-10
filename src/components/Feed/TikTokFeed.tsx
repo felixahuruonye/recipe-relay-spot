@@ -1459,14 +1459,16 @@ const TikTokPost: React.FC<{
 
         <button onClick={onShare} className="flex flex-col items-center gap-0.5">
           <Share2 className="w-6 h-6 text-white drop-shadow-lg" />
+          <span className="text-white text-[10px] font-bold">{formatCount((post as any).share_count || (post as any).shares_count || 0)}</span>
         </button>
 
         <button onClick={() => handleAction(onSendToFriend, 'Login to send')} className="flex flex-col items-center gap-0.5">
           <Send className="w-6 h-6 text-white drop-shadow-lg" />
+          <span className="text-white text-[10px] font-bold">{formatCount((post as any).send_count || (post as any).sends_count || 0)}</span>
         </button>
 
-        {/* Send Star button for previously seen posts */}
-        {hasSeenBefore && !isOwnPost && (
+        {/* Tip button – always visible on every post (except own posts) */}
+        {!isOwnPost && (
           <button onClick={() => handleAction(onSendStar, 'Login to send stars')} className="flex flex-col items-center gap-0.5">
             <Star className="w-6 h-6 text-yellow-400 drop-shadow-lg" />
             <span className="text-yellow-400 text-[8px] font-bold">Tip</span>
