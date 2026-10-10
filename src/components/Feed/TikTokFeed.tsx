@@ -1491,18 +1491,21 @@ const TikTokPost: React.FC<{
               <Badge className="bg-yellow-400 text-black text-[9px] px-1.5 py-0 h-4 font-bold">VIP</Badge>
             )}
           </button>
-          <p className="text-white text-sm leading-relaxed line-clamp-2 drop-shadow-lg">
-            {post.title}
-            {post.body && hasMedia && <span className="text-white/70"> {post.body.slice(0, 80)}</span>}
+          <div className="drop-shadow-lg">
+            <p className="text-white text-sm leading-relaxed line-clamp-2">
+              {post.title}
+              {post.body && <span className="text-white/70"> {post.body}</span>}
+            </p>
             {captionNeedsExpand && (
               <button
+                type="button"
                 onClick={(e) => { e.stopPropagation(); openCaption(); }}
-                className="ml-1 font-semibold text-white/90 underline underline-offset-2"
+                className="mt-0.5 font-semibold text-white/90 underline underline-offset-2 text-sm"
               >
                 View More
               </button>
             )}
-          </p>
+          </div>
           <div className="flex items-center gap-2 flex-wrap">
             <Badge
               variant="outline"
@@ -2143,6 +2146,28 @@ const TikTokFeed: React.FC = () => {
         setUsers(usersMap);
         setPostLikes(likesMap);
         setPostCommentCounts(commentCountMap);
+        // Load share + send counts from post_shares so the side icons show real numbers
+        try {
+          const { data: shareRows } = await supabase
+            .from('post_shares')
+            .select('post_id, share_type')
+            .in('post_id', allPosts.map((p: any) => p.id));
+          const shareMap: Record<string, number> = {};
+          const sendMap: Record<string, number> = {};
+          (shareRows || []).forEach((r: any) => {
+            if (r.share_type === 'send') {
+              sendMap[r.post_id] = (sendMap[r.post_id] || 0) + 1;
+            } else {
+              shareMap[r.post_id] = (shareMap[r.post_id] || 0) + 1;
+            }
+          });
+          // Attach onto posts for the card to read
+          allPosts.forEach((p: any) => {
+            p.share_count = shareMap[p.id] || 0;
+            p.send_count = sendMap[p.id] || 0;
+          });
+        } catch (_) { /* non-fatal */ }
+
         setPostViewCounts(viewCountMap);
         setNewPostsAvailable(0);
       } else {
