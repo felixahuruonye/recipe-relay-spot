@@ -2487,31 +2487,6 @@ const TikTokFeed: React.FC = () => {
     { icon: '🎤', label: 'Musician Dashboard', path: '/musician' },
   ];
 
-  if (loading) {
-    // Instant content-shaped skeleton instead of a full-screen branded splash.
-    // TikTok never blocks the whole screen while data loads - it shows the
-    // shape of the content immediately, which reads as "fast" even when the
-    // network hasn't finished. Keeping the same shell (black bg, max-w-[480px])
-    // means there's no layout jump once real posts arrive.
-    return (
-      <div className="h-[100dvh] bg-black flex justify-center">
-        <div className="relative w-full max-w-[480px] h-full overflow-hidden">
-          <Skeleton className="absolute inset-0 rounded-none bg-neutral-900" />
-          <div className="absolute inset-0 flex flex-col justify-end p-4 pb-24 gap-3">
-            <Skeleton className="h-4 w-24 rounded-full bg-neutral-700" />
-            <Skeleton className="h-5 w-3/4 rounded-md bg-neutral-700" />
-            <Skeleton className="h-4 w-1/2 rounded-md bg-neutral-700" />
-          </div>
-          <div className="absolute right-3 bottom-32 flex flex-col items-center gap-6">
-            {[0, 1, 2].map((i) => (
-              <Skeleton key={i} className="w-10 h-10 rounded-full bg-neutral-700" />
-            ))}
-          </div>
-        </div>
-      </div>
-    );
-  }
-
   // Pull-to-refresh: must use real (non-React-synthetic) touch listeners
   // with { passive: false }. React attaches touchstart/touchmove as
   // passive by default for scroll performance, which silently makes
@@ -2563,6 +2538,32 @@ const TikTokFeed: React.FC = () => {
       el.removeEventListener('touchend', onEnd);
     };
   }, [isPullRefreshing]);
+
+  if (loading) {
+    // Instant content-shaped skeleton instead of a full-screen branded splash.
+    // TikTok never blocks the whole screen while data loads - it shows the
+    // shape of the content immediately, which reads as "fast" even when the
+    // network hasn't finished. Keeping the same shell (black bg, max-w-[480px])
+    // means there's no layout jump once real posts arrive.
+    return (
+      <div className="h-[100dvh] bg-black flex justify-center">
+        <div className="relative w-full max-w-[480px] h-full overflow-hidden">
+          <Skeleton className="absolute inset-0 rounded-none bg-neutral-900" />
+          <div className="absolute inset-0 flex flex-col justify-end p-4 pb-24 gap-3">
+            <Skeleton className="h-4 w-24 rounded-full bg-neutral-700" />
+            <Skeleton className="h-5 w-3/4 rounded-md bg-neutral-700" />
+            <Skeleton className="h-4 w-1/2 rounded-md bg-neutral-700" />
+          </div>
+          <div className="absolute right-3 bottom-32 flex flex-col items-center gap-6">
+            {[0, 1, 2].map((i) => (
+              <Skeleton key={i} className="w-10 h-10 rounded-full bg-neutral-700" />
+            ))}
+          </div>
+        </div>
+      </div>
+    );
+  }
+
 
   return (
     <>
