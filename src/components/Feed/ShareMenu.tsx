@@ -157,15 +157,25 @@ export const ShareMenu = ({ postId, postTitle, postImage, postDescription, postM
     }
   };
 
+  const trackShare = (shareType: string) => {
+    if (user) {
+      supabase.from('post_shares').insert({
+        post_id: postId,
+        user_id: user.id,
+        share_type: shareType,
+      }).then(() => {});
+    }
+  };
+
   const copyLink = async () => {
     try {
-      // Copy with formatted text for better sharing
       const copyText = `${shareText}\n\n${fullShareUrl}`;
       await navigator.clipboard.writeText(copyText);
+      trackShare('copy');
       toast({ title: 'Copied!', description: 'Link and preview info copied to clipboard' });
     } catch {
-      // Fallback
       navigator.clipboard.writeText(fullShareUrl);
+      trackShare('copy');
       toast({ title: 'Copied!', description: 'Link copied to clipboard' });
     }
   };
