@@ -71,7 +71,6 @@ export const CommentSection = ({ postId, onCountChange }: CommentSectionProps) =
   const [newComment, setNewComment] = useState('');
   const [newCommentImage, setNewCommentImage] = useState<File | null>(null);
   const [showStickers, setShowStickers] = useState(false);
-  // Single reply target – drives the MAIN input only (no nested boxes)
   const [replyTo, setReplyTo] = useState<{
     commentId: string;
     parentReplyId?: string;
@@ -80,6 +79,8 @@ export const CommentSection = ({ postId, onCountChange }: CommentSectionProps) =
   const [editingComment, setEditingComment] = useState<string | null>(null);
   const [editContent, setEditContent] = useState('');
   const [showReplies, setShowReplies] = useState<Record<string, boolean>>({});
+  const [myAvatar, setMyAvatar] = useState<string | null>(null);
+  const [myUsername, setMyUsername] = useState<string>('');
   const fileInputRef = useRef<HTMLInputElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const listRef = useRef<HTMLDivElement>(null);
@@ -87,13 +88,28 @@ export const CommentSection = ({ postId, onCountChange }: CommentSectionProps) =
   const { toast } = useToast();
   const navigate = useNavigate();
 
+  // Load current user's real avatar
+  useEffect(() => {
+    if (!user) { setMyAvatar(null); return; }
+    supabase
+      .from('user_profiles')
+      .select('avatar_url, username')
+      .eq('id', user.id)
+      .maybeSingle()
+      .then(({ data }) => {
+        if (data) {
+          setMyAvatar(data.avatar_url || null);
+          setMyUsername(data.username || '');
+        }
+      });
+  }, [user]);
+
   const goToProfile = (userId: string) => {
     if (!userId) return;
     navigate(`/profile/${userId}`);
   };
 
   const fetchComments = useCallback(async () => {
-    // Parallel fetch for speed
     const [commentsRes, reactionsRes, repliesRes] = await Promise.all([
       supabase
         .from('post_comments')
@@ -101,9 +117,7 @@ export const CommentSection = ({ postId, onCountChange }: CommentSectionProps) =
         .eq('post_id', postId)
         .eq('is_hidden', false)
         .order('created_at', { ascending: true }),
-      supabase
-        .from('comment_reactions')
-        .select('comment_id, user_id'),
+      supabase.from('comment_reactions').select('comment_id, user_id'),
       supabase
         .from('comment_replies')
         .select('id, comment_id, user_id, content, image_url, parent_reply_id, created_at')
@@ -122,7 +136,6 @@ export const CommentSection = ({ postId, onCountChange }: CommentSectionProps) =
     const allReactions = (reactionsRes.data || []).filter((r: any) => commentIds.has(r.comment_id));
     const allReplies = (repliesRes.data || []).filter((r: any) => commentIds.has(r.comment_id));
 
-    // Collect every user id we need profiles for
     const userIds = new Set<string>();
     commentsData.forEach((c: any) => userIds.add(c.user_id));
     allReplies.forEach((r: any) => userIds.add(r.user_id));
@@ -186,20 +199,20 @@ export const CommentSection = ({ postId, onCountChange }: CommentSectionProps) =
 
   const startReply = (commentId: string, toUsername: string, parentReplyId?: string) => {
     setReplyTo({ commentId, toUsername, parentReplyId });
-    // Focus main input so user can type immediately
     setTimeout(() => inputRef.current?.focus(), 50);
   };
 
   const cancelReply = () => setReplyTo(null);
 
   const handleSend = async () => {
-    if ((!newComment.trim() && !newCommentImage) || !user) return;
+    const hasText = !!newComment.trim();
+    const hasImage = !!newCommentImage;
+    if ((!hasText && !hasImage) || !user) return;
 
     let image_url: string | null = null;
     if (newCommentImage) image_url = await uploadImage(newCommentImage);
 
     if (replyTo) {
-      // This is a reply (to a comment or to a sub-reply)
       const { error } = await supabase.from('comment_replies').insert({
         comment_id: replyTo.commentId,
         user_id: user.id,
@@ -211,10 +224,8 @@ export const CommentSection = ({ postId, onCountChange }: CommentSectionProps) =
         toast({ title: 'Error', description: 'Failed to add reply', variant: 'destructive' });
         return;
       }
-      // Expand replies for that comment so the new one is visible
       setShowReplies(prev => ({ ...prev, [replyTo.commentId]: true }));
     } else {
-      // Top-level comment
       const { error } = await supabase.from('post_comments').insert({
         post_id: postId,
         user_id: user.id,
@@ -269,9 +280,10 @@ export const CommentSection = ({ postId, onCountChange }: CommentSectionProps) =
     toast({ title: 'Reported' });
   };
 
+  const canSend = !!(newComment.trim() || newCommentImage);
+
   return (
     <div className="flex flex-col h-full min-h-0">
-      {/* Comments list */}
       <div ref={listRef} className="flex-1 overflow-y-auto px-3 pt-1 pb-2 space-y-4">
         {loading && comments.length === 0 && (
           <div className="py-8 text-center text-sm text-muted-foreground">Loading comments…</div>
@@ -290,10 +302,9 @@ export const CommentSection = ({ postId, onCountChange }: CommentSectionProps) =
           return (
             <div key={comment.id} className="space-y-1">
               <div className="flex gap-2.5">
-                {/* Real avatar – clickable → profile */}
-                <button onClick={() => goToProfile(comment.user_id)} className="shrink-0">
-                  <Avatar className={`h-9 w-9 ${color}`}>
-                    <AvatarImage src={comment.user_profile?.avatar_url || undefined} />
+                <button type="button" onClick={() => goToProfile(comment.user_id)} className="shrink-0">
+                  <Avatar className={`h-9 w-9 ${!comment.user_profile?.avatar_url ? color : ''}`}>
+                    <AvatarImage src={comment.user_profile?.avatar_url || undefined} alt={uname} />
                     <AvatarFallback className="text-white text-sm font-semibold bg-transparent">
                       {uname[0]?.toUpperCase()}
                     </AvatarFallback>
@@ -303,6 +314,7 @@ export const CommentSection = ({ postId, onCountChange }: CommentSectionProps) =
                 <div className="flex-1 min-w-0">
                   <div className="flex items-baseline gap-1.5 flex-wrap">
                     <button
+                      type="button"
                       onClick={() => goToProfile(comment.user_id)}
                       className="font-semibold text-[13px] text-foreground hover:underline"
                     >
@@ -335,15 +347,17 @@ export const CommentSection = ({ postId, onCountChange }: CommentSectionProps) =
 
                   <div className="flex items-center gap-3 mt-1.5 text-[12px]">
                     <button
+                      type="button"
                       onClick={() => handleReaction(comment.id)}
                       className={`flex items-center gap-0.5 ${hasReacted ? 'text-red-500' : 'text-muted-foreground'}`}
                     >
                       <Heart className={`h-3.5 w-3.5 ${hasReacted ? 'fill-current' : ''}`} />
                       {(comment.reactions?.length || 0) > 0 && (
-                        <span className="tabular-nums">{comment.reactions.length}</span>
+                        <span className="tabular-nums">{comment.reactions!.length}</span>
                       )}
                     </button>
                     <button
+                      type="button"
                       onClick={() => startReply(comment.id, uname)}
                       className="text-muted-foreground font-medium hover:text-foreground"
                     >
@@ -351,6 +365,7 @@ export const CommentSection = ({ postId, onCountChange }: CommentSectionProps) =
                     </button>
                     {replies.length > 0 && (
                       <button
+                        type="button"
                         onClick={() => setShowReplies(p => ({ ...p, [comment.id]: !p[comment.id] }))}
                         className="text-blue-500 font-medium"
                       >
@@ -360,7 +375,7 @@ export const CommentSection = ({ postId, onCountChange }: CommentSectionProps) =
                     )}
                     <DropdownMenu>
                       <DropdownMenuTrigger asChild>
-                        <button className="text-muted-foreground ml-auto">···</button>
+                        <button type="button" className="text-muted-foreground ml-auto">···</button>
                       </DropdownMenuTrigger>
                       <DropdownMenuContent align="end">
                         {isOwner ? (
@@ -384,7 +399,6 @@ export const CommentSection = ({ postId, onCountChange }: CommentSectionProps) =
                     </DropdownMenu>
                   </div>
 
-                  {/* Nested replies – clean indentation, no extra input boxes */}
                   {showReplies[comment.id] && replies.length > 0 && (
                     <div className="mt-2 ml-1 space-y-3 border-l-2 border-border/50 pl-3">
                       {replies.map(reply => {
@@ -392,9 +406,9 @@ export const CommentSection = ({ postId, onCountChange }: CommentSectionProps) =
                         const rcolor = avatarColor(rname);
                         return (
                           <div key={reply.id} className="flex gap-2">
-                            <button onClick={() => goToProfile(reply.user_id)} className="shrink-0">
-                              <Avatar className={`h-7 w-7 ${rcolor}`}>
-                                <AvatarImage src={reply.user_profile?.avatar_url || undefined} />
+                            <button type="button" onClick={() => goToProfile(reply.user_id)} className="shrink-0">
+                              <Avatar className={`h-7 w-7 ${!reply.user_profile?.avatar_url ? rcolor : ''}`}>
+                                <AvatarImage src={reply.user_profile?.avatar_url || undefined} alt={rname} />
                                 <AvatarFallback className="text-white text-xs font-semibold bg-transparent">
                                   {rname[0]?.toUpperCase()}
                                 </AvatarFallback>
@@ -403,6 +417,7 @@ export const CommentSection = ({ postId, onCountChange }: CommentSectionProps) =
                             <div className="flex-1 min-w-0">
                               <div className="flex items-baseline gap-1.5">
                                 <button
+                                  type="button"
                                   onClick={() => goToProfile(reply.user_id)}
                                   className="font-semibold text-[12px] hover:underline"
                                 >
@@ -419,6 +434,7 @@ export const CommentSection = ({ postId, onCountChange }: CommentSectionProps) =
                                 <img src={reply.image_url} alt="" className="mt-1 rounded-md max-h-32 object-cover" />
                               )}
                               <button
+                                type="button"
                                 className="text-[11px] text-muted-foreground font-medium mt-0.5 hover:text-foreground"
                                 onClick={() => startReply(comment.id, rname, reply.id)}
                               >
@@ -442,6 +458,7 @@ export const CommentSection = ({ postId, onCountChange }: CommentSectionProps) =
         {QUICK_REACTIONS.map(e => (
           <button
             key={e}
+            type="button"
             onClick={() => handleQuickReaction(e)}
             className="text-xl leading-none p-1.5 rounded-full hover:bg-muted active:scale-90 transition-transform"
           >
@@ -450,15 +467,14 @@ export const CommentSection = ({ postId, onCountChange }: CommentSectionProps) =
         ))}
       </div>
 
-      {/* Main composer – used for both new comments AND all replies */}
+      {/* Main composer */}
       <div className="px-3 pb-3 pt-1 border-t border-border/40 bg-background">
-        {/* "Replying to @user" chip */}
         {replyTo && (
           <div className="flex items-center gap-2 mb-2 text-xs text-muted-foreground">
             <span>
               Replying to <span className="font-semibold text-foreground">@{replyTo.toUsername}</span>
             </span>
-            <button onClick={cancelReply} className="p-0.5 rounded-full hover:bg-muted">
+            <button type="button" onClick={cancelReply} className="p-0.5 rounded-full hover:bg-muted">
               <X className="h-3.5 w-3.5" />
             </button>
           </div>
@@ -468,6 +484,7 @@ export const CommentSection = ({ postId, onCountChange }: CommentSectionProps) =
           <div className="relative inline-block mb-2">
             <img src={URL.createObjectURL(newCommentImage)} alt="" className="h-16 rounded-lg" />
             <button
+              type="button"
               onClick={() => setNewCommentImage(null)}
               className="absolute -top-1 -right-1 bg-destructive text-destructive-foreground rounded-full p-0.5"
             >
@@ -478,7 +495,7 @@ export const CommentSection = ({ postId, onCountChange }: CommentSectionProps) =
         {showStickers && (
           <div className="grid grid-cols-8 gap-1 p-2 mb-2 bg-muted rounded-lg">
             {STICKERS.map(s => (
-              <button key={s} onClick={() => setNewComment(prev => prev + s)} className="text-xl hover:scale-125 transition-transform">
+              <button key={s} type="button" onClick={() => setNewComment(prev => prev + s)} className="text-xl hover:scale-125 transition-transform">
                 {s}
               </button>
             ))}
@@ -486,10 +503,11 @@ export const CommentSection = ({ postId, onCountChange }: CommentSectionProps) =
         )}
 
         <div className="flex items-center gap-2">
-          <button onClick={() => user && goToProfile(user.id)} className="shrink-0">
+          <button type="button" onClick={() => user && goToProfile(user.id)} className="shrink-0">
             <Avatar className="h-8 w-8">
+              <AvatarImage src={myAvatar || undefined} alt={myUsername || 'You'} />
               <AvatarFallback className="bg-orange-400 text-white text-xs">
-                {user?.email?.[0]?.toUpperCase() || '?'}
+                {(myUsername || user?.email || '?')[0]?.toUpperCase()}
               </AvatarFallback>
             </Avatar>
           </button>
@@ -502,7 +520,7 @@ export const CommentSection = ({ postId, onCountChange }: CommentSectionProps) =
               onKeyDown={e => {
                 if (e.key === 'Enter' && !e.shiftKey) {
                   e.preventDefault();
-                  handleSend();
+                  if (canSend) handleSend();
                 }
               }}
               placeholder={
@@ -530,12 +548,15 @@ export const CommentSection = ({ postId, onCountChange }: CommentSectionProps) =
             </button>
           </div>
 
-          {/* Always show send when there is content or when replying */}
-          {(newComment.trim() || newCommentImage || replyTo) && (
-            <Button size="icon" className="h-8 w-8 rounded-full shrink-0" onClick={handleSend}>
-              <Send className="h-3.5 w-3.5" />
-            </Button>
-          )}
+          {/* Send button – always visible when there is text or an image */}
+          <Button
+            size="icon"
+            className={`h-8 w-8 rounded-full shrink-0 transition-opacity ${canSend ? 'opacity-100' : 'opacity-40'}`}
+            onClick={handleSend}
+            disabled={!canSend}
+          >
+            <Send className="h-3.5 w-3.5" />
+          </Button>
         </div>
       </div>
     </div>
