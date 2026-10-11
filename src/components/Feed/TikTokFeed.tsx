@@ -542,16 +542,16 @@ const SendToFriend: React.FC<{
     const shareMsg = postThumbnail
       ? `📢 Shared: ${postTitle}\n🖼️ ${postThumbnail}\n${window.location.origin}/?post=${postId}`
       : `📢 Shared: ${postTitle}\n${window.location.origin}/?post=${postId}`;
-    await supabase.from('private_messages').insert({
-      from_user_id: user.id, to_user_id: toUserId, message: shareMsg,
-      media_url: postThumbnail || null,
-    });
-    // Track send count so the side icon updates for everyone
-    await supabase.from('post_shares').insert({
-      post_id: postId, user_id: user.id, share_type: 'send',
-    } as any);
+    // Optimistic: close immediately, network in background
     toast({ title: 'Sent!', description: 'Post shared to friend' });
     onClose();
+    supabase.from('private_messages').insert({
+      from_user_id: user.id, to_user_id: toUserId, message: shareMsg,
+      media_url: postThumbnail || null,
+    }).then(() => {});
+    supabase.from('post_shares').insert({
+      post_id: postId, user_id: user.id, share_type: 'send',
+    } as any).then(() => {});
   };
 
   const sendToGroup = async (groupId: string) => {
@@ -1457,15 +1457,19 @@ const TikTokPost: React.FC<{
           <span className="text-white text-[10px] font-bold">{formatCount(likesCount)}</span>
         </button>
 
-        <button onClick={() => handleAction(onComment, 'Login to comment')} className="flex flex-col items-center gap-0.5">
-          <MessageCircle className="w-7 h-7 text-white drop-shadow-lg" />
-          <span className="text-white text-[10px] font-bold">{formatCount(commentsCount)}</span>
-        </button>
+        {(post as any).comments_enabled !== false && (
+          <button onClick={() => handleAction(onComment, 'Login to comment')} className="flex flex-col items-center gap-0.5">
+            <MessageCircle className="w-7 h-7 text-white drop-shadow-lg" />
+            <span className="text-white text-[10px] font-bold">{formatCount(commentsCount)}</span>
+          </button>
+        )}
 
-        <div className="flex flex-col items-center gap-0.5">
-          <Eye className="w-6 h-6 text-white/80 drop-shadow-lg" />
-          <span className="text-white/80 text-[10px]">{formatCount(viewCount)}</span>
-        </div>
+        {(post as any).views_visible !== false && (
+          <div className="flex flex-col items-center gap-0.5">
+            <Eye className="w-6 h-6 text-white/80 drop-shadow-lg" />
+            <span className="text-white/80 text-[10px]">{formatCount(viewCount)}</span>
+          </div>
+        )}
 
         <button onClick={onShare} className="flex flex-col items-center gap-0.5">
           <Share2 className="w-6 h-6 text-white drop-shadow-lg" />
