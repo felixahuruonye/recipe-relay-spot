@@ -556,13 +556,15 @@ const SendToFriend: React.FC<{
     }).then(() => {});
     supabase.from('post_shares').insert({
       post_id: postId, user_id: user.id, share_type: 'send',
-    } as any).then(() => {});
-    // Persist send_count on post row
-    supabase.from('posts').select('send_count').eq('id', postId).maybeSingle()
-      .then(({ data }) => {
-        const next = Number((data as any)?.send_count || 0) + 1;
-        supabase.from('posts').update({ send_count: next } as any).eq('id', postId).then(() => {});
-      });
+    } as any).then(({ error }) => {
+      if (error) console.warn('post_shares send insert', error.message);
+    });
+    supabase.rpc('increment_post_counter', {
+      p_post_id: postId,
+      p_field: 'send_count',
+    } as any).then(({ error }) => {
+      if (error) console.warn('increment send_count', error.message);
+    });
   };
 
   const sendToGroup = async (groupId: string) => {
@@ -1007,30 +1009,24 @@ const EnhancedShareMenu: React.FC<{
   
   const trackShare = (shareType: string) => {
     onShareTracked?.(); // instant parent count bump
+    const field = shareType === 'send' ? 'send_count' : 'share_count';
+    // 1) Log event
     if (user) {
-      // Log event (may fail under RLS – non-fatal)
       supabase.from('post_shares').insert({
         post_id: post.id,
         user_id: user.id,
         share_type: shareType,
-      } as any).then(() => {});
-      // Persist on the post row so counts survive refresh
-      const field = shareType === 'send' ? 'send_count' : 'share_count';
-      supabase.rpc('increment_post_counter' as any, {
-        p_post_id: post.id,
-        p_field: field,
-      }).then(({ error }) => {
-        if (error) {
-          // Fallback: read-modify-write
-          supabase.from('posts').select('share_count, send_count').eq('id', post.id).maybeSingle()
-            .then(({ data }) => {
-              if (!data) return;
-              const next = Number((data as any)[field] || 0) + 1;
-              supabase.from('posts').update({ [field]: next } as any).eq('id', post.id).then(() => {});
-            });
-        }
+      } as any).then(({ error }) => {
+        if (error) console.warn('post_shares insert', error.message);
       });
     }
+    // 2) Persist counter via SECURITY DEFINER rpc (works even when post is not yours)
+    supabase.rpc('increment_post_counter', {
+      p_post_id: post.id,
+      p_field: field,
+    } as any).then(({ error }) => {
+      if (error) console.warn('increment_post_counter', error.message);
+    });
   };
 
   const copyLink = () => {
