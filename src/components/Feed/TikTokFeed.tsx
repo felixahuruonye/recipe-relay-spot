@@ -2154,6 +2154,7 @@ const TikTokFeed: React.FC = () => {
         setPosts(allPosts as Post[]);
         setOrderedPostIds(rankPostIds(allPosts as Post[], user?.id || 'guest', sessionSeedRef.current));
         setNewPostsAvailable(0);
+        setLoading(false); // stop spinner as soon as posts are on screen
 
         const postIds = allPosts.map((p: any) => p.id);
         const userIds = [...new Set(allPosts.map((p: any) => p.user_id))];
