@@ -550,21 +550,32 @@ const SendToFriend: React.FC<{
     onSendTracked?.();
     toast({ title: 'Sent!', description: 'Post shared to friend' });
     onClose();
+    // Message in background
     supabase.from('private_messages').insert({
       from_user_id: user.id, to_user_id: toUserId, message: shareMsg,
       media_url: postThumbnail || null,
     }).then(() => {});
-    supabase.from('post_shares').insert({
-      post_id: postId, user_id: user.id, share_type: 'send',
-    } as any).then(({ error }) => {
-      if (error) console.warn('post_shares send insert', error.message);
-    });
-    supabase.rpc('increment_post_counter', {
-      p_post_id: postId,
-      p_field: 'send_count',
-    } as any).then(({ error }) => {
-      if (error) console.warn('increment send_count', error.message);
-    });
+    // Same persistence pattern as share (works after refresh)
+    (async () => {
+      const { error } = await supabase.from('post_shares').insert({
+        post_id: postId,
+        user_id: user.id,
+        share_type: 'send',
+      } as any);
+      if (error) {
+        const msg = String(error.message || '');
+        if (!msg.includes('duplicate') && error.code !== '23505') {
+          console.warn('post_shares send insert failed', error.message);
+        }
+      }
+      try {
+        const { data: row } = await supabase.from('posts').select('send_count').eq('id', postId).maybeSingle();
+        const current = Number((row as any)?.send_count || 0);
+        await supabase.from('posts').update({ send_count: current + 1 } as any).eq('id', postId);
+      } catch (e) {
+        console.warn('send_count bump failed', e);
+      }
+    })();
   };
 
   const sendToGroup = async (groupId: string) => {
@@ -576,6 +587,18 @@ const SendToFriend: React.FC<{
       group_id: groupId, user_id: user.id, message: shareMsg,
       media_url: postThumbnail || null,
     });
+    onSendTracked?.();
+    // Persist send count like friend-send
+    (async () => {
+      await supabase.from('post_shares').insert({
+        post_id: postId, user_id: user.id, share_type: 'send',
+      } as any);
+      try {
+        const { data: row } = await supabase.from('posts').select('send_count').eq('id', postId).maybeSingle();
+        const current = Number((row as any)?.send_count || 0);
+        await supabase.from('posts').update({ send_count: current + 1 } as any).eq('id', postId);
+      } catch {}
+    })();
     toast({ title: 'Sent!', description: 'Post shared to group' });
     onClose();
   };
