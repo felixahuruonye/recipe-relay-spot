@@ -1320,7 +1320,7 @@ const TikTokPost: React.FC<{
         <video
           key={`${activeMedia}-${mediaRetryKey}`}
           ref={videoRef}
-          src={mediaRetryKey > 0 ? `${activeMedia}${activeMedia.includes('?') ? '&' : '?'}retry=${mediaRetryKey}` : activeMedia}
+          src={isActive ? (mediaRetryKey > 0 ? `${activeMedia}${activeMedia.includes('?') ? '&' : '?'}retry=${mediaRetryKey}` : activeMedia) : undefined}
           poster={post.thumbnail_url || undefined}
           className="absolute inset-0 w-full h-full object-cover"
           loop={!autoScroll}
