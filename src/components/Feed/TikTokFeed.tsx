@@ -557,6 +557,12 @@ const SendToFriend: React.FC<{
     supabase.from('post_shares').insert({
       post_id: postId, user_id: user.id, share_type: 'send',
     } as any).then(() => {});
+    // Persist send_count on post row
+    supabase.from('posts').select('send_count').eq('id', postId).maybeSingle()
+      .then(({ data }) => {
+        const next = Number((data as any)?.send_count || 0) + 1;
+        supabase.from('posts').update({ send_count: next } as any).eq('id', postId).then(() => {});
+      });
   };
 
   const sendToGroup = async (groupId: string) => {
@@ -1002,11 +1008,28 @@ const EnhancedShareMenu: React.FC<{
   const trackShare = (shareType: string) => {
     onShareTracked?.(); // instant parent count bump
     if (user) {
+      // Log event (may fail under RLS – non-fatal)
       supabase.from('post_shares').insert({
         post_id: post.id,
         user_id: user.id,
         share_type: shareType,
       } as any).then(() => {});
+      // Persist on the post row so counts survive refresh
+      const field = shareType === 'send' ? 'send_count' : 'share_count';
+      supabase.rpc('increment_post_counter' as any, {
+        p_post_id: post.id,
+        p_field: field,
+      }).then(({ error }) => {
+        if (error) {
+          // Fallback: read-modify-write
+          supabase.from('posts').select('share_count, send_count').eq('id', post.id).maybeSingle()
+            .then(({ data }) => {
+              if (!data) return;
+              const next = Number((data as any)[field] || 0) + 1;
+              supabase.from('posts').update({ [field]: next } as any).eq('id', post.id).then(() => {});
+            });
+        }
+      });
     }
   };
 
@@ -2155,6 +2178,15 @@ const TikTokFeed: React.FC = () => {
         setOrderedPostIds(rankPostIds(allPosts as Post[], user?.id || 'guest', sessionSeedRef.current));
         setNewPostsAvailable(0);
         setLoading(false); // stop spinner as soon as posts are on screen
+        // Seed counts from columns on the post row (survives refresh)
+        const seedShare: Record<string, number> = {};
+        const seedSend: Record<string, number> = {};
+        allPosts.forEach((p: any) => {
+          seedShare[p.id] = Number(p.share_count || p.shares_count || 0);
+          seedSend[p.id] = Number(p.send_count || p.sends_count || 0);
+        });
+        setPostShareCounts(seedShare);
+        setPostSendCounts(seedSend);
 
         const postIds = allPosts.map((p: any) => p.id);
         const userIds = [...new Set(allPosts.map((p: any) => p.user_id))];
@@ -2195,9 +2227,18 @@ const TikTokFeed: React.FC = () => {
 
         const shareMap: Record<string, number> = {};
         const sendMap: Record<string, number> = {};
+        allPosts.forEach((p: any) => {
+          shareMap[p.id] = Number(p.share_count || p.shares_count || 0);
+          sendMap[p.id] = Number(p.send_count || p.sends_count || 0);
+        });
         (sharesRes.data || []).forEach((r: any) => {
           if (r.share_type === 'send') sendMap[r.post_id] = (sendMap[r.post_id] || 0) + 1;
           else shareMap[r.post_id] = (shareMap[r.post_id] || 0) + 1;
+        });
+        // Prefer the higher of denormalized column vs aggregated rows
+        allPosts.forEach((p: any) => {
+          shareMap[p.id] = Math.max(shareMap[p.id] || 0, Number(p.share_count || 0));
+          sendMap[p.id] = Math.max(sendMap[p.id] || 0, Number(p.send_count || 0));
         });
         setPostShareCounts(shareMap);
         setPostSendCounts(sendMap);
