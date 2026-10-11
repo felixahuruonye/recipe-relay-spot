@@ -458,9 +458,12 @@ const SoundDrilldown: React.FC<{
             <span>❤️ {totalLikes.toLocaleString()} likes</span>
             <span>💬 {totalComments.toLocaleString()} comments</span>
           </div>
-          <Button size="sm" className="w-full mt-3 gap-2" onClick={onUseSound}>
-            <Music2 className="w-4 h-4" /> Use this sound
-          </Button>
+          {/* Only allow reusing Community / Lenory Free sounds – hide for copyright/original */}
+          {(sourceLabel === 'Community' || sourceLabel === 'Lenory Free') && (
+            <Button size="sm" className="w-full mt-3 gap-2" onClick={onUseSound}>
+              <Music2 className="w-4 h-4" /> Use this sound
+            </Button>
+          )}
         </div>
         <div className="max-h-[calc(80vh-180px)] overflow-y-auto overscroll-contain">
           <div className="p-4 grid grid-cols-3 gap-1 pb-8">
