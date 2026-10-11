@@ -19,9 +19,10 @@ interface ShareMenuProps {
   postImage?: string;
   postDescription?: string;
   postMediaType?: string;
+  onShared?: () => void;
 }
 
-export const ShareMenu = ({ postId, postTitle, postImage, postDescription, postMediaType }: ShareMenuProps) => {
+export const ShareMenu = ({ postId, postTitle, postImage, postDescription, postMediaType, onShared }: ShareMenuProps) => {
   const [open, setOpen] = useState(false);
   const [groups, setGroups] = useState<any[]>([]);
   const { user } = useAuth();
@@ -158,6 +159,7 @@ export const ShareMenu = ({ postId, postTitle, postImage, postDescription, postM
   };
 
   const trackShare = (shareType: string) => {
+    onShared?.(); // optimistic parent count bump immediately
     if (user) {
       supabase.from('post_shares').insert({
         post_id: postId,
