@@ -954,33 +954,26 @@ const EnhancedShareMenu: React.FC<{
       toast({ title: 'Login required', description: 'Please login to bookmark posts' });
       return;
     }
-
+    const was = isBookmarked;
+    // Optimistic UI
+    setIsBookmarked(!was);
+    toast({ title: was ? 'Removed from bookmarks' : 'Added to bookmarks' });
     try {
-      if (isBookmarked) {
-        const { error } = await (supabase as any)
-          .from('user_bookmarks')
-          .delete()
-          .eq('item_type', 'post')
-          .eq('item_id', post.id)
-          .eq('user_id', user.id);
-        if (error) throw error;
-        setIsBookmarked(false);
-        toast({ title: 'Removed from bookmarks' });
+      if (was) {
+        await (supabase as any).from('user_bookmarks').delete()
+          .eq('item_type', 'post').eq('item_id', post.id).eq('user_id', user.id);
       } else {
-        const { error } = await (supabase as any)
-          .from('user_bookmarks')
-          .insert({ item_type: 'post', item_id: post.id, user_id: user.id });
-        if (error) throw error;
-        setIsBookmarked(true);
-        toast({ title: 'Added to bookmarks' });
+        await (supabase as any).from('user_bookmarks').insert({
+          item_type: 'post', item_id: post.id, user_id: user.id,
+        });
       }
     } catch (error: any) {
-      console.error('Error toggling bookmark:', error);
-      toast({ title: 'Error', description: error?.message || 'Failed to update bookmark', variant: 'destructive' });
+      setIsBookmarked(was); // revert
+      toast({ title: 'Error', description: error?.message || 'Failed', variant: 'destructive' });
     }
-    onClose();
   };
 
+  
   const copyLink = () => {
     navigator.clipboard.writeText(`${window.location.origin}/?post=${post.id}`);
     toast({ title: 'Link copied!' });
@@ -1333,7 +1326,7 @@ const TikTokPost: React.FC<{
           loop={!autoScroll}
           playsInline
           muted={isMuted}
-          preload="auto"
+          preload="none"
           controlsList="nodownload noremoteplayback noplaybackrate"
           disablePictureInPicture
           onContextMenu={(e) => e.preventDefault()}
@@ -1484,12 +1477,6 @@ const TikTokPost: React.FC<{
           <span className="text-white text-[10px] font-bold">{formatCount(sendCount)}</span>
         </button>
 
-        {!isOwnPost && (
-          <button onClick={() => handleAction(onBookmark, 'Login to bookmark')} className="flex flex-col items-center gap-0.5">
-            <Bookmark className={`w-6 h-6 drop-shadow-lg ${isBookmarked ? 'fill-white text-white' : 'text-white'}`} />
-            <span className="text-white text-[10px] font-bold">{formatCount(bookmarkCount)}</span>
-          </button>
-        )}
 
         {/* Tip button – always visible on every post (except own posts) */}
         {!isOwnPost && (
