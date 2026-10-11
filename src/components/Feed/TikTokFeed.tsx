@@ -1119,6 +1119,12 @@ const TikTokPost: React.FC<{
   onFollow: () => void;
   onComment: () => void;
   onShare: () => void;
+  shareCount: number;
+  sendCount: number;
+  bookmarkCount: number;
+  isBookmarked: boolean;
+  onBookmark: () => void;
+  
   onSendToFriend: () => void;
   onSoundDrilldown: () => void;
   onProfile: () => void;
@@ -1463,13 +1469,20 @@ const TikTokPost: React.FC<{
 
         <button onClick={onShare} className="flex flex-col items-center gap-0.5">
           <Share2 className="w-6 h-6 text-white drop-shadow-lg" />
-          <span className="text-white text-[10px] font-bold">{formatCount((post as any).share_count || (post as any).shares_count || 0)}</span>
+          <span className="text-white text-[10px] font-bold">{formatCount(shareCount)}</span>
         </button>
 
         <button onClick={() => handleAction(onSendToFriend, 'Login to send')} className="flex flex-col items-center gap-0.5">
           <Send className="w-6 h-6 text-white drop-shadow-lg" />
-          <span className="text-white text-[10px] font-bold">{formatCount((post as any).send_count || (post as any).sends_count || 0)}</span>
+          <span className="text-white text-[10px] font-bold">{formatCount(sendCount)}</span>
         </button>
+
+        {!isOwnPost && (
+          <button onClick={() => handleAction(onBookmark, 'Login to bookmark')} className="flex flex-col items-center gap-0.5">
+            <Bookmark className={`w-6 h-6 drop-shadow-lg ${isBookmarked ? 'fill-white text-white' : 'text-white'}`} />
+            <span className="text-white text-[10px] font-bold">{formatCount(bookmarkCount)}</span>
+          </button>
+        )}
 
         {/* Tip button – always visible on every post (except own posts) */}
         {!isOwnPost && (
@@ -1595,6 +1608,10 @@ const TikTokFeed: React.FC = () => {
   const [postLikes, setPostLikes] = useState<Record<string, any[]>>({});
   const [postViewCounts, setPostViewCounts] = useState<Record<string, number>>({});
   const [postCommentCounts, setPostCommentCounts] = useState<Record<string, number>>({});
+  const [postShareCounts, setPostShareCounts] = useState<Record<string, number>>({});
+  const [postSendCounts, setPostSendCounts] = useState<Record<string, number>>({});
+  const [postBookmarkCounts, setPostBookmarkCounts] = useState<Record<string, number>>({});
+  const [myBookmarks, setMyBookmarks] = useState<Set<string>>(new Set());
   const [loading, setLoading] = useState(true);
   const [activeIndex, setActiveIndex] = useState(0);
   const [isMuted, setIsMuted] = useState(false);
@@ -2145,33 +2162,43 @@ const TikTokFeed: React.FC = () => {
           setMusicTracks(mMap);
         }
 
+        // Share / send / bookmark counts (parallel, before setPosts so UI sees them)
+        const postIds = allPosts.map((p: any) => p.id);
+        const [shareRes, bookmarkRes] = await Promise.all([
+          supabase.from('post_shares').select('post_id, share_type').in('post_id', postIds),
+          (supabase as any).from('user_bookmarks').select('item_id').eq('item_type', 'post').in('item_id', postIds),
+        ]);
+        const shareMap: Record<string, number> = {};
+        const sendMap: Record<string, number> = {};
+        (shareRes.data || []).forEach((r: any) => {
+          if (r.share_type === 'send') sendMap[r.post_id] = (sendMap[r.post_id] || 0) + 1;
+          else shareMap[r.post_id] = (shareMap[r.post_id] || 0) + 1;
+        });
+        const bmMap: Record<string, number> = {};
+        const myBm = new Set<string>();
+        (bookmarkRes.data || []).forEach((r: any) => {
+          bmMap[r.item_id] = (bmMap[r.item_id] || 0) + 1;
+        });
+        // Also mark which ones *this* user bookmarked
+        if (user) {
+          const { data: mine } = await (supabase as any)
+            .from('user_bookmarks')
+            .select('item_id')
+            .eq('item_type', 'post')
+            .eq('user_id', user.id)
+            .in('item_id', postIds);
+          (mine || []).forEach((r: any) => myBm.add(r.item_id));
+        }
+        setPostShareCounts(shareMap);
+        setPostSendCounts(sendMap);
+        setPostBookmarkCounts(bmMap);
+        setMyBookmarks(myBm);
+
         setPosts(allPosts as Post[]);
         setOrderedPostIds(rankPostIds(allPosts as Post[], user?.id || 'guest', sessionSeedRef.current));
         setUsers(usersMap);
         setPostLikes(likesMap);
         setPostCommentCounts(commentCountMap);
-        // Load share + send counts from post_shares so the side icons show real numbers
-        try {
-          const { data: shareRows } = await supabase
-            .from('post_shares')
-            .select('post_id, share_type')
-            .in('post_id', allPosts.map((p: any) => p.id));
-          const shareMap: Record<string, number> = {};
-          const sendMap: Record<string, number> = {};
-          (shareRows || []).forEach((r: any) => {
-            if (r.share_type === 'send') {
-              sendMap[r.post_id] = (sendMap[r.post_id] || 0) + 1;
-            } else {
-              shareMap[r.post_id] = (shareMap[r.post_id] || 0) + 1;
-            }
-          });
-          // Attach onto posts for the card to read
-          allPosts.forEach((p: any) => {
-            p.share_count = shareMap[p.id] || 0;
-            p.send_count = sendMap[p.id] || 0;
-          });
-        } catch (_) { /* non-fatal */ }
-
         setPostViewCounts(viewCountMap);
         setNewPostsAvailable(0);
       } else {
