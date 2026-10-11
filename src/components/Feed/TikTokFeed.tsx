@@ -955,20 +955,27 @@ const EnhancedShareMenu: React.FC<{
       return;
     }
     const was = isBookmarked;
-    // Optimistic UI
+    // Optimistic UI – flip immediately
     setIsBookmarked(!was);
-    toast({ title: was ? 'Removed from bookmarks' : 'Added to bookmarks' });
     try {
       if (was) {
-        await (supabase as any).from('user_bookmarks').delete()
+        const { error } = await (supabase as any).from('user_bookmarks').delete()
           .eq('item_type', 'post').eq('item_id', post.id).eq('user_id', user.id);
+        if (error) throw error;
+        toast({ title: 'Removed from bookmarks' });
       } else {
-        await (supabase as any).from('user_bookmarks').insert({
+        const { error } = await (supabase as any).from('user_bookmarks').insert({
           item_type: 'post', item_id: post.id, user_id: user.id,
         });
+        // 23505 = unique_violation → already bookmarked; treat as success
+        if (error && error.code !== '23505' && !String(error.message || '').includes('duplicate key')) {
+          throw error;
+        }
+        toast({ title: 'Added to bookmarks' });
+        setIsBookmarked(true);
       }
     } catch (error: any) {
-      setIsBookmarked(was); // revert
+      setIsBookmarked(was); // revert only on real failure
       toast({ title: 'Error', description: error?.message || 'Failed', variant: 'destructive' });
     }
   };
@@ -2516,7 +2523,8 @@ const TikTokFeed: React.FC = () => {
       const dt = Date.now() - start.t;
       if (dt > 800) return;
       if (Math.abs(dx) < 50 || Math.abs(dx) < Math.abs(dy) * 1.1) return;
-      // Ask before switching pages so accidental swipes don't yank the user away
+      // Require a deliberate horizontal swipe + confirmation (avoids accidents)
+      if (Math.abs(dx) < 80) return;
       const target = dx < 0 ? 'explore' : 'storyline';
       if (target === 'storyline' && !user) {
         requireLogin('Login for stories');
