@@ -1007,26 +1007,31 @@ const EnhancedShareMenu: React.FC<{
   };
 
   
-  const trackShare = (shareType: string) => {
+  const trackShare = async (shareType: string) => {
     onShareTracked?.(); // instant parent count bump
-    const field = shareType === 'send' ? 'send_count' : 'share_count';
-    // 1) Log event
-    if (user) {
-      supabase.from('post_shares').insert({
-        post_id: post.id,
-        user_id: user.id,
-        share_type: shareType,
-      } as any).then(({ error }) => {
-        if (error) console.warn('post_shares insert', error.message);
-      });
+    if (!user) return;
+    // Same pattern as likes: write a row, then bump the post counter column
+    const { error } = await supabase.from('post_shares').insert({
+      post_id: post.id,
+      user_id: user.id,
+      share_type: shareType === 'send' ? 'send' : 'link',
+    } as any);
+    if (error) {
+      // duplicate share by same user is OK – still count once
+      const msg = String(error.message || '');
+      if (!msg.includes('duplicate') && error.code !== '23505') {
+        console.warn('post_shares insert failed', error.message);
+      }
     }
-    // 2) Persist counter via SECURITY DEFINER rpc (works even when post is not yours)
-    supabase.rpc('increment_post_counter', {
-      p_post_id: post.id,
-      p_field: field,
-    } as any).then(({ error }) => {
-      if (error) console.warn('increment_post_counter', error.message);
-    });
+    // Bump denormalized counter the same way handleLike bumps likes_count
+    try {
+      const field = shareType === 'send' ? 'send_count' : 'share_count';
+      const { data: row } = await supabase.from('posts').select('share_count, send_count').eq('id', post.id).maybeSingle();
+      const current = Number((row as any)?.[field] || 0);
+      await supabase.from('posts').update({ [field]: current + 1 } as any).eq('id', post.id);
+    } catch (e) {
+      console.warn('post counter bump failed', e);
+    }
   };
 
   const copyLink = () => {
@@ -2221,20 +2226,25 @@ const TikTokFeed: React.FC = () => {
         allPosts.forEach((p: any) => { viewCountMap[p.id] = p.view_count || 0; });
         setPostViewCounts(viewCountMap);
 
+        // Count shares/sends exactly like comments (from post_shares rows)
         const shareMap: Record<string, number> = {};
         const sendMap: Record<string, number> = {};
-        allPosts.forEach((p: any) => {
-          shareMap[p.id] = Number(p.share_count || p.shares_count || 0);
-          sendMap[p.id] = Number(p.send_count || p.sends_count || 0);
-        });
+        if ((sharesRes as any).error) {
+          console.warn('post_shares load error', (sharesRes as any).error);
+        }
         (sharesRes.data || []).forEach((r: any) => {
-          if (r.share_type === 'send') sendMap[r.post_id] = (sendMap[r.post_id] || 0) + 1;
-          else shareMap[r.post_id] = (shareMap[r.post_id] || 0) + 1;
+          if (r.share_type === 'send') {
+            sendMap[r.post_id] = (sendMap[r.post_id] || 0) + 1;
+          } else {
+            shareMap[r.post_id] = (shareMap[r.post_id] || 0) + 1;
+          }
         });
-        // Prefer the higher of denormalized column vs aggregated rows
+        // Also use post columns if present (whichever is higher)
         allPosts.forEach((p: any) => {
-          shareMap[p.id] = Math.max(shareMap[p.id] || 0, Number(p.share_count || 0));
-          sendMap[p.id] = Math.max(sendMap[p.id] || 0, Number(p.send_count || 0));
+          const colShare = Number(p.share_count ?? p.shares_count ?? 0);
+          const colSend = Number(p.send_count ?? p.sends_count ?? 0);
+          if (colShare > (shareMap[p.id] || 0)) shareMap[p.id] = colShare;
+          if (colSend > (sendMap[p.id] || 0)) sendMap[p.id] = colSend;
         });
         setPostShareCounts(shareMap);
         setPostSendCounts(sendMap);
