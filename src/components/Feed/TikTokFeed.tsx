@@ -2971,6 +2971,22 @@ const TikTokFeed: React.FC = () => {
             onDelete={() => {
               setPosts(prev => prev.filter(p => p.id !== activeSharePost.id));
             }}
+            onShareTracked={() => {
+              const id = activeSharePost.id;
+              setPostShareCounts(prev => ({ ...prev, [id]: (prev[id] || 0) + 1 }));
+            }}
+            onBookmarkChange={(bookmarked) => {
+              const id = activeSharePost.id;
+              setMyBookmarks(prev => {
+                const n = new Set(prev);
+                if (bookmarked) n.add(id); else n.delete(id);
+                return n;
+              });
+              setPostBookmarkCounts(prev => ({
+                ...prev,
+                [id]: Math.max(0, (prev[id] || 0) + (bookmarked ? 1 : -1)),
+              }));
+            }}
           />
         )}
       </AnimatePresence>
