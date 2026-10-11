@@ -2529,8 +2529,16 @@ const TikTokFeed: React.FC = () => {
       const dt = Date.now() - start.t;
       if (dt > 800) return;
       if (Math.abs(dx) < 50 || Math.abs(dx) < Math.abs(dy) * 1.1) return;
-      if (dx < 0) navigate('/explore');
-      else user ? navigate('/storyline') : requireLogin('Login for stories');
+      // Ask before switching pages so accidental swipes don't yank the user away
+      const target = dx < 0 ? 'explore' : 'storyline';
+      if (target === 'storyline' && !user) {
+        requireLogin('Login for stories');
+        return;
+      }
+      const label = target === 'explore' ? 'Explore' : 'Stories';
+      if (window.confirm(`Go to ${label}?`)) {
+        navigate(target === 'explore' ? '/explore' : '/storyline');
+      }
     };
     el.addEventListener('touchstart', onStart, { passive: true, capture: true });
     el.addEventListener('touchend', onEnd, { passive: true, capture: true });
