@@ -20,6 +20,7 @@ import Profile from "./pages/Profile";
 import Admin from "./pages/Admin";
 import Notifications from "./pages/Notifications";
 import NotFound from "./pages/NotFound";
+import PostVisibility from './pages/PostVisibility';
 import Settings from "./pages/Settings";
 import StarMarketplace from "./pages/StarMarketplace";
 import VIPSubscription from "./pages/VIPSubscription";
@@ -202,6 +203,11 @@ const App = () => (
             <Route path="/settings" element={
               <ProtectedRoute>
                 <Settings />
+              </ProtectedRoute>
+            } />
+            <Route path="/settings/post-visibility" element={
+              <ProtectedRoute>
+                <PostVisibility />
               </ProtectedRoute>
             } />
             <Route path="/admin" element={<Admin />} />
