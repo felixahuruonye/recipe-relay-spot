@@ -6,7 +6,7 @@ import { Label } from '@/components/ui/label';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Sun, Moon, Settings as SettingsIcon, MessageSquare, Share2, HelpCircle, LogOut, Lock, Coins, Trash2, Repeat2, MapPin, Smartphone, ShieldCheck } from 'lucide-react';
+import { Sun, Moon, Settings as SettingsIcon, MessageSquare, Share2, HelpCircle, LogOut, Lock, Coins, Trash2, Repeat2, MapPin, Smartphone, ShieldCheck , Eye } from 'lucide-react';
 import { useTheme } from '@/contexts/ThemeContext';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/integrations/supabase/client';
@@ -363,6 +363,22 @@ const Settings = () => {
         </CardContent>
       </Card>
 
+      {/* Post & Visibility */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <Eye className="w-5 h-5" /> Post & Visibility
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <p className="text-sm text-muted-foreground">
+            Control comments and view counts on your posts. Changes apply immediately on the feed.
+          </p>
+          <PostVisibilityManager />
+        </CardContent>
+      </Card>
+
+
       {/* Personal Info - powers Creator Dashboard demographic analytics */}
       <Card className="glass-card">
         <CardHeader>
@@ -590,5 +606,76 @@ const Settings = () => {
     </div>
   );
 };
+
+
+/** Lists the signed-in user's recent posts with per-post comment & view toggles */
+function PostVisibilityManager() {
+  const { user } = useAuth();
+  const { toast } = useToast();
+  const [posts, setPosts] = React.useState<any[]>([]);
+  const [loading, setLoading] = React.useState(true);
+
+  React.useEffect(() => {
+    if (!user) return;
+    (async () => {
+      setLoading(true);
+      const { data } = await supabase
+        .from('posts')
+        .select('id, title, body, comments_enabled, views_visible, created_at, media_urls')
+        .eq('user_id', user.id)
+        .order('created_at', { ascending: false })
+        .limit(30);
+      setPosts(data || []);
+      setLoading(false);
+    })();
+  }, [user]);
+
+  const toggle = async (postId: string, field: 'comments_enabled' | 'views_visible', value: boolean) => {
+    setPosts(prev => prev.map(p => p.id === postId ? { ...p, [field]: value } : p));
+    const { error } = await supabase.from('posts').update({ [field]: value } as any).eq('id', postId);
+    if (error) {
+      // Revert
+      setPosts(prev => prev.map(p => p.id === postId ? { ...p, [field]: !value } : p));
+      toast({ title: 'Could not update', description: error.message, variant: 'destructive' });
+    } else {
+      toast({ title: value ? 'Enabled' : 'Disabled' });
+    }
+  };
+
+  if (loading) return <p className="text-sm text-muted-foreground">Loading your posts…</p>;
+  if (posts.length === 0) return <p className="text-sm text-muted-foreground">You have no posts yet.</p>;
+
+  return (
+    <div className="space-y-3 max-h-80 overflow-y-auto">
+      {posts.map(p => (
+        <div key={p.id} className="flex items-start gap-3 p-3 rounded-lg border border-border/60">
+          {p.media_urls?.[0] && (
+            <img src={p.media_urls[0]} alt="" className="w-12 h-12 rounded object-cover shrink-0" />
+          )}
+          <div className="flex-1 min-w-0">
+            <p className="text-sm font-medium truncate">{p.title || p.body?.slice(0, 40) || 'Untitled'}</p>
+            <div className="flex flex-wrap gap-4 mt-2">
+              <label className="flex items-center gap-2 text-xs">
+                <Switch
+                  checked={p.comments_enabled !== false}
+                  onCheckedChange={(v) => toggle(p.id, 'comments_enabled', v)}
+                />
+                Comments
+              </label>
+              <label className="flex items-center gap-2 text-xs">
+                <Switch
+                  checked={p.views_visible !== false}
+                  onCheckedChange={(v) => toggle(p.id, 'views_visible', v)}
+                />
+                View count
+              </label>
+            </div>
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
 
 export default Settings;
