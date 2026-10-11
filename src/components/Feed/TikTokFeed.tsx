@@ -850,7 +850,9 @@ const EnhancedShareMenu: React.FC<{
   isOwnPost: boolean;
   onDelete?: () => void;
   onEdit?: () => void;
-}> = ({ open, onClose, post, isOwnPost, onDelete, onEdit }) => {
+  onShareTracked?: () => void;
+  onBookmarkChange?: (bookmarked: boolean) => void;
+}> = ({ open, onClose, post, isOwnPost, onDelete, onEdit, onShareTracked, onBookmarkChange }) => {
   const { toast } = useToast();
   const navigate = useNavigate();
   const { user } = useAuth();
@@ -962,6 +964,7 @@ const EnhancedShareMenu: React.FC<{
         await (supabase as any).from('user_bookmarks').delete()
           .eq('item_type', 'post').eq('item_id', post.id).eq('user_id', user.id);
         toast({ title: 'Removed from bookmarks' });
+        onBookmarkChange?.(false);
       } else {
         // upsert avoids duplicate-key error if already bookmarked
         const { error } = await (supabase as any).from('user_bookmarks').upsert(
@@ -980,6 +983,7 @@ const EnhancedShareMenu: React.FC<{
         }
         toast({ title: 'Added to bookmarks' });
         setIsBookmarked(true);
+        onBookmarkChange?.(true);
       }
     } catch (error: any) {
       const msg = String(error?.message || '');
@@ -993,8 +997,20 @@ const EnhancedShareMenu: React.FC<{
   };
 
   
+  const trackShare = (shareType: string) => {
+    onShareTracked?.(); // instant parent count bump
+    if (user) {
+      supabase.from('post_shares').insert({
+        post_id: post.id,
+        user_id: user.id,
+        share_type: shareType,
+      } as any).then(() => {});
+    }
+  };
+
   const copyLink = () => {
     navigator.clipboard.writeText(`${window.location.origin}/?post=${post.id}`);
+    trackShare('copy');
     toast({ title: 'Link copied!' });
     onClose();
   };
@@ -1002,6 +1018,7 @@ const EnhancedShareMenu: React.FC<{
   const shareNative = async () => {
     try {
       await navigator.share({ title: post.title, url: `${window.location.origin}/?post=${post.id}` });
+      trackShare('native');
     } catch {}
     onClose();
   };
