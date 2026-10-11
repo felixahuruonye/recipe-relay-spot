@@ -501,7 +501,8 @@ const SendToFriend: React.FC<{
   postId: string;
   postTitle: string;
   postThumbnail?: string;
-}> = ({ open, onClose, postId, postTitle, postThumbnail }) => {
+  onSendTracked?: () => void;
+}> = ({ open, onClose, postId, postTitle, postThumbnail, onSendTracked }) => {
   const { user } = useAuth();
   const { toast } = useToast();
   const [friends, setFriends] = useState<any[]>([]);
@@ -546,6 +547,7 @@ const SendToFriend: React.FC<{
       ? `📢 Shared: ${postTitle}\n🖼️ ${postThumbnail}\n${window.location.origin}/?post=${postId}`
       : `📢 Shared: ${postTitle}\n${window.location.origin}/?post=${postId}`;
     // Optimistic: close immediately, network in background
+    onSendTracked?.();
     toast({ title: 'Sent!', description: 'Post shared to friend' });
     onClose();
     supabase.from('private_messages').insert({
@@ -3000,6 +3002,11 @@ const TikTokFeed: React.FC = () => {
             postId={activeSendPost.id}
             postTitle={activeSendPost.title}
             postThumbnail={activeSendPost.media_urls?.[0]}
+          onSendTracked={() => {
+              if (!activeSendPost) return;
+              const id = activeSendPost.id;
+              setPostSendCounts(prev => ({ ...prev, [id]: (prev[id] || 0) + 1 }));
+            }}
           />
         )}
       </AnimatePresence>
