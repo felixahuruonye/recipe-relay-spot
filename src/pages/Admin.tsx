@@ -21,6 +21,7 @@ import { UserMessagesTab } from '@/components/Admin/UserMessagesTab';
 import { DeleteUsersTab } from '@/components/Admin/DeleteUsersTab';
 import { DeliveriesTab } from '@/components/Admin/DeliveriesTab';
 import { MonetizationTab } from '@/components/Admin/MonetizationTab';
+import { BotsTab } from '@/components/Admin/BotsTab';
 import { ChatReportsTab } from '@/components/Admin/ChatReportsTab';
 import { TaskAdminTab } from '@/components/Admin/TaskAdminTab';
 import { useAuth } from '@/contexts/AuthContext';
@@ -161,7 +162,8 @@ const AdminPanel = () => {
         <Tabs defaultValue="overview" className="w-full">
           <div className="overflow-x-auto">
             <TabsList className="inline-flex w-max gap-1">
-              <TabsTrigger value="overview">Overview</TabsTrigger>
+              <TabsTrigger value="bots">Bots / AI</TabsTrigger>
+            <TabsTrigger value="overview">Overview</TabsTrigger>
               <TabsTrigger value="balances">Balances</TabsTrigger>
               <TabsTrigger value="tasks">Tasks</TabsTrigger>
               <TabsTrigger value="monetization">Monetization</TabsTrigger>
@@ -182,7 +184,10 @@ const AdminPanel = () => {
             </TabsList>
           </div>
 
-          <TabsContent value="overview">
+          <TabsContent value="bots" className="mt-4">
+              <BotsTab />
+            </TabsContent>
+            <TabsContent value="overview">
             <AdminOverview />
           </TabsContent>
 
