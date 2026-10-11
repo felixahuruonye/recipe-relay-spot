@@ -959,24 +959,36 @@ const EnhancedShareMenu: React.FC<{
     setIsBookmarked(!was);
     try {
       if (was) {
-        const { error } = await (supabase as any).from('user_bookmarks').delete()
+        await (supabase as any).from('user_bookmarks').delete()
           .eq('item_type', 'post').eq('item_id', post.id).eq('user_id', user.id);
-        if (error) throw error;
         toast({ title: 'Removed from bookmarks' });
       } else {
-        const { error } = await (supabase as any).from('user_bookmarks').insert({
-          item_type: 'post', item_id: post.id, user_id: user.id,
-        });
-        // 23505 = unique_violation → already bookmarked; treat as success
-        if (error && error.code !== '23505' && !String(error.message || '').includes('duplicate key')) {
+        // upsert avoids duplicate-key error if already bookmarked
+        const { error } = await (supabase as any).from('user_bookmarks').upsert(
+          { item_type: 'post', item_id: post.id, user_id: user.id },
+          { onConflict: 'item_type,item_id,user_id', ignoreDuplicates: true }
+        );
+        if (error) {
+          const msg = String(error.message || error.code || '');
+          // Ignore unique violations entirely
+          if (error.code === '23505' || msg.includes('duplicate key') || msg.includes('unique')) {
+            setIsBookmarked(true);
+            toast({ title: 'Already in bookmarks' });
+            return;
+          }
           throw error;
         }
         toast({ title: 'Added to bookmarks' });
         setIsBookmarked(true);
       }
     } catch (error: any) {
-      setIsBookmarked(was); // revert only on real failure
-      toast({ title: 'Error', description: error?.message || 'Failed', variant: 'destructive' });
+      const msg = String(error?.message || '');
+      if (error?.code === '23505' || msg.includes('duplicate key') || msg.includes('unique')) {
+        setIsBookmarked(true);
+        return; // silent success – already bookmarked
+      }
+      setIsBookmarked(was);
+      toast({ title: 'Error', description: msg || 'Failed', variant: 'destructive' });
     }
   };
 
@@ -2521,7 +2533,7 @@ const TikTokFeed: React.FC = () => {
       const dy = t.clientY - start.y;
       const dt = Date.now() - start.t;
       if (dt > 800) return;
-      if (Math.abs(dx) < 50 || Math.abs(dx) < Math.abs(dy) * 1.1) return;
+      if (Math.abs(dx) < 80 || Math.abs(dx) < Math.abs(dy) * 1.4) return; // stronger intentional swipe
       // Require a deliberate horizontal swipe + confirmation (avoids accidents)
       if (Math.abs(dx) < 80) return;
       const target = dx < 0 ? 'explore' : 'storyline';
@@ -2530,7 +2542,8 @@ const TikTokFeed: React.FC = () => {
         return;
       }
       const label = target === 'explore' ? 'Explore' : 'Stories';
-      if (window.confirm(`Go to ${label}?`)) {
+      // In-app confirm so users don't leave the feed by accident
+      if (window.confirm(`Go to ${label}?\n\nSwipe only switches pages when you confirm.`)) {
         navigate(target === 'explore' ? '/explore' : '/storyline');
       }
     };
