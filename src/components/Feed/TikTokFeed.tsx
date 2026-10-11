@@ -1141,7 +1141,7 @@ const TikTokPost: React.FC<{
 }> = ({
   post, postUser, musicTrack: mTrack, isActive, isLiked, likesCount, commentsCount, viewCount,
   isFollowing, isOwnPost, isMuted, autoScroll, onToggleMute, onLike, onFollow,
-  onComment, onShare, onSendToFriend, onSoundDrilldown, onProfile, onRequireLogin, onVideoEnd, onViewQualified, onImageTimerEnd, onSendStar, isLoggedIn, hasSeenBefore, onRewardPreview
+  onComment, onShare, shareCount = 0, sendCount = 0, bookmarkCount = 0, isBookmarked = false, onBookmark, onSendToFriend, onSoundDrilldown, onProfile, onRequireLogin, onVideoEnd, onViewQualified, onImageTimerEnd, onSendStar, isLoggedIn, hasSeenBefore, onRewardPreview
 }) => {
   const navigate = useNavigate();
   const { toast } = useToast();
@@ -2741,6 +2741,11 @@ const TikTokFeed: React.FC = () => {
                     onFollow={() => handleFollow(post.user_id)}
                     onComment={() => { setActiveCommentPostId(post.id); setShowComments(true); }}
                     onShare={() => { setActiveSharePost(post); setShowShareMenu(true); }}
+                    shareCount={postShareCounts[post.id] || 0}
+                    sendCount={postSendCounts[post.id] || 0}
+                    bookmarkCount={postBookmarkCounts[post.id] || 0}
+                    isBookmarked={myBookmarks.has(post.id)}
+                    onBookmark={() => handleBookmarkPost(post.id)}
                     onSendToFriend={() => { setActiveSendPost(post); setShowSendToFriend(true); }}
                     onSoundDrilldown={() => {
                       const mTrack = post.music_track_id ? musicTracks[post.music_track_id] : undefined;
