@@ -2112,7 +2112,7 @@ const TikTokFeed: React.FC = () => {
         .or('disabled.is.null,disabled.eq.false')
         .order('boosted', { ascending: false })
         .order('created_at', { ascending: false })
-        .limit(50);
+        .limit(20);
 
       // Fallback for when the is_private migration hasn't been applied yet,
       // so the feed never silently breaks and shows zero posts.
@@ -2131,88 +2131,72 @@ const TikTokFeed: React.FC = () => {
 
       const allPosts = postsData || [];
       if (allPosts.length > 0) {
-        const userIds = [...new Set(allPosts.map(p => p.user_id))];
-        const { data: usersData } = await supabase
-          .from('user_profiles')
-          .select('id, username, avatar_url, vip, is_vip')
-          .in('id', userIds);
+        // Show posts immediately so the feed isn't blank while engagement loads
+        setPosts(allPosts as Post[]);
+        setOrderedPostIds(rankPostIds(allPosts as Post[], user?.id || 'guest', sessionSeedRef.current));
+        setNewPostsAvailable(0);
+
+        const postIds = allPosts.map((p: any) => p.id);
+        const userIds = [...new Set(allPosts.map((p: any) => p.user_id))];
+        const musicTrackIds = allPosts.filter((p: any) => p.music_track_id).map((p: any) => p.music_track_id!);
+
+        // Everything else in parallel for speed
+        const [usersRes, likesRes, commentsRes, sharesRes, bookmarksRes, musicRes] = await Promise.all([
+          supabase.from('user_profiles').select('id, username, avatar_url, vip, is_vip').in('id', userIds),
+          supabase.from('post_likes').select('post_id, user_id').in('post_id', postIds),
+          supabase.from('post_comments').select('post_id').in('post_id', postIds),
+          supabase.from('post_shares').select('post_id, share_type').in('post_id', postIds),
+          (supabase as any).from('user_bookmarks').select('item_id, user_id').eq('item_type', 'post').in('item_id', postIds),
+          musicTrackIds.length
+            ? supabase.from('music_tracks').select('id, title, artist_name, audio_url, source, youtube_id, cover_url, artist_id').in('id', musicTrackIds)
+            : Promise.resolve({ data: [] as any[] }),
+        ]);
 
         const usersMap: Record<string, UserProfile> = {};
-        usersData?.forEach(u => { usersMap[u.id] = u as UserProfile; });
-
-        const { data: likesData } = await supabase
-          .from('post_likes')
-          .select('*')
-          .in('post_id', allPosts.map(p => p.id));
+        (usersRes.data || []).forEach((u: any) => { usersMap[u.id] = u as UserProfile; });
+        setUsers(usersMap);
 
         const likesMap: Record<string, any[]> = {};
-        likesData?.forEach(l => {
+        (likesRes.data || []).forEach((l: any) => {
           if (!likesMap[l.post_id]) likesMap[l.post_id] = [];
           likesMap[l.post_id].push(l);
         });
+        setPostLikes(likesMap);
 
         const commentCountMap: Record<string, number> = {};
-        const { data: commentCounts } = await supabase
-          .from('post_comments')
-          .select('post_id')
-          .in('post_id', allPosts.map(p => p.id));
-        commentCounts?.forEach(c => {
+        (commentsRes.data || []).forEach((c: any) => {
           commentCountMap[c.post_id] = (commentCountMap[c.post_id] || 0) + 1;
         });
+        setPostCommentCounts(commentCountMap);
 
         const viewCountMap: Record<string, number> = {};
-        allPosts.forEach(p => { viewCountMap[p.id] = p.view_count || 0; });
+        allPosts.forEach((p: any) => { viewCountMap[p.id] = p.view_count || 0; });
+        setPostViewCounts(viewCountMap);
 
-        const musicTrackIds = allPosts.filter(p => p.music_track_id).map(p => p.music_track_id!);
-        if (musicTrackIds.length > 0) {
-          const { data: musicData } = await supabase
-            .from('music_tracks')
-            .select('id, title, artist_name, audio_url, source, youtube_id, cover_url, artist_id')
-            .in('id', musicTrackIds);
-          const mMap: Record<string, MusicTrack> = {};
-          musicData?.forEach((m: any) => { mMap[m.id] = m; });
-          setMusicTracks(mMap);
-        }
-
-        // Share / send / bookmark counts (parallel, before setPosts so UI sees them)
-        const postIds = allPosts.map((p: any) => p.id);
-        const [shareRes, bookmarkRes] = await Promise.all([
-          supabase.from('post_shares').select('post_id, share_type').in('post_id', postIds),
-          (supabase as any).from('user_bookmarks').select('item_id').eq('item_type', 'post').in('item_id', postIds),
-        ]);
         const shareMap: Record<string, number> = {};
         const sendMap: Record<string, number> = {};
-        (shareRes.data || []).forEach((r: any) => {
+        (sharesRes.data || []).forEach((r: any) => {
           if (r.share_type === 'send') sendMap[r.post_id] = (sendMap[r.post_id] || 0) + 1;
           else shareMap[r.post_id] = (shareMap[r.post_id] || 0) + 1;
         });
-        const bmMap: Record<string, number> = {};
-        const myBm = new Set<string>();
-        (bookmarkRes.data || []).forEach((r: any) => {
-          bmMap[r.item_id] = (bmMap[r.item_id] || 0) + 1;
-        });
-        // Also mark which ones *this* user bookmarked
-        if (user) {
-          const { data: mine } = await (supabase as any)
-            .from('user_bookmarks')
-            .select('item_id')
-            .eq('item_type', 'post')
-            .eq('user_id', user.id)
-            .in('item_id', postIds);
-          (mine || []).forEach((r: any) => myBm.add(r.item_id));
-        }
         setPostShareCounts(shareMap);
         setPostSendCounts(sendMap);
+
+        const bmMap: Record<string, number> = {};
+        const myBm = new Set<string>();
+        (bookmarksRes.data || []).forEach((r: any) => {
+          bmMap[r.item_id] = (bmMap[r.item_id] || 0) + 1;
+          if (user && r.user_id === user.id) myBm.add(r.item_id);
+        });
         setPostBookmarkCounts(bmMap);
         setMyBookmarks(myBm);
 
-        setPosts(allPosts as Post[]);
-        setOrderedPostIds(rankPostIds(allPosts as Post[], user?.id || 'guest', sessionSeedRef.current));
-        setUsers(usersMap);
-        setPostLikes(likesMap);
-        setPostCommentCounts(commentCountMap);
-        setPostViewCounts(viewCountMap);
-        setNewPostsAvailable(0);
+        if (musicRes.data && (musicRes.data as any[]).length > 0) {
+          const mMap: Record<string, MusicTrack> = {};
+          (musicRes.data as any[]).forEach((m: any) => { mMap[m.id] = m; });
+          setMusicTracks(mMap);
+        }
+
       } else {
         setPosts([]);
         setOrderedPostIds([]);
