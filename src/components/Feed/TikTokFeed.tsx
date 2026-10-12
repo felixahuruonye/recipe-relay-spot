@@ -2114,30 +2114,42 @@ const TikTokFeed: React.FC = () => {
     (async () => {
       try {
         await ensureUserProfile(supabase as any, { id: user.id, email: user.email });
-        const { data } = await supabase.rpc('record_post_first_view' as any, { p_post_id: post.id });
-        const result = data as any;
-        if (result?.success) {
-          setProcessedPosts(prev => new Set(prev).add(post.id));
-          if (result.first_view) {
-            setPostViewCounts(prev => ({ ...prev, [post.id]: (prev[post.id] ?? post.view_count ?? 0) + 1 }));
-          }
-          loadMyProfile();
-          // fetchPosts() removed here for the same reason as the two view
-          // paths above - loadMyProfile() already refreshes the balance,
-          // and view_count is reflected locally just above when it's a
-          // first view. A full feed rebuild+re-rank isn't needed per view.
-          if (result.charged) {
-            setLastEarnAmount(result.viewer_cashback || 0);
-            setShowStarFloat(true);
-            setTimeout(() => setShowStarFloat(false), 2500);
-            toast({ title: '💰 Earned!', description: `⭐ ${result.stars_spent} → ₦${Number(result.viewer_cashback).toFixed(0)} cashback` });
-          } else if (result.reason === 'insufficient_stars') {
-            setStarNotification('no_earn');
-          } else if (result.reason === 'already_viewed') {
-            // repeat view: offer to tip instead
-            setTipPost(post); setTipAmount(5);
-          }
+        // Record the view (non-earning path)
+        await supabase.rpc('record_authenticated_post_view' as any, { p_post_id: post.id, p_viewer_id: user.id });
+        setProcessedPosts(prev => new Set(prev).add(post.id));
+        setPostViewCounts(prev => ({ ...prev, [post.id]: (prev[post.id] ?? post.view_count ?? 0) + 1 }));
+
+        // Auto-spend tip using user's configured amount (works for ALL posts)
+        const stars =
+          Number((myProfile as any)?.auto_deduct_stars) ||
+          Number((myProfile as any)?.story_settings?.auto_deduct_stars) ||
+          1;
+        const starBal = myProfile?.star_balance || 0;
+        if (starBal < stars) {
+          setStarNotification('no_earn');
+          return;
         }
+        const { data, error } = await supabase.rpc('tip_post' as any, {
+          p_post_id: post.id,
+          p_stars: stars,
+          p_source: 'auto_spend',
+        });
+        const result = data as any;
+        if (error || !result?.success) {
+          const msg = result?.error || error?.message || '';
+          if (String(msg).toLowerCase().includes('insufficient')) {
+            setStarNotification('no_earn');
+          }
+          return;
+        }
+        loadMyProfile();
+        setLastEarnAmount(result.viewer_cashback || 0);
+        setShowStarFloat(true);
+        setTimeout(() => setShowStarFloat(false), 2500);
+        toast({
+          title: '💰 Auto-Spend',
+          description: `⭐ ${stars} → ₦${Number(result.viewer_cashback || 0).toFixed(0)} cashback`,
+        });
       } finally {
         processingRef.current.delete(post.id);
       }
