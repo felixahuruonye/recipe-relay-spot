@@ -58,14 +58,70 @@ export const MonetizationTab: React.FC = () => {
 
     const { data: e } = await (supabase as any).from('monetization_events').select('*').order('created_at', { ascending: false }).limit(50);
     setEvents(e || []);
-    const tipsRes = await (supabase as any).from('tip_ledger').select('*').order('created_at', { ascending: false }).limit(200);
-    if (tipsRes.error) {
-      console.warn('tip_ledger admin load', tipsRes.error);
-      setTipLoadError(tipsRes.error.message || 'Cannot read tip_ledger (check RLS)');
-      setTipLedger([]);
-    } else {
+    // Primary: tip_ledger. Fallback: reconstruct from wallet_history tip rows
+    // (ledger inserts can fail if the apply_tip_ledger trigger errors).
+    const tipsRes = await (supabase as any)
+      .from('tip_ledger')
+      .select('*')
+      .order('created_at', { ascending: false })
+      .limit(200);
+
+    if (!tipsRes.error && tipsRes.data && tipsRes.data.length > 0) {
       setTipLoadError(null);
-      setTipLedger(tipsRes.data || []);
+      setTipLedger(tipsRes.data);
+    } else {
+      if (tipsRes.error) {
+        console.warn('tip_ledger admin load', tipsRes.error);
+        setTipLoadError(tipsRes.error.message || 'Cannot read tip_ledger');
+      } else {
+        setTipLoadError(null);
+      }
+
+      // Fallback from wallet_history so vault is never empty when tips exist
+      const histRes = await (supabase as any)
+        .from('wallet_history')
+        .select('*')
+        .in('type', ['tip_cashback', 'tip_earn', 'tip', 'TIP', 'tip_cashback'])
+        .order('created_at', { ascending: false })
+        .limit(200);
+
+      if (histRes.error) {
+        console.warn('wallet_history vault fallback', histRes.error);
+        if (!tipsRes.error) setTipLoadError('tip_ledger empty — also failed reading wallet_history: ' + histRes.error.message);
+        setTipLedger([]);
+      } else {
+        const rows = (histRes.data || []).map((h: any) => {
+          const meta = h.meta || {};
+          const amount = Number(h.amount || 0);
+          const isCashback = String(h.type || '').toLowerCase().includes('cashback');
+          const stars = Number(meta.stars || 0);
+          return {
+            id: h.id,
+            post_id: meta.post_id || null,
+            from_user_id: isCashback ? h.user_id : (meta.from_user_id || null),
+            to_user_id: isCashback ? (meta.creator_id || null) : h.user_id,
+            stars,
+            star_to_ngn_rate: meta.rate || null,
+            amount_ngn: amount,
+            creator_pct: null,
+            musician_pct: null,
+            viewer_pct: null,
+            platform_pct: null,
+            creator_ngn: isCashback ? 0 : amount,
+            musician_ngn: 0,
+            viewer_ngn: isCashback ? amount : 0,
+            platform_ngn: 0,
+            source: meta.source || h.type || 'tip',
+            music_track_id: null,
+            created_at: h.created_at,
+            _from_wallet_history: true,
+          };
+        });
+        setTipLedger(rows);
+        if (rows.length === 0 && !tipsRes.error) {
+          setTipLoadError('tip_ledger is empty. New tips should write here — if wallet shows tips but vault does not, the tip_ledger trigger may be blocking inserts. Run the trigger fix SQL.');
+        }
+      }
     }
   };
 
