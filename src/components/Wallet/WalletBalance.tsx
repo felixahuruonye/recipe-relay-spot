@@ -160,119 +160,12 @@ export const WalletBalance = () => {
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
         <Card className="glass-card">
           <CardHeader className="pb-3">
-            <CardTitle className="text-sm font-medium flex items-center gap-2">
-              <Wallet className="w-4 h-4" />
-              Wallet Balance
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <p className="text-2xl font-bold gradient-text">{formatCurrency(walletBalance)}</p>
-            <p className="text-xs text-muted-foreground mt-1">Available to withdraw</p>
-          </CardContent>
-        </Card>
-
-        <Card className="glass-card">
-          <CardHeader className="pb-3">
-            <CardTitle className="text-sm font-medium flex items-center gap-2">
-              <Star className="w-4 h-4 fill-current" />
-              Star Balance
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <p className="text-2xl font-bold text-primary">{starBalance}⭐</p>
-            <p className="text-xs text-muted-foreground mt-1">Use to unlock content</p>
-          </CardContent>
-        </Card>
-
-        <Card className="glass-card">
-          <CardHeader className="pb-3">
-            <CardTitle className="text-sm font-medium flex items-center gap-2">
-              <TrendingUp className="w-4 h-4" />
-              Total Earned
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <p className="text-2xl font-bold text-green-500">{formatCurrency(totalEarned)}</p>
-            <p className="text-xs text-muted-foreground mt-1">Lifetime earnings</p>
-          </CardContent>
-        </Card>
-      </div>
-
-      {/* Transaction History */}
-      <Card className="glass-card">
-        <CardHeader>
-          <CardTitle className="flex items-center justify-between">
-            <span>Recent Transactions</span>
-            <Dialog>
-              <DialogTrigger asChild>
-                <Button variant="outline" size="sm">View All</Button>
-              </DialogTrigger>
-              <DialogContent className="max-w-2xl max-h-[80vh] overflow-y-auto">
-                <DialogHeader>
-                  <DialogTitle>Transaction History</DialogTitle>
-                </DialogHeader>
-                <Tabs defaultValue="all">
-                  <TabsList className="grid grid-cols-3 w-full">
-                    <TabsTrigger value="all">All</TabsTrigger>
-                    <TabsTrigger value="earnings">Earnings</TabsTrigger>
-                    <TabsTrigger value="spending">Spending</TabsTrigger>
-                  </TabsList>
-                  
-                  <TabsContent value="all" className="space-y-2 mt-4">
-                    {transactions.map((tx) => (
-                      <div key={tx.id} className="flex items-center justify-between p-3 glass-card rounded-lg">
-                        <div className="flex items-center gap-3">
-                          {getTransactionIcon(tx.type)}
-                          <div>
-                            <p className="font-medium text-sm">{tx.type.replace(/_/g, ' ').toUpperCase()}</p>
-                            <p className="text-xs text-muted-foreground">
-                              {new Date(tx.created_at).toLocaleString()}
-                            </p>
-                          </div>
-                        </div>
-                        <p className={`font-bold ${tx.amount >= 0 ? 'text-green-500' : 'text-red-500'}`}>
-                          {tx.amount >= 0 ? '+' : ''}{formatCurrency(Math.abs(tx.amount))}
-                        </p>
-                      </div>
-                    ))}
-                  </TabsContent>
-
-                  <TabsContent value="earnings" className="space-y-2 mt-4">
-                    {transactions.filter(tx => tx.type.includes('earn') || tx.type.includes('credit')).map((tx) => (
-                      <div key={tx.id} className="flex items-center justify-between p-3 glass-card rounded-lg">
-                        <div className="flex items-center gap-3">
-                          <ArrowDownRight className="w-4 h-4 text-green-500" />
-                          <div>
-                            <p className="font-medium text-sm">{tx.type.replace(/_/g, ' ').toUpperCase()}</p>
-                            <p className="text-xs text-muted-foreground">
-                              {new Date(tx.created_at).toLocaleString()}
-                            </p>
-                          </div>
-                        </div>
-                        <p className="font-bold text-green-500">+{formatCurrency(Math.abs(tx.amount))}</p>
-                      </div>
-                    ))}
-                  </TabsContent>
-
-                  <TabsContent value="spending" className="space-y-2 mt-4">
-                    {transactions.filter(tx => !tx.type.includes('earn') && !tx.type.includes('credit')).map((tx) => (
-                      <div key={tx.id} className="flex items-center justify-between p-3 glass-card rounded-lg">
-                        <div className="flex items-center gap-3">
-                          <ArrowUpRight className="w-4 h-4 text-red-500" />
-                          <div>
-                            <p className="font-medium text-sm">{tx.type.replace(/_/g, ' ').toUpperCase()}</p>
-                            <p className="text-xs text-muted-foreground">
-                              {new Date(tx.created_at).toLocaleString()}
-                            </p>
-                          </div>
-                        </div>
-                        <p className="font-bold text-red-500">-{formatCurrency(Math.abs(tx.amount))}</p>
-                      </div>
-                    ))}
-                  </TabsContent>
-                </Tabs>
-              </DialogContent>
-            </Dialog>
+            <CardTitle className="flex items-center justify-between gap-2">
+            <span>Transaction History</span>
+            <Button type="button" variant="outline" size="sm" className="h-8 gap-1" onClick={() => { fetchBalances(); fetchTransactions(); }}>
+              <RefreshCw className="w-3.5 h-3.5" />
+              Refresh
+            </Button>
           </CardTitle>
         </CardHeader>
         <CardContent className="space-y-2">
