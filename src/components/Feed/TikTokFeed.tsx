@@ -2129,14 +2129,9 @@ const TikTokFeed: React.FC = () => {
           setStarNotification('no_earn');
           return;
         }
-        const { data, error } = await supabase.rpc('tip_post' as any, {
-          p_post_id: post.id,
-          p_stars: stars,
-          p_source: 'auto_spend',
-        });
-        const result = data as any;
-        if (error || !result?.success) {
-          const msg = result?.error || error?.message || '';
+        const result = await executeTip(post.id, stars, 'auto_spend', post.music_track_id);
+        if (!result?.success) {
+          const msg = result?.error || '';
           if (String(msg).toLowerCase().includes('insufficient')) {
             setStarNotification('no_earn');
           }
@@ -2556,18 +2551,98 @@ const TikTokFeed: React.FC = () => {
     setShowTipDialog(true);
   };
 
+  
+  const loadTipRates = async () => {
+    const keys = [
+      'star_to_ngn_rate',
+      'split_creator_pct',
+      'split_creator_music_pct',
+      'split_musician_pct',
+      'split_viewer_cashback_pct',
+      'split_platform_pct',
+    ];
+    const { data } = await supabase.from('admin_settings').select('setting_key, setting_value').in('setting_key', keys);
+    const map: Record<string, number> = {};
+    (data || []).forEach((r: any) => { map[r.setting_key] = Number(r.setting_value); });
+    return {
+      rate: map.star_to_ngn_rate || 300,
+      creatorPct: map.split_creator_pct || 40,
+      creatorMusicPct: map.split_creator_music_pct || 30,
+      musicianPct: map.split_musician_pct || 10,
+      viewerPct: map.split_viewer_cashback_pct || 35,
+      platformPct: map.split_platform_pct || 25,
+    };
+  };
+
+  /** Tip without relying on tip_post RPC — inserts tip_ledger (trigger applies balances) */
+  const executeTip = async (postId: string, stars: number, source: string, musicTrackId?: string | null) => {
+    if (!user) return { success: false, error: 'Not signed in' };
+    const rates = await loadTipRates();
+    const hasMusic = !!musicTrackId;
+    const cPct = hasMusic ? rates.creatorMusicPct : rates.creatorPct;
+    const mPct = hasMusic ? rates.musicianPct : 0;
+    const total = stars * rates.rate;
+    const creatorNgn = Math.round(total * cPct) / 100;
+    const musicianNgn = Math.round(total * mPct) / 100;
+    const viewerNgn = Math.round(total * rates.viewerPct) / 100;
+    const platformNgn = Math.round(total * rates.platformPct) / 100;
+
+    // Prefer RPC if available
+    const rpc = await supabase.rpc('tip_post' as any, {
+      p_post_id: postId,
+      p_stars: stars,
+      p_source: source,
+    });
+    if (!rpc.error && (rpc.data as any)?.success) {
+      return rpc.data as any;
+    }
+
+    // Fallback: insert ledger row (DB trigger moves balances)
+    const { data: postRow } = await supabase.from('posts').select('user_id, music_track_id').eq('id', postId).maybeSingle();
+    if (!postRow) return { success: false, error: 'Post not found' };
+    if ((postRow as any).user_id === user.id) return { success: false, error: 'Cannot tip your own post' };
+
+    const { error } = await (supabase as any).from('tip_ledger').insert({
+      post_id: postId,
+      from_user_id: user.id,
+      to_user_id: (postRow as any).user_id,
+      stars,
+      star_to_ngn_rate: rates.rate,
+      amount_ngn: total,
+      creator_pct: cPct,
+      musician_pct: mPct,
+      viewer_pct: rates.viewerPct,
+      platform_pct: rates.platformPct,
+      creator_ngn: creatorNgn,
+      musician_ngn: musicianNgn,
+      viewer_ngn: viewerNgn,
+      platform_ngn: platformNgn,
+      source,
+      music_track_id: musicTrackId || (postRow as any).music_track_id || null,
+    });
+    if (error) return { success: false, error: error.message };
+    return {
+      success: true,
+      viewer_cashback: viewerNgn,
+      creator_amount: creatorNgn,
+      platform_amount: platformNgn,
+      musician_amount: musicianNgn,
+      rate: rates.rate,
+    };
+  };
+
+
   const confirmTip = async () => {
     if (!user || !tipPost) return;
     if (![1,2,3,5,10,20,50,100].includes(tipAmount)) { toast({ title: 'Invalid amount', description: 'Pick 1, 2, 3, 5, 10, 20, 50 or 100 stars' }); return; }
     const starBal = myProfile?.star_balance || 0;
     if (starBal < tipAmount) { setStarNotification('no_earn'); setShowTipDialog(false); return; }
-    const { data, error } = await supabase.rpc('tip_post' as any, { p_post_id: tipPost.id, p_stars: tipAmount, p_source: 'manual' });
-    const res = data as any;
-    if (error || !res?.success) {
-      toast({ title: 'Tip failed', description: res?.error || error?.message || 'Try again', variant: 'destructive' as any });
+    const res = await executeTip(tipPost.id, tipAmount, 'manual', tipPost.music_track_id);
+    if (!res?.success) {
+      toast({ title: 'Tip failed', description: res?.error || 'Try again', variant: 'destructive' as any });
       return;
     }
-    toast({ title: '⭐ ' + tipAmount + ' Stars sent!', description: '₦' + Number(res.viewer_cashback).toFixed(0) + ' cashback' });
+    toast({ title: '⭐ ' + tipAmount + ' Stars sent!', description: '₦' + Number(res.viewer_cashback || 0).toFixed(0) + ' cashback' });
     setShowTipDialog(false);
     loadMyProfile();
   };
