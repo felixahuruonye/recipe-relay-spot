@@ -7,6 +7,7 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useToast } from '@/hooks/use-toast';
+import { RefreshCw } from 'lucide-react';
 
 type UserRow = {
   id: string;
@@ -66,8 +67,14 @@ export const MonetizationTab: React.FC = () => {
       .on('postgres_changes', { event: '*', schema: 'public', table: 'user_profiles' }, load)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'fraud_flags' }, load)
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'monetization_events' }, load)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'tip_ledger' }, load)
       .subscribe();
-    return () => { supabase.removeChannel(ch); };
+    // Auto-refresh tip vault + rates every 3s
+    const poll = setInterval(() => { load(); }, 3000);
+    return () => {
+      supabase.removeChannel(ch);
+      clearInterval(poll);
+    };
   }, []);
 
   const filtered = useMemo(() => {
@@ -238,11 +245,17 @@ export const MonetizationTab: React.FC = () => {
     
       <TabsContent value="vault">
         <Card>
-          <CardHeader>
-            <CardTitle>Tip Vault — full history</CardTitle>
-            <p className="text-sm text-muted-foreground">
-              Every tip split (creator + platform + viewer + musician). Not shown on creator dashboards as a vault — creators only see their tip earnings.
-            </p>
+          <CardHeader className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <CardTitle>Tip Vault — full history</CardTitle>
+              <p className="text-sm text-muted-foreground mt-1">
+                Every tip split (creator + platform + viewer + musician). Auto-refreshes every 3s.
+              </p>
+            </div>
+            <Button type="button" variant="outline" size="sm" onClick={() => load()} className="gap-2 shrink-0">
+              <RefreshCw className="w-4 h-4" />
+              Refresh
+            </Button>
           </CardHeader>
           <CardContent className="overflow-x-auto space-y-3">
             <div className="grid grid-cols-2 md:grid-cols-4 gap-2 text-sm">
