@@ -32,7 +32,11 @@ const Notifications = () => {
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
 
   useEffect(() => {
-    if (user) loadNotifications();
+    if (!user) return;
+    loadNotifications();
+    // Poll every 3s so list stays fresh even if realtime is delayed
+    const poll = setInterval(() => { loadNotifications(); }, 3000);
+    return () => clearInterval(poll);
   }, [user]);
 
   useEffect(() => {
@@ -52,7 +56,10 @@ const Notifications = () => {
           created_at: n.created_at,
           action_data: n.action_data
         };
-        setNotifications((prev) => [newNotification, ...prev]);
+        setNotifications((prev) => {
+          if (prev.some((x) => x.id === newNotification.id)) return prev;
+          return [newNotification, ...prev];
+        });
         toast({ title: newNotification.title, description: newNotification.message });
       })
       .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'user_notifications', filter: `user_id=eq.${user.id}` }, (payload) => {
