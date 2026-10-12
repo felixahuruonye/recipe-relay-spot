@@ -78,19 +78,23 @@ export const MonetizationTab: React.FC = () => {
       }
 
       // Fallback from wallet_history so vault is never empty when tips exist
+      // Pull recent wallet rows and keep tip-related ones (type names vary)
       const histRes = await (supabase as any)
         .from('wallet_history')
         .select('*')
-        .in('type', ['tip_cashback', 'tip_earn', 'tip', 'TIP', 'tip_cashback'])
         .order('created_at', { ascending: false })
-        .limit(200);
+        .limit(300);
 
       if (histRes.error) {
         console.warn('wallet_history vault fallback', histRes.error);
         if (!tipsRes.error) setTipLoadError('tip_ledger empty — also failed reading wallet_history: ' + histRes.error.message);
         setTipLedger([]);
       } else {
-        const rows = (histRes.data || []).map((h: any) => {
+        const tipLike = (histRes.data || []).filter((h: any) => {
+          const t = String(h.type || '').toLowerCase();
+          return t.includes('tip') || t.includes('cashback');
+        });
+        const rows = tipLike.map((h: any) => {
           const meta = h.meta || {};
           const amount = Number(h.amount || 0);
           const isCashback = String(h.type || '').toLowerCase().includes('cashback');
@@ -365,7 +369,7 @@ export const MonetizationTab: React.FC = () => {
               </TableHeader>
               <TableBody>
                 {tipLedger.length === 0 && (
-                  <TableRow><TableCell colSpan={6} className="text-muted-foreground text-sm">No tips yet. Run the tip_ledger migration and tip a post.</TableCell></TableRow>
+                  <TableRow><TableCell colSpan={6} className="text-muted-foreground text-sm">No tip rows found in tip_ledger or wallet_history yet. Make a new tip after the trigger fix.</TableCell></TableRow>
                 )}
                 {tipLedger.map((t: any) => (
                   <TableRow key={t.id}>
