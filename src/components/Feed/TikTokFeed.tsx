@@ -2633,12 +2633,21 @@ const TikTokFeed: React.FC = () => {
     try {
       const rpc = await supabase.rpc('tip_post' as any, { p_post_id: postId, p_stars: stars, p_source: source });
       if (!rpc.error && (rpc.data as any)?.success) {
-        // Optimistic local balance
+        const cashback = Number((rpc.data as any).viewer_cashback || vNgn);
         setMyProfile((prev: any) => prev ? {
           ...prev,
           star_balance: Math.max(0, Number(prev.star_balance || 0) - stars),
-          wallet_balance: Number(prev.wallet_balance || 0) + Number((rpc.data as any).viewer_cashback || vNgn),
+          wallet_balance: Number(prev.wallet_balance || 0) + cashback,
         } : prev);
+        try {
+          await (supabase as any).from('wallet_history').insert({
+            user_id: user.id,
+            type: 'tip_cashback',
+            amount: cashback,
+            description: `Tip cashback ⭐${stars}`,
+            meta: { post_id: postId, stars, source },
+          });
+        } catch {}
         return rpc.data as any;
       }
     } catch {}
@@ -2704,6 +2713,19 @@ const TikTokFeed: React.FC = () => {
       star_balance: nextStars,
       wallet_balance: nextWallet,
     } : prev);
+
+    // Dual-write history so Wallet page shows cashback even if tip_ledger SELECT is blocked
+    try {
+      await (supabase as any).from('wallet_history').insert({
+        user_id: user.id,
+        type: 'tip_cashback',
+        amount: vNgn,
+        description: `Auto/manual tip cashback ⭐${stars}`,
+        meta: { post_id: postId, stars, source, creator_id: creatorId },
+      });
+    } catch (e) {
+      console.warn('wallet_history insert', e);
+    }
 
     return {
       success: true,
