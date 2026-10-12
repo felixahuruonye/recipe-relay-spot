@@ -2546,10 +2546,10 @@ const TikTokFeed: React.FC = () => {
 
   const confirmTip = async () => {
     if (!user || !tipPost) return;
-    if (![5,10,20,50,100].includes(tipAmount)) { toast({ title: 'Invalid amount', description: 'Pick 5, 10, 20, 50 or 100 stars' }); return; }
+    if (![1,2,3,5,10,20,50,100].includes(tipAmount)) { toast({ title: 'Invalid amount', description: 'Pick 1, 2, 3, 5, 10, 20, 50 or 100 stars' }); return; }
     const starBal = myProfile?.star_balance || 0;
     if (starBal < tipAmount) { setStarNotification('no_earn'); setShowTipDialog(false); return; }
-    const { data, error } = await supabase.rpc('tip_post' as any, { p_post_id: tipPost.id, p_stars: tipAmount });
+    const { data, error } = await supabase.rpc('tip_post' as any, { p_post_id: tipPost.id, p_stars: tipAmount, p_source: 'manual' });
     const res = data as any;
     if (error || !res?.success) {
       toast({ title: 'Tip failed', description: res?.error || error?.message || 'Try again', variant: 'destructive' as any });
