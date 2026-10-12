@@ -1,10 +1,9 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Wallet, Star, TrendingUp, ArrowUpRight, ArrowDownRight, RefreshCw } from 'lucide-react';
-import { Badge } from '@/components/ui/badge';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 
@@ -15,8 +14,10 @@ export const WalletBalance = () => {
   const [totalEarned, setTotalEarned] = useState(0);
   const [transactions, setTransactions] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+  const [loadError, setLoadError] = useState<string | null>(null);
 
-  const fetchBalances = async () => {
+  const fetchBalances = useCallback(async () => {
     if (!user) return;
     try {
       const { data, error } = await supabase
@@ -30,88 +31,110 @@ export const WalletBalance = () => {
         setStarBalance(Number((data as any).star_balance || 0));
         setTotalEarned(Number((data as any).total_earned || 0));
       }
-    } catch (e) {
+    } catch (e: any) {
       console.error('Error fetching balances:', e);
+      setLoadError(e?.message || 'Failed to load balances');
     } finally {
       setLoading(false);
     }
-  };
+  }, [user]);
 
-  const fetchTransactions = async () => {
+  const fetchTransactions = useCallback(async () => {
     if (!user) return;
     try {
-      const [{ data: hist }, { data: tipsAsViewer }, { data: tipsAsCreator }] = await Promise.all([
-        supabase.from('wallet_history').select('*').eq('user_id', user.id).order('created_at', { ascending: false }).limit(50),
-        (supabase as any).from('tip_ledger').select('*').eq('from_user_id', user.id).order('created_at', { ascending: false }).limit(50),
-        (supabase as any).from('tip_ledger').select('*').eq('to_user_id', user.id).order('created_at', { ascending: false }).limit(50),
-      ]);
+      const rows: any[] = [];
 
-      const fromHist = (hist || []).map((t: any) => ({
-        id: t.id,
-        type: t.type || t.transaction_type || 'wallet',
-        amount: Number(t.amount || 0),
-        created_at: t.created_at,
-      }));
+      // 1) wallet_history
+      const histRes = await supabase
+        .from('wallet_history')
+        .select('*')
+        .eq('user_id', user.id)
+        .order('created_at', { ascending: false })
+        .limit(50);
+      if (histRes.error) {
+        console.warn('wallet_history', histRes.error.message);
+      } else {
+        (histRes.data || []).forEach((t: any) => {
+          rows.push({
+            id: `wh-${t.id}`,
+            type: t.type || t.transaction_type || 'wallet',
+            amount: Number(t.amount || 0),
+            created_at: t.created_at,
+            source: 'wallet_history',
+          });
+        });
+      }
 
-      const fromTipsOut = (tipsAsViewer || []).map((t: any) => ({
-        id: `tip-out-${t.id}`,
-        type: 'tip_cashback',
-        amount: Number(t.viewer_ngn || 0),
-        created_at: t.created_at,
-      }));
+      // 2) tip_ledger as viewer (cashback)
+      const tipsOut = await (supabase as any)
+        .from('tip_ledger')
+        .select('id, stars, viewer_ngn, creator_ngn, source, created_at, from_user_id, to_user_id')
+        .eq('from_user_id', user.id)
+        .order('created_at', { ascending: false })
+        .limit(50);
+      if (tipsOut.error) {
+        console.warn('tip_ledger out', tipsOut.error.message);
+        setLoadError((prev) => prev || `Tips read blocked: ${tipsOut.error.message}`);
+      } else {
+        (tipsOut.data || []).forEach((t: any) => {
+          rows.push({
+            id: `tip-out-${t.id}`,
+            type: 'tip_cashback',
+            amount: Number(t.viewer_ngn || 0),
+            created_at: t.created_at,
+            source: t.source || 'tip',
+            detail: `⭐${t.stars} spent · cashback`,
+          });
+        });
+      }
 
-      const fromTipsIn = (tipsAsCreator || []).map((t: any) => ({
-        id: `tip-in-${t.id}`,
-        type: 'tip_earn',
-        amount: Number(t.creator_ngn || 0),
-        created_at: t.created_at,
-      }));
+      // 3) tip_ledger as creator (earnings)
+      const tipsIn = await (supabase as any)
+        .from('tip_ledger')
+        .select('id, stars, viewer_ngn, creator_ngn, source, created_at, from_user_id, to_user_id')
+        .eq('to_user_id', user.id)
+        .order('created_at', { ascending: false })
+        .limit(50);
+      if (tipsIn.error) {
+        console.warn('tip_ledger in', tipsIn.error.message);
+      } else {
+        (tipsIn.data || []).forEach((t: any) => {
+          rows.push({
+            id: `tip-in-${t.id}`,
+            type: 'tip_earn',
+            amount: Number(t.creator_ngn || 0),
+            created_at: t.created_at,
+            source: t.source || 'tip',
+            detail: `⭐${t.stars} tip received`,
+          });
+        });
+      }
 
-      const merged = [...fromHist, ...fromTipsOut, ...fromTipsIn]
-        .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
-        .slice(0, 50);
-      setTransactions(merged);
-    } catch (error) {
+      rows.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+      setTransactions(rows.slice(0, 80));
+      if (rows.length > 0) setLoadError(null);
+    } catch (error: any) {
       console.error('Error fetching transactions:', error);
+      setLoadError(error?.message || 'Failed to load history');
     }
-  };
+  }, [user]);
+
+  const refreshAll = useCallback(async () => {
+    setRefreshing(true);
+    setLoadError(null);
+    await Promise.all([fetchBalances(), fetchTransactions()]);
+    setRefreshing(false);
+  }, [fetchBalances, fetchTransactions]);
 
   useEffect(() => {
     if (!user) return;
-    fetchBalances();
-    fetchTransactions();
+    refreshAll();
 
     const channel = supabase
-      .channel('wallet-changes-' + user.id)
-      .on('postgres_changes', {
-        event: '*',
-        schema: 'public',
-        table: 'user_profiles',
-        filter: `id=eq.${user.id}`,
-      }, () => { fetchBalances(); })
-      .on('postgres_changes', {
-        event: '*',
-        schema: 'public',
-        table: 'wallet_history',
-        filter: `user_id=eq.${user.id}`,
-      }, () => { fetchTransactions(); fetchBalances(); })
-      .on('postgres_changes', {
-        event: '*',
-        schema: 'public',
-        table: 'withdrawal_history',
-        filter: `user_id=eq.${user.id}`,
-      }, () => { fetchTransactions(); fetchBalances(); })
-      .on('postgres_changes', {
-        event: 'INSERT',
-        schema: 'public',
-        table: 'view_transactions',
-        filter: `uploader_id=eq.${user.id}`,
-      }, () => { fetchTransactions(); fetchBalances(); })
-      .on('postgres_changes', {
-        event: 'INSERT',
-        schema: 'public',
-        table: 'tip_ledger',
-      }, () => { fetchTransactions(); fetchBalances(); })
+      .channel('wallet-live-' + user.id)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'user_profiles', filter: `id=eq.${user.id}` }, () => { fetchBalances(); })
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'wallet_history', filter: `user_id=eq.${user.id}` }, () => { fetchTransactions(); fetchBalances(); })
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'tip_ledger' }, () => { fetchTransactions(); fetchBalances(); })
       .subscribe();
 
     const poll = setInterval(() => {
@@ -123,7 +146,7 @@ export const WalletBalance = () => {
       supabase.removeChannel(channel);
       clearInterval(poll);
     };
-  }, [user]);
+  }, [user, refreshAll, fetchBalances, fetchTransactions]);
 
   const formatCurrency = (amount: number) =>
     `₦${amount.toLocaleString('en-NG', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
@@ -204,10 +227,11 @@ export const WalletBalance = () => {
                 variant="outline"
                 size="sm"
                 className="h-8 gap-1"
-                onClick={() => { fetchBalances(); fetchTransactions(); }}
+                disabled={refreshing}
+                onClick={() => refreshAll()}
               >
-                <RefreshCw className="w-3.5 h-3.5" />
-                Refresh
+                <RefreshCw className={`w-3.5 h-3.5 ${refreshing ? 'animate-spin' : ''}`} />
+                {refreshing ? 'Refreshing…' : 'Refresh'}
               </Button>
               <Dialog>
                 <DialogTrigger asChild>
@@ -219,69 +243,44 @@ export const WalletBalance = () => {
                   <DialogHeader>
                     <DialogTitle>All transactions</DialogTitle>
                   </DialogHeader>
-                  <Tabs defaultValue="all">
-                    <TabsList className="grid grid-cols-3 w-full">
-                      <TabsTrigger value="all">All</TabsTrigger>
-                      <TabsTrigger value="earning">Earning</TabsTrigger>
-                      <TabsTrigger value="spending">Spending</TabsTrigger>
-                    </TabsList>
-                    <TabsContent value="all" className="space-y-2 mt-4">
-                      {transactions.map((tx) => (
-                        <div key={tx.id} className="flex items-center justify-between p-3 glass-card rounded-lg">
-                          <div className="flex items-center gap-3">
-                            {getTransactionIcon(tx.type)}
-                            <div>
-                              <p className="font-medium text-sm">{String(tx.type).replace(/_/g, ' ').toUpperCase()}</p>
-                              <p className="text-xs text-muted-foreground">{new Date(tx.created_at).toLocaleString()}</p>
-                            </div>
+                  <div className="space-y-2 mt-2">
+                    {transactions.map((tx) => (
+                      <div key={tx.id} className="flex items-center justify-between p-3 glass-card rounded-lg">
+                        <div className="flex items-center gap-3">
+                          {getTransactionIcon(tx.type)}
+                          <div>
+                            <p className="font-medium text-sm">{String(tx.type).replace(/_/g, ' ').toUpperCase()}</p>
+                            {tx.detail && <p className="text-xs text-muted-foreground">{tx.detail}</p>}
+                            <p className="text-xs text-muted-foreground">{new Date(tx.created_at).toLocaleString()}</p>
                           </div>
-                          <p className={`font-bold ${tx.amount >= 0 ? 'text-green-500' : 'text-red-500'}`}>
-                            {tx.amount >= 0 ? '+' : ''}{formatCurrency(Math.abs(tx.amount))}
-                          </p>
                         </div>
-                      ))}
-                    </TabsContent>
-                    <TabsContent value="earning" className="space-y-2 mt-4">
-                      {transactions.filter(tx => String(tx.type).includes('earn') || String(tx.type).includes('credit') || String(tx.type).includes('cashback')).map((tx) => (
-                        <div key={tx.id} className="flex items-center justify-between p-3 glass-card rounded-lg">
-                          <div className="flex items-center gap-3">
-                            <ArrowDownRight className="w-4 h-4 text-green-500" />
-                            <div>
-                              <p className="font-medium text-sm">{String(tx.type).replace(/_/g, ' ').toUpperCase()}</p>
-                              <p className="text-xs text-muted-foreground">{new Date(tx.created_at).toLocaleString()}</p>
-                            </div>
-                          </div>
-                          <p className="font-bold text-green-500">+{formatCurrency(Math.abs(tx.amount))}</p>
-                        </div>
-                      ))}
-                    </TabsContent>
-                    <TabsContent value="spending" className="space-y-2 mt-4">
-                      {transactions.filter(tx => !String(tx.type).includes('earn') && !String(tx.type).includes('credit') && !String(tx.type).includes('cashback')).map((tx) => (
-                        <div key={tx.id} className="flex items-center justify-between p-3 glass-card rounded-lg">
-                          <div className="flex items-center gap-3">
-                            <ArrowUpRight className="w-4 h-4 text-red-500" />
-                            <div>
-                              <p className="font-medium text-sm">{String(tx.type).replace(/_/g, ' ').toUpperCase()}</p>
-                              <p className="text-xs text-muted-foreground">{new Date(tx.created_at).toLocaleString()}</p>
-                            </div>
-                          </div>
-                          <p className="font-bold text-red-500">-{formatCurrency(Math.abs(tx.amount))}</p>
-                        </div>
-                      ))}
-                    </TabsContent>
-                  </Tabs>
+                        <p className={`font-bold ${tx.amount >= 0 ? 'text-green-500' : 'text-red-500'}`}>
+                          {tx.amount >= 0 ? '+' : ''}{formatCurrency(Math.abs(tx.amount))}
+                        </p>
+                      </div>
+                    ))}
+                    {transactions.length === 0 && (
+                      <p className="text-center text-muted-foreground py-8">No transactions yet</p>
+                    )}
+                  </div>
                 </DialogContent>
               </Dialog>
             </div>
           </CardTitle>
         </CardHeader>
         <CardContent className="space-y-2">
-          {transactions.slice(0, 5).map((tx) => (
+          {loadError && (
+            <p className="text-xs text-amber-600 bg-amber-500/10 rounded-md p-2">
+              {loadError}
+            </p>
+          )}
+          {transactions.slice(0, 8).map((tx) => (
             <div key={tx.id} className="flex items-center justify-between p-3 glass-card rounded-lg">
               <div className="flex items-center gap-3">
                 {getTransactionIcon(tx.type)}
                 <div>
                   <p className="font-medium text-sm">{String(tx.type).replace(/_/g, ' ').toUpperCase()}</p>
+                  {tx.detail && <p className="text-xs text-muted-foreground">{tx.detail}</p>}
                   <p className="text-xs text-muted-foreground">{new Date(tx.created_at).toLocaleString()}</p>
                 </div>
               </div>
@@ -290,7 +289,7 @@ export const WalletBalance = () => {
               </p>
             </div>
           ))}
-          {transactions.length === 0 && (
+          {transactions.length === 0 && !loadError && (
             <p className="text-center text-muted-foreground py-8">No transactions yet</p>
           )}
         </CardContent>
