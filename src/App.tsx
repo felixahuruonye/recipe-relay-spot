@@ -21,6 +21,7 @@ import Admin from "./pages/Admin";
 import Notifications from "./pages/Notifications";
 import NotFound from "./pages/NotFound";
 import PostVisibility from './pages/PostVisibility';
+import AutoDeductionConfig from './pages/AutoDeductionConfig';
 import Settings from "./pages/Settings";
 import StarMarketplace from "./pages/StarMarketplace";
 import VIPSubscription from "./pages/VIPSubscription";
@@ -208,6 +209,11 @@ const App = () => (
             <Route path="/settings/post-visibility" element={
               <ProtectedRoute>
                 <PostVisibility />
+              </ProtectedRoute>
+            } />
+            <Route path="/settings/auto-deduction" element={
+              <ProtectedRoute>
+                <AutoDeductionConfig />
               </ProtectedRoute>
             } />
             <Route path="/admin" element={<Admin />} />
