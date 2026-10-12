@@ -222,25 +222,26 @@ export const MonetizationTab: React.FC = () => {
 
   const vaultRange = useMemo(() => {
     const now = new Date();
+    now.setMilliseconds(999);
     if (vaultPeriod === 'custom') {
-      return {
-        from: vaultFrom ? new Date(vaultFrom) : null,
-        to: vaultTo ? new Date(vaultTo + 'T23:59:59') : now,
-      };
+      const from = vaultFrom ? new Date(vaultFrom + 'T00:00:00') : new Date(0);
+      const to = vaultTo ? new Date(vaultTo + 'T23:59:59.999') : now;
+      return { from, to, label: `${vaultFrom || '…'} → ${vaultTo || 'today'}` };
     }
-    const days = parseInt(String(vaultPeriod).replace('d', ''), 10) || 30;
-    return { from: new Date(now.getTime() - days * 86400000), to: now };
+    const days = Number(String(vaultPeriod).replace(/d/g, '')) || 30;
+    const from = new Date(now.getTime() - days * 24 * 60 * 60 * 1000);
+    return { from, to: now, label: `Last ${days} days` };
   }, [vaultPeriod, vaultFrom, vaultTo]);
 
   const periodLedger = useMemo(() => {
-    const { from, to } = vaultRange;
+    const fromMs = vaultRange.from.getTime();
+    const toMs = vaultRange.to.getTime();
     return tipLedger.filter((t) => {
-      const d = new Date(t.created_at);
-      if (from && d < from) return false;
-      if (to && d > to) return false;
-      return true;
+      const ms = new Date(t.created_at).getTime();
+      if (Number.isNaN(ms)) return false;
+      return ms >= fromMs && ms <= toMs;
     });
-  }, [tipLedger, vaultRange]);
+  }, [tipLedger, vaultRange.from, vaultRange.to]);
 
   const vaultStats = useMemo(() => {
     const real = periodLedger.filter((t) => !t._from_wallet_history);
@@ -601,6 +602,11 @@ export const MonetizationTab: React.FC = () => {
                   <Input type="date" className="h-8 w-auto" value={vaultTo} onChange={(e) => setVaultTo(e.target.value)} />
                 </div>
               )}
+              <p className="text-xs text-muted-foreground w-full">
+                Showing: <span className="font-medium text-foreground">{vaultRange.label}</span>
+                {' · '}
+                {periodLedger.length} events · tips {vaultStats.totalTips} · stars {vaultStats.starsTipped}
+              </p>
             </div>
           </CardHeader>
           <CardContent className="overflow-x-auto space-y-4">
@@ -608,7 +614,7 @@ export const MonetizationTab: React.FC = () => {
               <p className="text-sm text-amber-600 bg-amber-500/10 rounded-md p-3">{tipLoadError}</p>
             )}
 
-            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-2 text-sm">
+            <div key={`stats-${vaultPeriod}-${vaultFrom}-${vaultTo}-${periodLedger.length}`} className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-2 text-sm">
               <div className="rounded-lg border p-3">
                 <p className="text-muted-foreground text-xs">Total tips</p>
                 <p className="font-bold text-lg">{vaultStats.totalTips}</p>
