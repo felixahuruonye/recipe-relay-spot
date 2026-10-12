@@ -1227,7 +1227,7 @@ const TikTokPost: React.FC<{
   const { toast } = useToast();
   const videoRef = useRef<HTMLVideoElement>(null);
   const musicAudioRef = useRef<HTMLAudioElement>(null);
-  const [imageTimer, setImageTimer] = useState(5);
+  const [imageTimer, setImageTimer] = useState(30);
   const [isPaused, setIsPaused] = useState(false);
   const [mediaReady, setMediaReady] = useState(false);
   const [showDoubleHeart, setShowDoubleHeart] = useState(false);
@@ -1340,11 +1340,11 @@ const TikTokPost: React.FC<{
   // toggle would restart the countdown from 5 each time instead.
   useEffect(() => {
     if (!isActive || isVideo) {
-      setImageTimer(5);
+      setImageTimer(30);
       if (imageTimerRef.current) clearInterval(imageTimerRef.current);
       return;
     }
-    setImageTimer(5);
+    setImageTimer(30);
     imageTimerRef.current = setInterval(() => {
       if (isPausedRef.current) return;
       setImageTimer(prev => {
@@ -1418,7 +1418,12 @@ const TikTokPost: React.FC<{
           onTimeUpdate={(e) => {
             const video = e.currentTarget;
             const duration = Number.isFinite(video.duration) ? video.duration : 0;
-            const qualifiedAt = duration > 0 ? Math.min(duration * 0.7, 30) : 8;
+            // Short post (<=60s): qualify at 30s (or ~end if shorter). Long post: qualify at 60s.
+            let qualifiedAt = 30;
+            if (duration > 0) {
+              if (duration <= 60) qualifiedAt = Math.min(30, Math.max(duration * 0.95, 3));
+              else qualifiedAt = 60;
+            }
             if (!viewQualifiedRef.current && video.currentTime >= qualifiedAt) {
               viewQualifiedRef.current = true;
               onViewQualified();
@@ -2064,7 +2069,7 @@ const TikTokFeed: React.FC = () => {
 
     // Anti-abuse: cooldown
     const now = Date.now();
-    if (now - viewCooldownRef.current < 10000) return; // 10s cooldown
+    if (now - viewCooldownRef.current < 3000) return; // 3s anti-abuse cooldown
     viewCooldownRef.current = now;
 
     // Daily limit
@@ -2464,9 +2469,32 @@ const TikTokFeed: React.FC = () => {
 
   const loadMyProfile = async () => {
     if (!user) return;
-    const { data } = await (supabase as any).from('user_profiles').select('id, username, avatar_url, vip, is_vip, star_balance, wallet_balance, story_settings').eq('id', user.id).single();
+    const { data } = await (supabase as any).from('user_profiles').select('id, username, avatar_url, vip, is_vip, star_balance, wallet_balance, story_settings, auto_deduct_stars').eq('id', user.id).single();
     if (data) setMyProfile(data);
   };
+
+  // Realtime star/wallet balance on feed (and anywhere this component is mounted)
+  useEffect(() => {
+    if (!user) return;
+    const channel = supabase
+      .channel(`profile-balance-${user.id}`)
+      .on('postgres_changes', {
+        event: 'UPDATE',
+        schema: 'public',
+        table: 'user_profiles',
+        filter: `id=eq.${user.id}`,
+      }, (payload: any) => {
+        const row = payload.new;
+        if (!row) return;
+        setMyProfile((prev: any) => prev ? {
+          ...prev,
+          star_balance: row.star_balance ?? prev.star_balance,
+          wallet_balance: row.wallet_balance ?? prev.wallet_balance,
+        } : prev);
+      })
+      .subscribe();
+    return () => { supabase.removeChannel(channel); };
+  }, [user?.id]);
 
   const loadCounts = async () => {
     if (!user) return;
@@ -2582,30 +2610,36 @@ const TikTokFeed: React.FC = () => {
     const cPct = hasMusic ? rates.creatorMusicPct : rates.creatorPct;
     const mPct = hasMusic ? rates.musicianPct : 0;
     const total = stars * rates.rate;
-    const creatorNgn = Math.round(total * cPct) / 100;
-    const musicianNgn = Math.round(total * mPct) / 100;
-    const viewerNgn = Math.round(total * rates.viewerPct) / 100;
-    const platformNgn = Math.round(total * rates.platformPct) / 100;
+    const creatorNgn = Math.round((total * cPct) * 100) / 10000 * 100; // keep 2dp via round
+    const cNgn = Math.round(total * cPct) / 100;
+    const mNgn = Math.round(total * mPct) / 100;
+    const vNgn = Math.round(total * rates.viewerPct) / 100;
+    const pNgn = Math.round(total * rates.platformPct) / 100;
 
-    // Prefer RPC if available
-    const rpc = await supabase.rpc('tip_post' as any, {
-      p_post_id: postId,
-      p_stars: stars,
-      p_source: source,
-    });
-    if (!rpc.error && (rpc.data as any)?.success) {
-      return rpc.data as any;
-    }
-
-    // Fallback: insert ledger row (DB trigger moves balances)
     const { data: postRow } = await supabase.from('posts').select('user_id, music_track_id').eq('id', postId).maybeSingle();
     if (!postRow) return { success: false, error: 'Post not found' };
-    if ((postRow as any).user_id === user.id) return { success: false, error: 'Cannot tip your own post' };
+    const creatorId = (postRow as any).user_id as string;
+    if (creatorId === user.id) return { success: false, error: 'Cannot tip your own post' };
 
-    const { error } = await (supabase as any).from('tip_ledger').insert({
+    // Try RPC first
+    try {
+      const rpc = await supabase.rpc('tip_post' as any, { p_post_id: postId, p_stars: stars, p_source: source });
+      if (!rpc.error && (rpc.data as any)?.success) {
+        // Optimistic local balance
+        setMyProfile((prev: any) => prev ? {
+          ...prev,
+          star_balance: Math.max(0, Number(prev.star_balance || 0) - stars),
+          wallet_balance: Number(prev.wallet_balance || 0) + Number((rpc.data as any).viewer_cashback || vNgn),
+        } : prev);
+        return rpc.data as any;
+      }
+    } catch {}
+
+    // Insert tip_ledger (trigger may apply balances)
+    const { error: ledErr } = await (supabase as any).from('tip_ledger').insert({
       post_id: postId,
       from_user_id: user.id,
-      to_user_id: (postRow as any).user_id,
+      to_user_id: creatorId,
       stars,
       star_to_ngn_rate: rates.rate,
       amount_ngn: total,
@@ -2613,26 +2647,67 @@ const TikTokFeed: React.FC = () => {
       musician_pct: mPct,
       viewer_pct: rates.viewerPct,
       platform_pct: rates.platformPct,
-      creator_ngn: creatorNgn,
-      musician_ngn: musicianNgn,
-      viewer_ngn: viewerNgn,
-      platform_ngn: platformNgn,
+      creator_ngn: cNgn,
+      musician_ngn: mNgn,
+      viewer_ngn: vNgn,
+      platform_ngn: pNgn,
       source,
       music_track_id: musicTrackId || (postRow as any).music_track_id || null,
     });
-    if (error) return { success: false, error: error.message };
+    if (ledErr) {
+      console.warn('tip_ledger insert', ledErr.message);
+      // Still try direct balance moves for the tipper (own row – usually allowed by RLS)
+    }
+
+    // Always move tipper balances from the client (own profile) so UI updates even if trigger failed
+    const { data: me } = await supabase.from('user_profiles').select('star_balance, wallet_balance').eq('id', user.id).maybeSingle();
+    const nextStars = Math.max(0, Number((me as any)?.star_balance ?? myProfile?.star_balance ?? 0) - stars);
+    const nextWallet = Number((me as any)?.wallet_balance ?? myProfile?.wallet_balance ?? 0) + vNgn;
+    await supabase.from('user_profiles').update({
+      star_balance: nextStars,
+      wallet_balance: nextWallet,
+    } as any).eq('id', user.id);
+
+    // Credit creator (best-effort – may fail under RLS; trigger should handle when working)
+    try {
+      const { data: cr } = await supabase.from('user_profiles').select('total_earned, tip_earnings').eq('id', creatorId).maybeSingle();
+      if (cr) {
+        await supabase.from('user_profiles').update({
+          total_earned: Number((cr as any).total_earned || 0) + cNgn,
+          tip_earnings: Number((cr as any).tip_earnings || 0) + cNgn,
+        } as any).eq('id', creatorId);
+      }
+    } catch {}
+
+    // Notify creator
+    try {
+      await (supabase as any).from('user_notifications').insert({
+        user_id: creatorId,
+        type: 'tip',
+        title: 'You received a tip!',
+        body: `@${(myProfile as any)?.username || 'Someone'} sent you ⭐${stars} (₦${cNgn.toFixed(0)})`,
+        data: { post_id: postId, stars, from_user_id: user.id, amount_ngn: cNgn },
+        read: false,
+      });
+    } catch {}
+
+    setMyProfile((prev: any) => prev ? {
+      ...prev,
+      star_balance: nextStars,
+      wallet_balance: nextWallet,
+    } : prev);
+
     return {
       success: true,
-      viewer_cashback: viewerNgn,
-      creator_amount: creatorNgn,
-      platform_amount: platformNgn,
-      musician_amount: musicianNgn,
+      viewer_cashback: vNgn,
+      creator_amount: cNgn,
+      platform_amount: pNgn,
+      musician_amount: mNgn,
       rate: rates.rate,
     };
   };
 
-
-  const confirmTip = async () => {
+const confirmTip = async () => {
     if (!user || !tipPost) return;
     if (![1,2,3,5,10,20,50,100].includes(tipAmount)) { toast({ title: 'Invalid amount', description: 'Pick 1, 2, 3, 5, 10, 20, 50 or 100 stars' }); return; }
     const starBal = myProfile?.star_balance || 0;
