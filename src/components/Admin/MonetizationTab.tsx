@@ -21,9 +21,12 @@ type UserRow = {
 type Setting = { setting_key: string; setting_value: string; description: string | null };
 
 const TUNABLE_KEYS = [
-  'star_to_ngn_rate','first_view_stars','split_creator_pct','split_creator_music_pct',
-  'split_musician_pct','split_viewer_cashback_pct','split_platform_pct',
-  'level1_followers','level1_reactions','level2_followers','level2_reactions','level3_followers','level3_reactions'
+  'star_to_ngn_rate',
+  'split_creator_pct',
+  'split_creator_music_pct',
+  'split_musician_pct',
+  'split_viewer_cashback_pct',
+  'split_platform_pct',
 ];
 
 export const MonetizationTab: React.FC = () => {
@@ -32,6 +35,7 @@ export const MonetizationTab: React.FC = () => {
   const [settings, setSettings] = useState<Setting[]>([]);
   const [flags, setFlags] = useState<any[]>([]);
   const [events, setEvents] = useState<any[]>([]);
+  const [tipLedger, setTipLedger] = useState<any[]>([]);
   const [search, setSearch] = useState('');
   const [edits, setEdits] = useState<Record<string, string>>({});
 
@@ -51,6 +55,8 @@ export const MonetizationTab: React.FC = () => {
 
     const { data: e } = await (supabase as any).from('monetization_events').select('*').order('created_at', { ascending: false }).limit(50);
     setEvents(e || []);
+    const { data: tips } = await (supabase as any).from('tip_ledger').select('*').order('created_at', { ascending: false }).limit(100);
+    setTipLedger(tips || []);
   };
 
   useEffect(() => {
@@ -102,6 +108,7 @@ export const MonetizationTab: React.FC = () => {
       <TabsList>
         <TabsTrigger value="users">Creators</TabsTrigger>
         <TabsTrigger value="settings">Rates</TabsTrigger>
+        <TabsTrigger value="vault">Tip Vault</TabsTrigger>
         <TabsTrigger value="flags">Fraud Queue {flags.length ? `(${flags.length})` : ''}</TabsTrigger>
         <TabsTrigger value="events">Ledger</TabsTrigger>
       </TabsList>
@@ -228,6 +235,65 @@ export const MonetizationTab: React.FC = () => {
           </CardContent>
         </Card>
       </TabsContent>
+    
+      <TabsContent value="vault">
+        <Card>
+          <CardHeader>
+            <CardTitle>Tip Vault — full history</CardTitle>
+            <p className="text-sm text-muted-foreground">
+              Every tip split (creator + platform + viewer + musician). Not shown on creator dashboards as a vault — creators only see their tip earnings.
+            </p>
+          </CardHeader>
+          <CardContent className="overflow-x-auto space-y-3">
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-2 text-sm">
+              <div className="rounded-lg border p-3">
+                <p className="text-muted-foreground text-xs">Total tips</p>
+                <p className="font-bold text-lg">{tipLedger.length}</p>
+              </div>
+              <div className="rounded-lg border p-3">
+                <p className="text-muted-foreground text-xs">Stars tipped</p>
+                <p className="font-bold text-lg">{tipLedger.reduce((a, t) => a + Number(t.stars || 0), 0)}</p>
+              </div>
+              <div className="rounded-lg border p-3">
+                <p className="text-muted-foreground text-xs">Creator ₦</p>
+                <p className="font-bold text-lg">₦{tipLedger.reduce((a, t) => a + Number(t.creator_ngn || 0), 0).toFixed(0)}</p>
+              </div>
+              <div className="rounded-lg border p-3">
+                <p className="text-muted-foreground text-xs">Platform ₦</p>
+                <p className="font-bold text-lg">₦{tipLedger.reduce((a, t) => a + Number(t.platform_ngn || 0), 0).toFixed(0)}</p>
+              </div>
+            </div>
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>When</TableHead>
+                  <TableHead>Stars</TableHead>
+                  <TableHead>Creator ₦</TableHead>
+                  <TableHead>Platform ₦</TableHead>
+                  <TableHead>Viewer ₦</TableHead>
+                  <TableHead>Source</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {tipLedger.length === 0 && (
+                  <TableRow><TableCell colSpan={6} className="text-muted-foreground text-sm">No tips yet. Run the tip_ledger migration and tip a post.</TableCell></TableRow>
+                )}
+                {tipLedger.map((t: any) => (
+                  <TableRow key={t.id}>
+                    <TableCell className="text-xs whitespace-nowrap">{new Date(t.created_at).toLocaleString()}</TableCell>
+                    <TableCell>{t.stars}</TableCell>
+                    <TableCell>₦{Number(t.creator_ngn || 0).toFixed(0)}</TableCell>
+                    <TableCell>₦{Number(t.platform_ngn || 0).toFixed(0)}</TableCell>
+                    <TableCell>₦{Number(t.viewer_ngn || 0).toFixed(0)}</TableCell>
+                    <TableCell><Badge variant="outline">{t.source}</Badge></TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </CardContent>
+        </Card>
+      </TabsContent>
+
     </Tabs>
   );
 };
