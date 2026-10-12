@@ -90,6 +90,7 @@ export const MonetizationTab: React.FC = () => {
   const [selectedVaultUser, setSelectedVaultUser] = useState<UserRow | null>(null);
   const [detailKind, setDetailKind] = useState<'spent' | 'received' | 'cashback' | 'platform' | null>(null);
   const [bootError, setBootError] = useState<string | null>(null);
+  const [usernameMap, setUsernameMap] = useState<Record<string, string>>({});
 
   const load = useCallback(async () => {
     try {
@@ -99,6 +100,11 @@ export const MonetizationTab: React.FC = () => {
         .order('total_earned', { ascending: false })
         .limit(200);
       setUsers(((u as any) || []) as UserRow[]);
+      const umap: Record<string, string> = {};
+      (((u as any) || []) as UserRow[]).forEach((row) => {
+        if (row?.id) umap[row.id] = row.username || row.id.slice(0, 8);
+      });
+      setUsernameMap(umap);
 
       const { data: s } = await supabase
         .from('admin_settings')
@@ -125,7 +131,7 @@ export const MonetizationTab: React.FC = () => {
         .from('tip_ledger')
         .select('*')
         .order('created_at', { ascending: false })
-        .limit(200);
+        .limit(1000);
 
       if (!tipsRes.error && tipsRes.data && tipsRes.data.length > 0) {
         setTipLoadError(null);
@@ -141,7 +147,7 @@ export const MonetizationTab: React.FC = () => {
           .from('wallet_history')
           .select('*')
           .order('created_at', { ascending: false })
-          .limit(300);
+          .limit(1000);
 
         if (histRes.error) {
           if (!tipsRes.error) {
@@ -272,6 +278,77 @@ export const MonetizationTab: React.FC = () => {
     const uid = selectedVaultUser.id;
     return periodLedger.filter((t) => t.from_user_id === uid || t.to_user_id === uid);
   }, [selectedVaultUser, periodLedger]);
+
+  // When time period changes, pull fresh data from Supabase
+  useEffect(() => {
+    load();
+  }, [vaultPeriod, vaultFrom, vaultTo, load]);
+
+  // Per-user aggregates for the selected period (complete user table)
+  const periodUserStats = useMemo(() => {
+    const map = new Map<string, {
+      id: string;
+      username: string;
+      tipsOut: number;
+      tipsIn: number;
+      starsSpent: number;
+      starsRecvValue: number;
+      cashback: number;
+      platform: number;
+      lastAt: string | null;
+      sources: Set<string>;
+    }>();
+
+    const ensure = (uid: string | null | undefined) => {
+      if (!uid) return null;
+      if (!map.has(uid)) {
+        map.set(uid, {
+          id: uid,
+          username: usernameMap[uid] || uid.slice(0, 8),
+          tipsOut: 0,
+          tipsIn: 0,
+          starsSpent: 0,
+          starsRecvValue: 0,
+          cashback: 0,
+          platform: 0,
+          lastAt: null,
+          sources: new Set<string>(),
+        });
+      }
+      return map.get(uid)!;
+    };
+
+    periodLedger.forEach((t) => {
+      const from = ensure(t.from_user_id);
+      const to = ensure(t.to_user_id);
+      const stars = Number(t.stars || 0);
+      const cNgn = Number(t.creator_ngn || 0);
+      const vNgn = Number(t.viewer_ngn || 0);
+      const pNgn = platformShare(t, settings);
+      const src = t.source || 'tip';
+      if (from) {
+        from.tipsOut += 1;
+        from.starsSpent += stars;
+        from.cashback += vNgn;
+        from.platform += pNgn;
+        from.sources.add(src);
+        if (!from.lastAt || new Date(t.created_at) > new Date(from.lastAt)) from.lastAt = t.created_at;
+      }
+      if (to) {
+        to.tipsIn += 1;
+        to.starsRecvValue += cNgn;
+        to.sources.add(src);
+        if (!to.lastAt || new Date(t.created_at) > new Date(to.lastAt)) to.lastAt = t.created_at;
+      }
+    });
+
+    let list = Array.from(map.values());
+    const q = vaultUserSearch.trim().toLowerCase();
+    if (q) list = list.filter((u) => u.username.toLowerCase().includes(q) || u.id.includes(q));
+    list.sort((a, b) => (b.starsSpent + b.starsRecvValue + b.cashback) - (a.starsSpent + a.starsRecvValue + a.cashback));
+    return list;
+  }, [periodLedger, usernameMap, vaultUserSearch, settings]);
+
 
   const setLevel = async (u: UserRow, level: number) => {
     const { data, error } = await supabase.rpc('admin_set_monetization_level' as any, {
@@ -566,56 +643,177 @@ export const MonetizationTab: React.FC = () => {
             </div>
 
             <div className="space-y-2">
-              <p className="text-sm font-semibold">Users</p>
-              <div className="relative">
-                <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
-                <Input
-                  className="pl-9"
-                  placeholder="Search username…"
-                  value={vaultUserSearch}
-                  onChange={(e) => setVaultUserSearch(e.target.value)}
-                />
+              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+                <p className="text-sm font-semibold">Users in period ({periodUserStats.length})</p>
+                <div className="relative w-full sm:max-w-xs">
+                  <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
+                  <Input
+                    className="pl-9 h-9"
+                    placeholder="Search username…"
+                    value={vaultUserSearch}
+                    onChange={(e) => setVaultUserSearch(e.target.value)}
+                  />
+                </div>
               </div>
-              <div className="max-h-48 overflow-y-auto rounded-lg border divide-y">
-                {vaultUsers.map((u) => (
-                  <button
-                    key={u.id}
-                    type="button"
-                    onClick={() => {
-                      setSelectedVaultUser(u);
-                      setDetailKind(null);
-                    }}
-                    className={`w-full flex items-center justify-between px-3 py-2 text-sm text-left hover:bg-muted/40 ${
-                      selectedVaultUser?.id === u.id ? 'bg-muted' : ''
-                    }`}
-                  >
-                    <span className="font-medium">@{u.username || u.id.slice(0, 8)}</span>
-                    <Badge variant="outline" className="text-[10px]">
-                      Not Verified
-                    </Badge>
-                  </button>
-                ))}
-                {vaultUsers.length === 0 && (
-                  <p className="p-3 text-sm text-muted-foreground">No users match.</p>
-                )}
+              <div className="overflow-x-auto rounded-lg border">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>User</TableHead>
+                      <TableHead>When (last)</TableHead>
+                      <TableHead>Star spent</TableHead>
+                      <TableHead>Star received</TableHead>
+                      <TableHead>Cashbacks</TableHead>
+                      <TableHead>Source</TableHead>
+                      <TableHead>Matrix</TableHead>
+                      <TableHead>Status</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {periodUserStats.length === 0 && (
+                      <TableRow>
+                        <TableCell colSpan={8} className="text-muted-foreground text-sm">
+                          No user tip activity in this period. Change the time range or make a new tip.
+                        </TableCell>
+                      </TableRow>
+                    )}
+                    {periodUserStats.map((u) => {
+                      const matrixScore = u.starsSpent + u.starsRecvValue + u.cashback;
+                      const profile = users.find((x) => x.id === u.id);
+                      const banned = !!profile?.earning_banned;
+                      return (
+                        <TableRow
+                          key={u.id}
+                          className={`cursor-pointer ${selectedVaultUser?.id === u.id ? 'bg-muted/60' : ''}`}
+                          onClick={() => {
+                            setSelectedVaultUser({
+                              id: u.id,
+                              username: u.username,
+                              monetization_level: profile?.monetization_level ?? null,
+                              earning_banned: profile?.earning_banned ?? null,
+                              view_earn_progress: profile?.view_earn_progress ?? null,
+                              follower_count: profile?.follower_count ?? null,
+                              total_earned: profile?.total_earned ?? null,
+                            });
+                            setDetailKind(null);
+                          }}
+                        >
+                          <TableCell className="font-medium">@{u.username}</TableCell>
+                          <TableCell className="text-xs whitespace-nowrap">
+                            {u.lastAt ? new Date(u.lastAt).toLocaleString() : '—'}
+                          </TableCell>
+                          <TableCell>
+                            <button
+                              type="button"
+                              className="inline-flex items-center gap-1 text-sm"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setSelectedVaultUser({
+                                  id: u.id,
+                                  username: u.username,
+                                  monetization_level: profile?.monetization_level ?? null,
+                                  earning_banned: profile?.earning_banned ?? null,
+                                  view_earn_progress: profile?.view_earn_progress ?? null,
+                                  follower_count: profile?.follower_count ?? null,
+                                  total_earned: profile?.total_earned ?? null,
+                                });
+                                setDetailKind('spent');
+                              }}
+                            >
+                              ⭐{u.starsSpent} <Eye className="w-3.5 h-3.5 opacity-70" />
+                            </button>
+                          </TableCell>
+                          <TableCell>
+                            <button
+                              type="button"
+                              className="inline-flex items-center gap-1 text-sm"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setSelectedVaultUser({
+                                  id: u.id,
+                                  username: u.username,
+                                  monetization_level: profile?.monetization_level ?? null,
+                                  earning_banned: profile?.earning_banned ?? null,
+                                  view_earn_progress: profile?.view_earn_progress ?? null,
+                                  follower_count: profile?.follower_count ?? null,
+                                  total_earned: profile?.total_earned ?? null,
+                                });
+                                setDetailKind('received');
+                              }}
+                            >
+                              ₦{u.starsRecvValue.toFixed(0)} <Eye className="w-3.5 h-3.5 opacity-70" />
+                            </button>
+                          </TableCell>
+                          <TableCell>
+                            <button
+                              type="button"
+                              className="inline-flex items-center gap-1 text-sm"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setSelectedVaultUser({
+                                  id: u.id,
+                                  username: u.username,
+                                  monetization_level: profile?.monetization_level ?? null,
+                                  earning_banned: profile?.earning_banned ?? null,
+                                  view_earn_progress: profile?.view_earn_progress ?? null,
+                                  follower_count: profile?.follower_count ?? null,
+                                  total_earned: profile?.total_earned ?? null,
+                                });
+                                setDetailKind('cashback');
+                              }}
+                            >
+                              ₦{u.cashback.toFixed(0)} <Eye className="w-3.5 h-3.5 opacity-70" />
+                            </button>
+                          </TableCell>
+                          <TableCell className="text-xs max-w-[120px]">
+                            {Array.from(u.sources).slice(0, 3).join(', ') || '—'}
+                          </TableCell>
+                          <TableCell>
+                            <div className="w-16 h-2 rounded bg-muted overflow-hidden" title={`Score ₦${matrixScore.toFixed(0)}`}>
+                              <div
+                                className="h-full bg-primary"
+                                style={{ width: `${Math.min(100, matrixScore > 0 ? 20 + Math.min(80, matrixScore / 50) : 0)}%` }}
+                              />
+                            </div>
+                          </TableCell>
+                          <TableCell>
+                            {banned ? (
+                              <span className="text-xs">Banned</span>
+                            ) : (
+                              <span className="text-xs">Not Verified</span>
+                            )}
+                          </TableCell>
+                        </TableRow>
+                      );
+                    })}
+                  </TableBody>
+                </Table>
               </div>
+              <p className="text-xs text-muted-foreground">
+                Totals and this table update when you change the time period. Data auto-refreshes every few seconds.
+              </p>
             </div>
 
             {selectedVaultUser && (
               <div className="space-y-2 border rounded-lg p-3">
                 <div className="flex items-center justify-between">
-                  <p className="font-semibold text-sm">History · @{selectedVaultUser.username}</p>
+                  <p className="font-semibold text-sm">Event log · @{selectedVaultUser.username}</p>
                   <Button type="button" size="sm" variant="ghost" onClick={() => setSelectedVaultUser(null)}>
                     <X className="w-4 h-4" />
                   </Button>
                 </div>
-                <Badge className="bg-purple-600">Not Verified</Badge>
+                <div className="flex flex-wrap gap-2 text-xs">
+                  <Badge className="bg-purple-600">Not Verified</Badge>
+                  <span className="text-muted-foreground">
+                    {userTipRows.length} events in selected period
+                  </span>
+                </div>
                 <Table>
                   <TableHeader>
                     <TableRow>
                       <TableHead>When</TableHead>
                       <TableHead>Star spent</TableHead>
-                      <TableHead>Received</TableHead>
+                      <TableHead>Star received</TableHead>
                       <TableHead>Cashbacks</TableHead>
                       <TableHead>Source</TableHead>
                       <TableHead>Status</TableHead>
@@ -664,6 +862,38 @@ export const MonetizationTab: React.FC = () => {
                     })}
                   </TableBody>
                 </Table>
+                <div className="rounded-lg border p-3">
+                  <p className="text-xs font-semibold mb-2">Matrix earnings (period)</p>
+                  {(() => {
+                    const amounts = userTipRows.map((t) => {
+                      const v = t.from_user_id === selectedVaultUser.id ? Number(t.viewer_ngn || 0) : 0;
+                      const c = t.to_user_id === selectedVaultUser.id ? Number(t.creator_ngn || 0) : 0;
+                      return v + c;
+                    });
+                    const max = Math.max(1, ...(amounts.length ? amounts : [0]));
+                    const hi = amounts.length ? Math.max(...amounts) : 0;
+                    const lo = amounts.length ? Math.min(...amounts) : 0;
+                    return (
+                      <div className="space-y-2">
+                        <p className="text-xs text-muted-foreground">
+                          Highest ₦{hi.toFixed(0)} · Lowest ₦{lo.toFixed(0)} · Events {userTipRows.length}
+                        </p>
+                        <div className="flex items-end gap-1 h-16">
+                          {amounts.slice(0, 32).map((a, i) => (
+                            <div
+                              key={i}
+                              className="flex-1 bg-primary/70 rounded-t min-w-[3px]"
+                              style={{ height: `${Math.max(4, (a / max) * 100)}%` }}
+                            />
+                          ))}
+                          {amounts.length === 0 && (
+                            <p className="text-xs text-muted-foreground">No matrix data</p>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })()}
+                </div>
               </div>
             )}
 
@@ -693,8 +923,14 @@ export const MonetizationTab: React.FC = () => {
                     )}
                     {(detailKind === 'platform' ? periodLedger : userTipRows).map((t) => {
                       let line = '';
-                      if (detailKind === 'spent') line = `⭐${t.stars || 0} tipped`;
-                      if (detailKind === 'received') line = `₦${Number(t.creator_ngn || 0).toFixed(0)} from tip`;
+                      if (detailKind === 'spent') {
+                        const toName = usernameMap[t.to_user_id || ''] || (t.to_user_id || '—').toString().slice(0, 8);
+                        line = `⭐${t.stars || 0} → @${toName}`;
+                      }
+                      if (detailKind === 'received') {
+                        const fromName = usernameMap[t.from_user_id || ''] || (t.from_user_id || '—').toString().slice(0, 8);
+                        line = `₦${Number(t.creator_ngn || 0).toFixed(0)} from @${fromName}`;
+                      }
                       if (detailKind === 'cashback') line = `₦${Number(t.viewer_ngn || 0).toFixed(2)} cashback`;
                       if (detailKind === 'platform') {
                         line = `₦${platformShare(t, settings).toFixed(0)} · ⭐${t.stars || 0} · ${t.source || 'tip'}`;
