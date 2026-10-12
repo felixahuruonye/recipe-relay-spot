@@ -2618,7 +2618,6 @@ const TikTokFeed: React.FC = () => {
     const cPct = hasMusic ? rates.creatorMusicPct : rates.creatorPct;
     const mPct = hasMusic ? rates.musicianPct : 0;
     const total = stars * rates.rate;
-    const creatorNgn = Math.round((total * cPct) * 100) / 10000 * 100; // keep 2dp via round
     const cNgn = Math.round(total * cPct) / 100;
     const mNgn = Math.round(total * mPct) / 100;
     const vNgn = Math.round(total * rates.viewerPct) / 100;
@@ -2629,30 +2628,42 @@ const TikTokFeed: React.FC = () => {
     const creatorId = (postRow as any).user_id as string;
     if (creatorId === user.id) return { success: false, error: 'Cannot tip your own post' };
 
-    // Try RPC first
+    let usedRpc = false;
     try {
       const rpc = await supabase.rpc('tip_post' as any, { p_post_id: postId, p_stars: stars, p_source: source });
       if (!rpc.error && (rpc.data as any)?.success) {
+        usedRpc = true;
         const cashback = Number((rpc.data as any).viewer_cashback || vNgn);
         setMyProfile((prev: any) => prev ? {
           ...prev,
           star_balance: Math.max(0, Number(prev.star_balance || 0) - stars),
           wallet_balance: Number(prev.wallet_balance || 0) + cashback,
         } : prev);
-        try {
-          await (supabase as any).from('wallet_history').insert({
-            user_id: user.id,
-            type: 'tip_cashback',
-            amount: cashback,
-            description: `Tip cashback ⭐${stars}`,
-            meta: { post_id: postId, stars, source },
-          });
-        } catch {}
-        return rpc.data as any;
+        // wallet_history schema: user_id, type, amount, meta, currency (NO description)
+        const { error: whErr } = await (supabase as any).from('wallet_history').insert({
+          user_id: user.id,
+          type: 'tip_cashback',
+          amount: cashback,
+          currency: 'NGN',
+          meta: { post_id: postId, stars, source, label: `Tip cashback ⭐${stars}` },
+        });
+        if (whErr) console.warn('wallet_history', whErr.message);
+        // Viewer notification (correct columns: message not body)
+        await (supabase as any).from('user_notifications').insert({
+          user_id: user.id,
+          type: 'cashback',
+          title: 'Cashback!',
+          message: `You earned ₦${cashback.toFixed(2)} cashback!`,
+          notification_category: 'wallet',
+          action_data: { post_id: postId, stars, amount: cashback },
+        });
+        return { ...(rpc.data as any), viewer_cashback: cashback };
       }
-    } catch {}
+    } catch (e) {
+      console.warn('tip_post rpc', e);
+    }
 
-    // Insert tip_ledger (trigger may apply balances)
+    // tip_ledger insert
     const { error: ledErr } = await (supabase as any).from('tip_ledger').insert({
       post_id: postId,
       from_user_id: user.id,
@@ -2671,21 +2682,19 @@ const TikTokFeed: React.FC = () => {
       source,
       music_track_id: musicTrackId || (postRow as any).music_track_id || null,
     });
-    if (ledErr) {
-      console.warn('tip_ledger insert', ledErr.message);
-      // Still try direct balance moves for the tipper (own row – usually allowed by RLS)
-    }
+    if (ledErr) console.warn('tip_ledger insert', ledErr.message, ledErr);
 
-    // Always move tipper balances from the client (own profile) so UI updates even if trigger failed
+    // Move tipper balances (own row)
     const { data: me } = await supabase.from('user_profiles').select('star_balance, wallet_balance').eq('id', user.id).maybeSingle();
     const nextStars = Math.max(0, Number((me as any)?.star_balance ?? myProfile?.star_balance ?? 0) - stars);
     const nextWallet = Number((me as any)?.wallet_balance ?? myProfile?.wallet_balance ?? 0) + vNgn;
-    await supabase.from('user_profiles').update({
+    const { error: balErr } = await supabase.from('user_profiles').update({
       star_balance: nextStars,
       wallet_balance: nextWallet,
     } as any).eq('id', user.id);
+    if (balErr) console.warn('balance update', balErr.message);
 
-    // Credit creator (best-effort – may fail under RLS; trigger should handle when working)
+    // Credit creator best-effort
     try {
       const { data: cr } = await supabase.from('user_profiles').select('total_earned, tip_earnings').eq('id', creatorId).maybeSingle();
       if (cr) {
@@ -2696,36 +2705,54 @@ const TikTokFeed: React.FC = () => {
       }
     } catch {}
 
-    // Notify creator
-    try {
-      await (supabase as any).from('user_notifications').insert({
-        user_id: creatorId,
-        type: 'tip',
-        title: 'You received a tip!',
-        body: `@${(myProfile as any)?.username || 'Someone'} sent you ⭐${stars} (₦${cNgn.toFixed(0)})`,
-        data: { post_id: postId, stars, from_user_id: user.id, amount_ngn: cNgn },
-        read: false,
-      });
-    } catch {}
+    // Notify creator — correct schema (message, action_data)
+    const { error: n1 } = await (supabase as any).from('user_notifications').insert({
+      user_id: creatorId,
+      type: 'tip',
+      title: 'You received a tip!',
+      message: `@${(myProfile as any)?.username || 'Someone'} sent you ⭐${stars} (₦${cNgn.toFixed(0)})`,
+      notification_category: 'tips',
+      related_id: postId,
+      action_data: { post_id: postId, stars, from_user_id: user.id, amount_ngn: cNgn },
+    });
+    if (n1) console.warn('creator notif', n1.message);
+
+    // Notify viewer cashback
+    const { error: n2 } = await (supabase as any).from('user_notifications').insert({
+      user_id: user.id,
+      type: 'cashback',
+      title: 'Cashback!',
+      message: `You earned ₦${vNgn.toFixed(2)} cashback!`,
+      notification_category: 'wallet',
+      related_id: postId,
+      action_data: { post_id: postId, stars, amount: vNgn, source },
+    });
+    if (n2) console.warn('viewer notif', n2.message);
+
+    // wallet_history — correct columns only
+    const { error: wh2 } = await (supabase as any).from('wallet_history').insert({
+      user_id: user.id,
+      type: 'tip_cashback',
+      amount: vNgn,
+      currency: 'NGN',
+      meta: { post_id: postId, stars, source, creator_id: creatorId, label: `Tip cashback ⭐${stars}` },
+    });
+    if (wh2) console.warn('wallet_history', wh2.message);
+
+    // Creator earn history (best-effort)
+    await (supabase as any).from('wallet_history').insert({
+      user_id: creatorId,
+      type: 'tip_earn',
+      amount: cNgn,
+      currency: 'NGN',
+      meta: { post_id: postId, stars, from_user_id: user.id, label: `Tip received ⭐${stars}` },
+    }).then(({ error }: any) => { if (error) console.warn('creator wallet_history', error.message); });
 
     setMyProfile((prev: any) => prev ? {
       ...prev,
       star_balance: nextStars,
       wallet_balance: nextWallet,
     } : prev);
-
-    // Dual-write history so Wallet page shows cashback even if tip_ledger SELECT is blocked
-    try {
-      await (supabase as any).from('wallet_history').insert({
-        user_id: user.id,
-        type: 'tip_cashback',
-        amount: vNgn,
-        description: `Auto/manual tip cashback ⭐${stars}`,
-        meta: { post_id: postId, stars, source, creator_id: creatorId },
-      });
-    } catch (e) {
-      console.warn('wallet_history insert', e);
-    }
 
     return {
       success: true,
@@ -2734,6 +2761,7 @@ const TikTokFeed: React.FC = () => {
       platform_amount: pNgn,
       musician_amount: mNgn,
       rate: rates.rate,
+      ledger_error: ledErr?.message || null,
     };
   };
 
