@@ -310,8 +310,15 @@ const Settings = () => {
             </div>
             <Switch id="auto-spend" checked={autoSpend} onCheckedChange={toggleAutoSpend} className="data-[state=checked]:bg-yellow-500" />
           </div>
+          <Button
+            variant="outline"
+            className="w-full"
+            onClick={() => navigate('/settings/auto-deduction')}
+          >
+            Configure Auto Deduction
+          </Button>
           <p className="text-xs text-muted-foreground px-1">
-            💡 1 Star = ₦300 · Earnings split: Creator 40% · Viewer 35% · Platform 25%
+            When Auto-Spend is ON, stars are deducted after watching short posts (~30s) or long posts (~60s). Rates are set by admin.
           </p>
         </CardContent>
       </Card>
