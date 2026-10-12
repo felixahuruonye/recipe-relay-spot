@@ -3,7 +3,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { Wallet, Star, TrendingUp, ArrowUpRight, ArrowDownRight } from 'lucide-react';
+import { Wallet, Star, TrendingUp, ArrowUpRight, ArrowDownRight, RefreshCw } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
@@ -17,43 +17,53 @@ export const WalletBalance = () => {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    if (user) {
+    if (!user) return;
+    fetchBalances();
+    fetchTransactions();
+
+    const channel = supabase
+      .channel('wallet-changes-' + user.id)
+      .on('postgres_changes', {
+        event: '*',
+        schema: 'public',
+        table: 'user_profiles',
+        filter: `id=eq.${user.id}`
+      }, () => { fetchBalances(); })
+      .on('postgres_changes', {
+        event: '*',
+        schema: 'public',
+        table: 'wallet_history',
+        filter: `user_id=eq.${user.id}`
+      }, () => { fetchTransactions(); fetchBalances(); })
+      .on('postgres_changes', {
+        event: '*',
+        schema: 'public',
+        table: 'withdrawal_history',
+        filter: `user_id=eq.${user.id}`
+      }, () => { fetchTransactions(); fetchBalances(); })
+      .on('postgres_changes', {
+        event: 'INSERT',
+        schema: 'public',
+        table: 'view_transactions',
+        filter: `uploader_id=eq.${user.id}`
+      }, () => { fetchTransactions(); fetchBalances(); })
+      .on('postgres_changes', {
+        event: 'INSERT',
+        schema: 'public',
+        table: 'tip_ledger',
+      }, () => { fetchTransactions(); fetchBalances(); })
+      .subscribe();
+
+    // Auto-refresh every 3s so history never feels stale
+    const poll = setInterval(() => {
       fetchBalances();
       fetchTransactions();
-      
-      // Subscribe to real-time updates
-      const channel = supabase
-        .channel('wallet-changes-' + user.id)
-        .on('postgres_changes', {
-          event: '*',
-          schema: 'public',
-          table: 'user_profiles',
-          filter: `id=eq.${user.id}`
-        }, () => { fetchBalances(); })
-        .on('postgres_changes', {
-          event: '*',
-          schema: 'public',
-          table: 'wallet_history',
-          filter: `user_id=eq.${user.id}`
-        }, () => { fetchTransactions(); fetchBalances(); })
-        .on('postgres_changes', {
-          event: '*',
-          schema: 'public',
-          table: 'withdrawal_history',
-          filter: `user_id=eq.${user.id}`
-        }, () => { fetchTransactions(); fetchBalances(); })
-        .on('postgres_changes', {
-          event: 'INSERT',
-          schema: 'public',
-          table: 'view_transactions',
-          filter: `uploader_id=eq.${user.id}`
-        }, () => { fetchTransactions(); fetchBalances(); })
-        .subscribe();
+    }, 3000);
 
-      return () => {
-        supabase.removeChannel(channel);
-      };
-    }
+    return () => {
+      supabase.removeChannel(channel);
+      clearInterval(poll);
+    };
   }, [user]);
 
   const fetchBalances = async () => {
@@ -80,17 +90,40 @@ export const WalletBalance = () => {
 
   const fetchTransactions = async () => {
     if (!user) return;
-    
     try {
-      const { data, error } = await supabase
-        .from('wallet_history')
-        .select('*')
-        .eq('user_id', user.id)
-        .order('created_at', { ascending: false })
-        .limit(50);
+      const [{ data: hist }, { data: tipsAsViewer }, { data: tipsAsCreator }] = await Promise.all([
+        supabase.from('wallet_history').select('*').eq('user_id', user.id).order('created_at', { ascending: false }).limit(50),
+        (supabase as any).from('tip_ledger').select('*').eq('from_user_id', user.id).order('created_at', { ascending: false }).limit(50),
+        (supabase as any).from('tip_ledger').select('*').eq('to_user_id', user.id).order('created_at', { ascending: false }).limit(50),
+      ]);
 
-      if (error) throw error;
-      setTransactions(data || []);
+      const fromHist = (hist || []).map((t: any) => ({
+        id: t.id,
+        type: t.type || t.transaction_type || 'wallet',
+        amount: Number(t.amount || 0),
+        created_at: t.created_at,
+      }));
+
+      const fromTipsOut = (tipsAsViewer || []).map((t: any) => ({
+        id: `tip-out-${t.id}`,
+        type: 'tip_cashback',
+        amount: Number(t.viewer_ngn || 0),
+        created_at: t.created_at,
+        meta: `⭐${t.stars} tip cashback`,
+      }));
+
+      const fromTipsIn = (tipsAsCreator || []).map((t: any) => ({
+        id: `tip-in-${t.id}`,
+        type: 'tip_earn',
+        amount: Number(t.creator_ngn || 0),
+        created_at: t.created_at,
+        meta: `⭐${t.stars} tip received`,
+      }));
+
+      const merged = [...fromHist, ...fromTipsOut, ...fromTipsIn]
+        .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
+        .slice(0, 50);
+      setTransactions(merged);
     } catch (error) {
       console.error('Error fetching transactions:', error);
     }
