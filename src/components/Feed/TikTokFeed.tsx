@@ -1227,7 +1227,7 @@ const TikTokPost: React.FC<{
   const { toast } = useToast();
   const videoRef = useRef<HTMLVideoElement>(null);
   const musicAudioRef = useRef<HTMLAudioElement>(null);
-  const [imageTimer, setImageTimer] = useState(30);
+  const [imageTimer, setImageTimer] = useState(6);
   const [isPaused, setIsPaused] = useState(false);
   const [mediaReady, setMediaReady] = useState(false);
   const [showDoubleHeart, setShowDoubleHeart] = useState(false);
@@ -1340,11 +1340,11 @@ const TikTokPost: React.FC<{
   // toggle would restart the countdown from 5 each time instead.
   useEffect(() => {
     if (!isActive || isVideo) {
-      setImageTimer(30);
+      setImageTimer(6);
       if (imageTimerRef.current) clearInterval(imageTimerRef.current);
       return;
     }
-    setImageTimer(30);
+    setImageTimer(6);
     imageTimerRef.current = setInterval(() => {
       if (isPausedRef.current) return;
       setImageTimer(prev => {
@@ -2134,12 +2134,20 @@ const TikTokFeed: React.FC = () => {
           setStarNotification('no_earn');
           return;
         }
+        // Instant popup (don't wait for network)
+        setLastEarnAmount(0);
+        setShowStarFloat(true);
+        toast({
+          title: '⭐ Auto-Spend',
+          description: `Spending ${stars} star${stars > 1 ? 's' : ''}…`,
+        });
         const result = await executeTip(post.id, stars, 'auto_spend', post.music_track_id);
         if (!result?.success) {
           const msg = result?.error || '';
           if (String(msg).toLowerCase().includes('insufficient')) {
             setStarNotification('no_earn');
           }
+          setShowStarFloat(false);
           return;
         }
         loadMyProfile();
@@ -2147,8 +2155,8 @@ const TikTokFeed: React.FC = () => {
         setShowStarFloat(true);
         setTimeout(() => setShowStarFloat(false), 2500);
         toast({
-          title: '💰 Auto-Spend',
-          description: `⭐ ${stars} → ₦${Number(result.viewer_cashback || 0).toFixed(0)} cashback`,
+          title: '💰 Cashback',
+          description: `⭐ ${stars} → ₦${Number(result.viewer_cashback || 0).toFixed(0)} added to wallet`,
         });
       } finally {
         processingRef.current.delete(post.id);
