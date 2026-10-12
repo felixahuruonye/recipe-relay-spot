@@ -3148,7 +3148,7 @@ const TikTokFeed: React.FC = () => {
               <h3 className="font-bold text-base mb-3">⭐ Send Stars to Creator</h3>
               <p className="text-sm text-muted-foreground mb-4">Support @{users[tipPost.user_id]?.username || 'creator'}</p>
               <div className="flex gap-2 mb-4 flex-wrap">
-                {[5, 10, 20, 50, 100].map(amt => (
+                {[1, 2, 3, 5, 10, 20, 50, 100].map(amt => (
                   <Button key={amt} size="sm" variant={tipAmount === amt ? 'default' : 'outline'} onClick={() => setTipAmount(amt)}>{amt} ⭐</Button>
                 ))}
               </div>
