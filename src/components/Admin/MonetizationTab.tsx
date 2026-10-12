@@ -37,6 +37,8 @@ export const MonetizationTab: React.FC = () => {
   const [flags, setFlags] = useState<any[]>([]);
   const [events, setEvents] = useState<any[]>([]);
   const [tipLedger, setTipLedger] = useState<any[]>([]);
+  const [tipLoadError, setTipLoadError] = useState<string | null>(null);
+  const [vaultRefreshing, setVaultRefreshing] = useState(false);
   const [search, setSearch] = useState('');
   const [edits, setEdits] = useState<Record<string, string>>({});
 
@@ -56,8 +58,21 @@ export const MonetizationTab: React.FC = () => {
 
     const { data: e } = await (supabase as any).from('monetization_events').select('*').order('created_at', { ascending: false }).limit(50);
     setEvents(e || []);
-    const { data: tips } = await (supabase as any).from('tip_ledger').select('*').order('created_at', { ascending: false }).limit(100);
-    setTipLedger(tips || []);
+    const tipsRes = await (supabase as any).from('tip_ledger').select('*').order('created_at', { ascending: false }).limit(200);
+    if (tipsRes.error) {
+      console.warn('tip_ledger admin load', tipsRes.error);
+      setTipLoadError(tipsRes.error.message || 'Cannot read tip_ledger (check RLS)');
+      setTipLedger([]);
+    } else {
+      setTipLoadError(null);
+      setTipLedger(tipsRes.data || []);
+    }
+  };
+
+  const refreshVault = async () => {
+    setVaultRefreshing(true);
+    await load();
+    setVaultRefreshing(false);
   };
 
   useEffect(() => {
@@ -252,12 +267,17 @@ export const MonetizationTab: React.FC = () => {
                 Every tip split (creator + platform + viewer + musician). Auto-refreshes every 3s.
               </p>
             </div>
-            <Button type="button" variant="outline" size="sm" onClick={() => load()} className="gap-2 shrink-0">
-              <RefreshCw className="w-4 h-4" />
-              Refresh
+            <Button type="button" variant="outline" size="sm" onClick={() => refreshVault()} disabled={vaultRefreshing} className="gap-2 shrink-0">
+              <RefreshCw className={`w-4 h-4 ${vaultRefreshing ? 'animate-spin' : ''}`} />
+              {vaultRefreshing ? 'Refreshing…' : 'Refresh'}
             </Button>
           </CardHeader>
           <CardContent className="overflow-x-auto space-y-3">
+            {tipLoadError && (
+              <p className="text-sm text-amber-600 bg-amber-500/10 rounded-md p-3">
+                Tip Vault could not load: {tipLoadError}. Run the tip_ledger SELECT policy SQL.
+              </p>
+            )}
             <div className="grid grid-cols-2 md:grid-cols-4 gap-2 text-sm">
               <div className="rounded-lg border p-3">
                 <p className="text-muted-foreground text-xs">Total tips</p>
