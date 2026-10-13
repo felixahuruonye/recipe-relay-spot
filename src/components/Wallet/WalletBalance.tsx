@@ -79,14 +79,28 @@ export const WalletBalance = () => {
         setLoadError((prev) => prev || `Tips read blocked: ${tipsOut.error.message}`);
       } else {
         (tipsOut.data || []).forEach((t: any) => {
-          rows.push({
-            id: `tip-out-${t.id}`,
-            type: 'tip_cashback',
-            amount: Number(t.viewer_ngn || 0),
-            created_at: t.created_at,
-            source: t.source || 'tip',
-            detail: `⭐${t.stars} spent · cashback`,
-          });
+          const cash = Number(t.viewer_ngn || 0);
+          const spent = Number(t.stars || 0);
+          if (spent > 0) {
+            rows.push({
+              id: `tip-spend-${t.id}`,
+              type: 'star_spend',
+              amount: -spent,
+              created_at: t.created_at,
+              source: t.source || 'tip',
+              detail: `⭐${spent} tipped`,
+            });
+          }
+          if (cash > 0) {
+            rows.push({
+              id: `tip-out-${t.id}`,
+              type: 'tip_cashback',
+              amount: cash,
+              created_at: t.created_at,
+              source: t.source || 'tip',
+              detail: `⭐${spent} spent · ₦${cash} cashback (pending)`,
+            });
+          }
         });
       }
 
@@ -101,13 +115,15 @@ export const WalletBalance = () => {
         console.warn('tip_ledger in', tipsIn.error.message);
       } else {
         (tipsIn.data || []).forEach((t: any) => {
+          const amt = Number(t.creator_ngn || 0);
+          if (amt <= 0) return;
           rows.push({
             id: `tip-in-${t.id}`,
-            type: 'tip_earn',
-            amount: Number(t.creator_ngn || 0),
+            type: 'tip_pending',
+            amount: amt,
             created_at: t.created_at,
             source: t.source || 'tip',
-            detail: `⭐${t.stars} tip received`,
+            detail: `⭐${t.stars} tip received (pending)`,
           });
         });
       }
@@ -154,7 +170,7 @@ export const WalletBalance = () => {
     `₦${amount.toLocaleString('en-NG', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 
   const getTransactionIcon = (type: string) =>
-    type.includes('earn') || type.includes('credit') || type.includes('cashback') ? (
+    type.includes('earn') || type.includes('credit') || type.includes('cashback') || type.includes('pending') ? (
       <ArrowDownRight className="w-4 h-4 text-green-500" />
     ) : (
       <ArrowUpRight className="w-4 h-4 text-red-500" />
@@ -209,12 +225,12 @@ export const WalletBalance = () => {
           <CardHeader className="pb-3">
             <CardTitle className="text-sm font-medium flex items-center gap-2">
               <TrendingUp className="w-4 h-4 text-amber-500" />
-              Pending Tip Earnings
+              Pending Earnings
             </CardTitle>
           </CardHeader>
           <CardContent>
             <p className="text-2xl font-bold text-amber-500">{formatCurrency(pendingTipEarnings)}</p>
-            <p className="text-xs text-muted-foreground mt-1">Locked until monetization unlock</p>
+            <p className="text-xs text-muted-foreground mt-1">Cashbacks + tips locked until verification unlock</p>
           </CardContent>
         </Card>
 
