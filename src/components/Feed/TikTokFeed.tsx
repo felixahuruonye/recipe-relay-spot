@@ -1227,7 +1227,7 @@ const TikTokPost: React.FC<{
   const { toast } = useToast();
   const videoRef = useRef<HTMLVideoElement>(null);
   const musicAudioRef = useRef<HTMLAudioElement>(null);
-  const [imageTimer, setImageTimer] = useState(6);
+  const [imageTimer, setImageTimer] = useState(10);
   const [isPaused, setIsPaused] = useState(false);
   const [mediaReady, setMediaReady] = useState(false);
   const [showDoubleHeart, setShowDoubleHeart] = useState(false);
@@ -1340,11 +1340,11 @@ const TikTokPost: React.FC<{
   // toggle would restart the countdown from 5 each time instead.
   useEffect(() => {
     if (!isActive || isVideo) {
-      setImageTimer(6);
+      setImageTimer(10);
       if (imageTimerRef.current) clearInterval(imageTimerRef.current);
       return;
     }
-    setImageTimer(6);
+    setImageTimer(10);
     imageTimerRef.current = setInterval(() => {
       if (isPausedRef.current) return;
       setImageTimer(prev => {
@@ -2129,12 +2129,18 @@ const TikTokFeed: React.FC = () => {
           Number((myProfile as any)?.auto_deduct_stars) ||
           Number((myProfile as any)?.story_settings?.auto_deduct_stars) ||
           1;
-        const starBal = myProfile?.star_balance || 0;
-        if (starBal < stars) {
+        const starBal = Number(myProfile?.star_balance || 0) - reservedStarsRef.current;
+        if (starBal <= 0) {
           setStarNotification('no_earn');
           return;
         }
-        // Instant popup (don't wait for network)
+        if (starBal < stars) {
+          setStarNotification(starBal <= 3 ? 'low' : 'no_earn');
+          return;
+        }
+        if (starBal <= 3) setStarNotification('low');
+        reservedStarsRef.current += stars;
+        setMyProfile((prev: any) => prev ? { ...prev, star_balance: Math.max(0, Number(prev.star_balance || 0) - stars) } : prev);
         setLastEarnAmount(0);
         setShowStarFloat(true);
         toast({
@@ -2143,13 +2149,18 @@ const TikTokFeed: React.FC = () => {
         });
         const result = await executeTip(post.id, stars, 'auto_spend', post.music_track_id);
         if (!result?.success) {
+          reservedStarsRef.current = Math.max(0, reservedStarsRef.current - stars);
+          setMyProfile((prev: any) => prev ? { ...prev, star_balance: Number(prev.star_balance || 0) + stars } : prev);
           const msg = result?.error || '';
-          if (String(msg).toLowerCase().includes('insufficient')) {
+          if (String(msg).toLowerCase().includes('insufficient') || starBal - stars <= 0) {
             setStarNotification('no_earn');
+          } else if (starBal <= 3) {
+            setStarNotification('low');
           }
           setShowStarFloat(false);
           return;
         }
+        reservedStarsRef.current = Math.max(0, reservedStarsRef.current - stars);
         loadMyProfile();
         setLastEarnAmount(result.viewer_cashback || 0);
         setShowStarFloat(true);
@@ -2580,10 +2591,18 @@ const TikTokFeed: React.FC = () => {
   const [showTipDialog, setShowTipDialog] = useState(false);
   const [tipPost, setTipPost] = useState<Post | null>(null);
   const [tipAmount, setTipAmount] = useState(5);
+  const tippingLockRef = useRef(false);
+  const reservedStarsRef = useRef(0);
 
   const handleSendStar = async (post: Post) => {
+    const bal = Number(myProfile?.star_balance || 0) - reservedStarsRef.current;
+    if (bal <= 0) {
+      setStarNotification('no_earn');
+      return;
+    }
+    if (bal <= 3) setStarNotification('low');
     setTipPost(post);
-    setTipAmount(5);
+    setTipAmount(Math.min(5, bal));
     setShowTipDialog(true);
   };
 
@@ -2637,7 +2656,7 @@ const TikTokFeed: React.FC = () => {
         setMyProfile((prev: any) => prev ? {
           ...prev,
           star_balance: Math.max(0, Number(prev.star_balance || 0) - stars),
-          wallet_balance: Number(prev.wallet_balance || 0) + cashback,
+          pending_tip_earnings: Number(prev.pending_tip_earnings || 0) + cashback,
         } : prev);
         // wallet_history schema: user_id, type, amount, meta, currency (NO description)
         const { error: whErr } = await (supabase as any).from('wallet_history').insert({
@@ -2685,24 +2704,24 @@ const TikTokFeed: React.FC = () => {
     });
     if (ledErr) console.warn('tip_ledger insert', ledErr.message, ledErr);
 
-    // Move tipper balances (own row)
-    const { data: me } = await supabase.from('user_profiles').select('star_balance, wallet_balance').eq('id', user.id).maybeSingle();
+    // Move tipper stars only; cashback goes to Pending Earnings (not wallet until verification)
+    const { data: me } = await supabase.from('user_profiles').select('star_balance, pending_tip_earnings').eq('id', user.id).maybeSingle();
     const nextStars = Math.max(0, Number((me as any)?.star_balance ?? myProfile?.star_balance ?? 0) - stars);
-    const nextWallet = Number((me as any)?.wallet_balance ?? myProfile?.wallet_balance ?? 0) + vNgn;
+    const nextPendingViewer = Number((me as any)?.pending_tip_earnings || 0) + vNgn;
     const { error: balErr } = await supabase.from('user_profiles').update({
       star_balance: nextStars,
-      wallet_balance: nextWallet,
+      pending_tip_earnings: nextPendingViewer,
     } as any).eq('id', user.id);
     if (balErr) console.warn('balance update', balErr.message);
 
-    // Creator share → Pending Tip Earnings only (not wallet / not lifetime until monetization unlock)
+    // Creator share → Pending Earnings only
     try {
       const { data: cr } = await supabase.from('user_profiles').select('pending_tip_earnings').eq('id', creatorId).maybeSingle();
       const prevPending = Number((cr as any)?.pending_tip_earnings || 0);
       const { error: pendErr } = await supabase.from('user_profiles').update({
         pending_tip_earnings: prevPending + cNgn,
       } as any).eq('id', creatorId);
-      if (pendErr) console.warn('pending_tip_earnings', pendErr.message);
+      if (pendErr) console.warn('pending_tip_earnings creator', pendErr.message);
     } catch (e) {
       console.warn('creator pending credit', e);
     }
@@ -2724,7 +2743,7 @@ const TikTokFeed: React.FC = () => {
       user_id: user.id,
       type: 'cashback',
       title: 'Cashback!',
-      message: `You earned ₦${vNgn.toFixed(2)} cashback!`,
+      message: `₦${vNgn.toFixed(2)} cashback added to Pending Earnings`,
       notification_category: 'wallet',
       related_id: postId,
       action_data: { post_id: postId, stars, amount: vNgn, source },
@@ -2753,8 +2772,9 @@ const TikTokFeed: React.FC = () => {
     setMyProfile((prev: any) => prev ? {
       ...prev,
       star_balance: nextStars,
-      wallet_balance: nextWallet,
+      pending_tip_earnings: Number(prev.pending_tip_earnings || 0) + vNgn,
     } : prev);
+    reservedStarsRef.current = Math.max(0, reservedStarsRef.current - stars);
 
     return {
       success: true,
@@ -3371,7 +3391,7 @@ const confirmTip = async () => {
               <p className="text-sm text-muted-foreground mb-4">Support @{users[tipPost.user_id]?.username || 'creator'}</p>
               <div className="flex gap-2 mb-4 flex-wrap">
                 {[1, 2, 3, 5, 10, 20, 50, 100].map(amt => (
-                  <Button key={amt} size="sm" variant={tipAmount === amt ? 'default' : 'outline'} onClick={() => setTipAmount(amt)}>{amt} ⭐</Button>
+                  <Button key={amt} size="sm" variant={tipAmount === amt ? 'default' : 'outline'} onClick={() => { setTipAmount(amt); void confirmTip(amt); }}>{amt} ⭐</Button>
                 ))}
               </div>
               <p className="text-xs text-muted-foreground mb-4">₦{(tipAmount * 300 * 0.35).toFixed(0)} cashback · ₦{(tipAmount * 300 * 0.40).toFixed(0)} to creator</p>
