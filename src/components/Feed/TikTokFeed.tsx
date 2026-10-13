@@ -2760,14 +2760,28 @@ const TikTokFeed: React.FC = () => {
     });
     if (wh2) console.warn('wallet_history', wh2.message);
 
-    // Creator pending tip history (not available for withdrawal yet)
+    // Creator + viewer history via SECURITY DEFINER (RLS blocks cross-user wallet_history inserts)
+    try {
+      await (supabase as any).rpc('log_tip_histories', {
+        p_from: user.id,
+        p_to: creatorId,
+        p_stars: stars,
+        p_viewer_ngn: vNgn,
+        p_creator_ngn: cNgn,
+        p_source: source,
+        p_post_id: postId,
+      });
+    } catch (e) {
+      console.warn('log_tip_histories', e);
+    }
+    // Best-effort direct insert for viewer (own row)
     await (supabase as any).from('wallet_history').insert({
-      user_id: creatorId,
-      type: 'tip_pending',
-      amount: cNgn,
+      user_id: user.id,
+      type: 'tip_cashback',
+      amount: vNgn,
       currency: 'NGN',
-      meta: { post_id: postId, stars, from_user_id: user.id, status: 'pending', label: `Pending tip ⭐${stars}` },
-    }).then(({ error }: any) => { if (error) console.warn('creator wallet_history', error.message); });
+      meta: { post_id: postId, stars, status: 'pending', label: `Cashback pending ⭐${stars}` },
+    }).then(({ error }: any) => { if (error) console.warn('viewer wallet_history', error.message); });
 
     setMyProfile((prev: any) => prev ? {
       ...prev,
