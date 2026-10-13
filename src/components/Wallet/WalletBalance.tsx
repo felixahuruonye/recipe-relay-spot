@@ -12,6 +12,7 @@ export const WalletBalance = () => {
   const [walletBalance, setWalletBalance] = useState(0);
   const [starBalance, setStarBalance] = useState(0);
   const [totalEarned, setTotalEarned] = useState(0);
+  const [pendingTipEarnings, setPendingTipEarnings] = useState(0);
   const [transactions, setTransactions] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -22,7 +23,7 @@ export const WalletBalance = () => {
     try {
       const { data, error } = await supabase
         .from('user_profiles')
-        .select('wallet_balance, star_balance, total_earned')
+        .select('wallet_balance, star_balance, total_earned, pending_tip_earnings')
         .eq('id', user.id)
         .single();
       if (error) throw error;
@@ -30,6 +31,7 @@ export const WalletBalance = () => {
         setWalletBalance(Number((data as any).wallet_balance || 0));
         setStarBalance(Number((data as any).star_balance || 0));
         setTotalEarned(Number((data as any).total_earned || 0));
+        setPendingTipEarnings(Number((data as any).pending_tip_earnings || 0));
       }
     } catch (e: any) {
       console.error('Error fetching balances:', e);
@@ -173,7 +175,7 @@ export const WalletBalance = () => {
 
   return (
     <div className="space-y-4">
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         <Card className="glass-card">
           <CardHeader className="pb-3">
             <CardTitle className="text-sm font-medium flex items-center gap-2">
@@ -206,13 +208,26 @@ export const WalletBalance = () => {
         <Card className="glass-card">
           <CardHeader className="pb-3">
             <CardTitle className="text-sm font-medium flex items-center gap-2">
+              <TrendingUp className="w-4 h-4 text-amber-500" />
+              Pending Tip Earnings
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <p className="text-2xl font-bold text-amber-500">{formatCurrency(pendingTipEarnings)}</p>
+            <p className="text-xs text-muted-foreground mt-1">Locked until monetization unlock</p>
+          </CardContent>
+        </Card>
+
+        <Card className="glass-card">
+          <CardHeader className="pb-3">
+            <CardTitle className="text-sm font-medium flex items-center gap-2">
               <TrendingUp className="w-4 h-4 text-green-500" />
-              Total Earned
+              Available / Lifetime
             </CardTitle>
           </CardHeader>
           <CardContent>
             <p className="text-2xl font-bold text-green-500">{formatCurrency(totalEarned)}</p>
-            <p className="text-xs text-muted-foreground mt-1">Lifetime earnings</p>
+            <p className="text-xs text-muted-foreground mt-1">Released for withdrawal</p>
           </CardContent>
         </Card>
       </div>
