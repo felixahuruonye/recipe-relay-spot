@@ -251,27 +251,38 @@ export const MonetizationTab: React.FC = () => {
     let starsTipped = 0;
     let creatorPending = 0;
     let creatorAvailable = 0;
-    let viewerNgn = 0;
+    let viewerPending = 0;
+    let viewerReleased = 0;
     let musicianNgn = 0;
     let platformNgn = 0;
     source.forEach((t) => {
       starsTipped += Number(t.stars || 0);
       const c = Number(t.creator_ngn || 0);
+      const v = Number(t.viewer_ngn || 0);
+      const m = Number(t.musician_ngn || 0);
       const st = String(t.status || 'pending').toLowerCase();
-      if (st === 'released' || st === 'approved' || st === 'available') creatorAvailable += c;
-      else creatorPending += c;
-      viewerNgn += Number(t.viewer_ngn || 0);
-      musicianNgn += Number(t.musician_ngn || 0);
-      platformNgn += platformShare(t, settings);
+      const released = st === 'released' || st === 'approved' || st === 'available';
+      if (released) {
+        creatorAvailable += c;
+        viewerReleased += v;
+        musicianNgn += m;
+        platformNgn += platformShare(t, settings);
+      } else {
+        // Pending: tips + cashbacks locked; platform does NOT take share yet
+        creatorPending += c;
+        viewerPending += v;
+      }
     });
-    // Also sum profile pending if we loaded users with pending_tip_earnings - optional
+    // Total pending across all users (tips received + cashbacks)
+    const allPending = creatorPending + viewerPending;
     return {
       totalTips: source.length,
       starsTipped,
-      creatorPending,
+      creatorPending: allPending,
       creatorAvailable,
-      creatorNgn: creatorPending + creatorAvailable,
-      viewerNgn,
+      creatorNgn: allPending + creatorAvailable,
+      viewerNgn: viewerPending + viewerReleased,
+      viewerPending,
       musicianNgn,
       platformNgn,
     };
@@ -633,11 +644,11 @@ export const MonetizationTab: React.FC = () => {
                 <p className="font-bold text-lg">{vaultStats.starsTipped}</p>
               </div>
               <div className="rounded-lg border p-3">
-                <p className="text-muted-foreground text-xs">Creators pending</p>
-                <p className="font-bold text-lg text-amber-500">₦{(vaultStats.creatorPending ?? vaultStats.creatorNgn).toFixed(0)}</p>
+                <p className="text-muted-foreground text-xs">Pending (tips+cashback)</p>
+                <p className="font-bold text-lg text-amber-500">₦{(vaultStats.creatorPending ?? 0).toFixed(0)}</p>
               </div>
               <div className="rounded-lg border p-3">
-                <p className="text-muted-foreground text-xs">Creators available</p>
+                <p className="text-muted-foreground text-xs">Released to creators</p>
                 <p className="font-bold text-lg text-green-500">₦{(vaultStats.creatorAvailable ?? 0).toFixed(0)}</p>
               </div>
               <div className="rounded-lg border p-3">
@@ -887,33 +898,65 @@ export const MonetizationTab: React.FC = () => {
                   </TableBody>
                 </Table>
                 <div className="rounded-lg border p-3">
-                  <p className="text-xs font-semibold mb-2">Matrix earnings (period)</p>
+                  <p className="text-xs font-semibold mb-2">Matrix · activity chart</p>
                   {(() => {
-                    const amounts = userTipRows.map((t) => {
-                      const v = t.from_user_id === selectedVaultUser.id ? Number(t.viewer_ngn || 0) : 0;
-                      const c = t.to_user_id === selectedVaultUser.id ? Number(t.creator_ngn || 0) : 0;
-                      return v + c;
-                    });
-                    const max = Math.max(1, ...(amounts.length ? amounts : [0]));
-                    const hi = amounts.length ? Math.max(...amounts) : 0;
-                    const lo = amounts.length ? Math.min(...amounts) : 0;
+                    const points = userTipRows.map((t) => {
+                      const isOut = t.from_user_id === selectedVaultUser.id;
+                      const v = isOut ? Number(t.viewer_ngn || 0) : 0;
+                      const c = !isOut ? Number(t.creator_ngn || 0) : 0;
+                      return {
+                        y: v + c,
+                        kind: isOut ? (v > 0 ? 'cashback' : 'spend') : 'tip_in',
+                        at: t.created_at,
+                      };
+                    }).reverse();
+                    const ys = points.map((p) => p.y);
+                    const max = Math.max(1, ...(ys.length ? ys : [0]));
+                    const hi = ys.length ? Math.max(...ys) : 0;
+                    const lo = ys.length ? Math.min(...ys) : 0;
+                    const trend = ys.length >= 2 ? ys[ys.length - 1] - ys[0] : 0;
                     return (
                       <div className="space-y-2">
                         <p className="text-xs text-muted-foreground">
-                          Highest ₦{hi.toFixed(0)} · Lowest ₦{lo.toFixed(0)} · Events {userTipRows.length}
+                          {trend >= 0 ? '📈' : '📉'} High ₦{hi.toFixed(0)} · Low ₦{lo.toFixed(0)} · {points.length} events
                         </p>
-                        <div className="flex items-end gap-1 h-16">
-                          {amounts.slice(0, 32).map((a, i) => (
-                            <div
-                              key={i}
-                              className="flex-1 bg-primary/70 rounded-t min-w-[3px]"
-                              style={{ height: `${Math.max(4, (a / max) * 100)}%` }}
-                            />
-                          ))}
-                          {amounts.length === 0 && (
-                            <p className="text-xs text-muted-foreground">No matrix data</p>
-                          )}
+                        <div className="relative h-24 w-full rounded-md bg-muted/30 border overflow-hidden px-1">
+                          <svg viewBox="0 0 100 40" className="w-full h-full" preserveAspectRatio="none">
+                            {points.length > 1 && (
+                              <polyline
+                                fill="none"
+                                stroke="currentColor"
+                                strokeWidth="1.2"
+                                className="text-primary"
+                                points={points.map((p, i) => {
+                                  const x = (i / Math.max(1, points.length - 1)) * 100;
+                                  const y = 36 - (p.y / max) * 32;
+                                  return `${x},${y}`;
+                                }).join(' ')}
+                              />
+                            )}
+                          </svg>
+                          <div className="absolute inset-0 flex items-end justify-between px-1 pb-1 pointer-events-none">
+                            {points.map((p, i) => (
+                              <span
+                                key={i}
+                                title={`${p.kind} ₦${p.y.toFixed(0)}`}
+                                className={`rounded-full ${
+                                  p.kind === 'cashback' ? 'bg-sky-400' :
+                                  p.kind === 'tip_in' ? 'bg-amber-400' : 'bg-violet-400'
+                                }`}
+                                style={{
+                                  width: 6,
+                                  height: 6,
+                                  marginBottom: `${Math.max(2, (p.y / max) * 70)}%`,
+                                }}
+                              />
+                            ))}
+                          </div>
                         </div>
+                        <p className="text-[10px] text-muted-foreground">
+                          Dots: <span className="text-sky-400">● cashback</span> · <span className="text-amber-400">● tip received</span> · <span className="text-violet-400">● star spend</span>
+                        </p>
                       </div>
                     );
                   })()}
@@ -945,7 +988,15 @@ export const MonetizationTab: React.FC = () => {
                     {(detailKind === 'platform' ? periodLedger : userTipRows).length === 0 && (
                       <p className="text-sm text-muted-foreground">No rows in this period.</p>
                     )}
-                    {(detailKind === 'platform' ? periodLedger : userTipRows).map((t) => {
+                    {(detailKind === 'platform' ? periodLedger : userTipRows)
+                      .filter((t) => {
+                        if (detailKind === 'spent') return t.from_user_id === selectedVaultUser?.id && Number(t.stars || 0) > 0;
+                        if (detailKind === 'received') return t.to_user_id === selectedVaultUser?.id && Number(t.creator_ngn || 0) > 0;
+                        if (detailKind === 'cashback') return t.from_user_id === selectedVaultUser?.id && Number(t.viewer_ngn || 0) > 0;
+                        if (detailKind === 'platform') return String(t.status || '').toLowerCase() === 'released' || String(t.status || '').toLowerCase() === 'approved';
+                        return true;
+                      })
+                      .map((t) => {
                       let line = '';
                       if (detailKind === 'spent') {
                         const toName = usernameMap[t.to_user_id || ''] || (t.to_user_id || '—').toString().slice(0, 8);
@@ -955,7 +1006,7 @@ export const MonetizationTab: React.FC = () => {
                         const fromName = usernameMap[t.from_user_id || ''] || (t.from_user_id || '—').toString().slice(0, 8);
                         line = `₦${Number(t.creator_ngn || 0).toFixed(0)} from @${fromName}`;
                       }
-                      if (detailKind === 'cashback') line = `₦${Number(t.viewer_ngn || 0).toFixed(2)} cashback`;
+                      if (detailKind === 'cashback') line = `₦${Number(t.viewer_ngn || 0).toFixed(2)} cashback (pending)`;
                       if (detailKind === 'platform') {
                         line = `₦${platformShare(t, settings).toFixed(0)} · ⭐${t.stars || 0} · ${t.source || 'tip'}`;
                       }
