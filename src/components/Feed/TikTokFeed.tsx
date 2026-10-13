@@ -2606,7 +2606,62 @@ const TikTokFeed: React.FC = () => {
     setShowTipDialog(true);
   };
 
-  
+  const confirmTip = async (amountOverride?: number) => {
+    if (!user || !tipPost) return;
+    if (tippingLockRef.current) return;
+    const amt = typeof amountOverride === 'number' ? amountOverride : tipAmount;
+    if (![1, 2, 3, 5, 10, 20, 50, 100].includes(amt)) {
+      toast({ title: 'Invalid amount', description: 'Pick 1, 2, 3, 5, 10, 20, 50 or 100 stars' });
+      return;
+    }
+    const starBal = Number(myProfile?.star_balance || 0) - reservedStarsRef.current;
+    if (starBal <= 0) {
+      setStarNotification('no_earn');
+      setShowTipDialog(false);
+      return;
+    }
+    if (starBal < amt) {
+      setStarNotification(starBal <= 3 ? 'low' : 'no_earn');
+      setShowTipDialog(false);
+      return;
+    }
+    tippingLockRef.current = true;
+    reservedStarsRef.current += amt;
+    setMyProfile((prev: any) =>
+      prev ? { ...prev, star_balance: Math.max(0, Number(prev.star_balance || 0) - amt) } : prev
+    );
+    setShowTipDialog(false);
+    toast({ title: '⭐ ' + amt + ' Stars sent!', description: 'Processing…' });
+    try {
+      const res = await executeTip(tipPost.id, amt, 'manual', tipPost.music_track_id);
+      if (!res?.success) {
+        reservedStarsRef.current = Math.max(0, reservedStarsRef.current - amt);
+        setMyProfile((prev: any) =>
+          prev ? { ...prev, star_balance: Number(prev.star_balance || 0) + amt } : prev
+        );
+        toast({
+          title: 'Tip failed',
+          description: (res as any)?.error || 'Try again',
+          variant: 'destructive' as any,
+        });
+      } else {
+        toast({
+          title: '⭐ ' + amt + ' Stars sent!',
+          description: '₦' + Number((res as any).viewer_cashback || 0).toFixed(0) + ' to Pending Earnings',
+        });
+        loadMyProfile();
+      }
+    } catch (e: any) {
+      reservedStarsRef.current = Math.max(0, reservedStarsRef.current - amt);
+      setMyProfile((prev: any) =>
+        prev ? { ...prev, star_balance: Number(prev.star_balance || 0) + amt } : prev
+      );
+      toast({ title: 'Tip failed', description: e?.message || 'Try again', variant: 'destructive' as any });
+    } finally {
+      tippingLockRef.current = false;
+    }
+  };
+
   const loadTipRates = async () => {
     const keys = [
       'star_to_ngn_rate',
@@ -3375,15 +3430,26 @@ const TikTokFeed: React.FC = () => {
             <div className="absolute inset-0 bg-black/50" onClick={() => setShowTipDialog(false)} />
             <motion.div className="absolute bottom-0 left-0 right-0 max-w-[480px] mx-auto bg-card rounded-t-2xl p-6" initial={{ y: '100%' }} animate={{ y: 0 }} exit={{ y: '100%' }}>
               <h3 className="font-bold text-base mb-3">⭐ Send Stars to Creator</h3>
-              <p className="text-sm text-muted-foreground mb-4">Support @{users[tipPost.user_id]?.username || 'creator'}</p>
+              <p className="text-sm text-muted-foreground mb-4">Support @{(users && tipPost?.user_id && users[tipPost.user_id]?.username) || 'creator'}</p>
               <div className="flex gap-2 mb-4 flex-wrap">
                 {[1, 2, 3, 5, 10, 20, 50, 100].map(amt => (
-                  <Button key={amt} size="sm" variant={tipAmount === amt ? 'default' : 'outline'} onClick={() => { setTipAmount(amt); void confirmTip(amt); }}>{amt} ⭐</Button>
+                  <Button
+                    key={amt}
+                    size="sm"
+                    variant={tipAmount === amt ? 'default' : 'outline'}
+                    disabled={amt > (Number(myProfile?.star_balance || 0) - reservedStarsRef.current)}
+                    onClick={() => {
+                      setTipAmount(amt);
+                      void confirmTip(amt);
+                    }}
+                  >
+                    {amt} ⭐
+                  </Button>
                 ))}
               </div>
               <p className="text-xs text-muted-foreground mb-4">₦{(tipAmount * 300 * 0.35).toFixed(0)} cashback · ₦{(tipAmount * 300 * 0.40).toFixed(0)} to creator</p>
               <div className="flex gap-2">
-                <Button className="flex-1" onClick={confirmTip}>Send {tipAmount} ⭐</Button>
+                <Button className="flex-1" onClick={() => void confirmTip()}>Send {tipAmount} ⭐</Button>
                 <Button variant="outline" className="flex-1" onClick={() => setShowTipDialog(false)}>Cancel</Button>
               </div>
             </motion.div>
