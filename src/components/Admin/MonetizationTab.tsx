@@ -17,6 +17,7 @@ type UserRow = {
   view_earn_progress: number | null;
   follower_count: number | null;
   total_earned: number | null;
+  pending_tip_earnings?: number | null;
 };
 
 type Setting = { setting_key: string; setting_value: string; description: string | null };
@@ -38,6 +39,7 @@ type TipRow = {
   viewer_ngn?: number | null;
   platform_ngn?: number | null;
   source?: string | null;
+  status?: string | null;
   created_at: string;
   _from_wallet_history?: boolean;
 };
@@ -96,7 +98,7 @@ export const MonetizationTab: React.FC = () => {
     try {
       const { data: u } = await supabase
         .from('user_profiles')
-        .select('id, username, monetization_level, earning_banned, view_earn_progress, follower_count, total_earned')
+        .select('id, username, monetization_level, earning_banned, view_earn_progress, follower_count, total_earned, pending_tip_earnings')
         .order('total_earned', { ascending: false })
         .limit(200);
       setUsers(((u as any) || []) as UserRow[]);
@@ -247,21 +249,28 @@ export const MonetizationTab: React.FC = () => {
     const real = periodLedger.filter((t) => !t._from_wallet_history);
     const source = real.length > 0 ? real : periodLedger;
     let starsTipped = 0;
-    let creatorNgn = 0;
+    let creatorPending = 0;
+    let creatorAvailable = 0;
     let viewerNgn = 0;
     let musicianNgn = 0;
     let platformNgn = 0;
     source.forEach((t) => {
       starsTipped += Number(t.stars || 0);
-      creatorNgn += Number(t.creator_ngn || 0);
+      const c = Number(t.creator_ngn || 0);
+      const st = String(t.status || 'pending').toLowerCase();
+      if (st === 'released' || st === 'approved' || st === 'available') creatorAvailable += c;
+      else creatorPending += c;
       viewerNgn += Number(t.viewer_ngn || 0);
       musicianNgn += Number(t.musician_ngn || 0);
       platformNgn += platformShare(t, settings);
     });
+    // Also sum profile pending if we loaded users with pending_tip_earnings - optional
     return {
       totalTips: source.length,
       starsTipped,
-      creatorNgn,
+      creatorPending,
+      creatorAvailable,
+      creatorNgn: creatorPending + creatorAvailable,
       viewerNgn,
       musicianNgn,
       platformNgn,
@@ -624,8 +633,12 @@ export const MonetizationTab: React.FC = () => {
                 <p className="font-bold text-lg">{vaultStats.starsTipped}</p>
               </div>
               <div className="rounded-lg border p-3">
-                <p className="text-muted-foreground text-xs">Creators</p>
-                <p className="font-bold text-lg text-green-500">₦{vaultStats.creatorNgn.toFixed(0)}</p>
+                <p className="text-muted-foreground text-xs">Creators pending</p>
+                <p className="font-bold text-lg text-amber-500">₦{(vaultStats.creatorPending ?? vaultStats.creatorNgn).toFixed(0)}</p>
+              </div>
+              <div className="rounded-lg border p-3">
+                <p className="text-muted-foreground text-xs">Creators available</p>
+                <p className="font-bold text-lg text-green-500">₦{(vaultStats.creatorAvailable ?? 0).toFixed(0)}</p>
               </div>
               <div className="rounded-lg border p-3">
                 <p className="text-muted-foreground text-xs">Viewers</p>
@@ -669,6 +682,7 @@ export const MonetizationTab: React.FC = () => {
                       <TableHead>When (last)</TableHead>
                       <TableHead>Star spent</TableHead>
                       <TableHead>Star received</TableHead>
+                      <TableHead>Pending ₦</TableHead>
                       <TableHead>Cashbacks</TableHead>
                       <TableHead>Source</TableHead>
                       <TableHead>Matrix</TableHead>
@@ -678,7 +692,7 @@ export const MonetizationTab: React.FC = () => {
                   <TableBody>
                     {periodUserStats.length === 0 && (
                       <TableRow>
-                        <TableCell colSpan={8} className="text-muted-foreground text-sm">
+                        <TableCell colSpan={9} className="text-muted-foreground text-sm">
                           No user tip activity in this period. Change the time range or make a new tip.
                         </TableCell>
                       </TableRow>
@@ -750,6 +764,9 @@ export const MonetizationTab: React.FC = () => {
                               ₦{u.starsRecvValue.toFixed(0)} <Eye className="w-3.5 h-3.5 opacity-70" />
                             </button>
                           </TableCell>
+                          <TableCell className="text-amber-500 font-medium">
+                            ₦{Number(profile?.pending_tip_earnings || u.starsRecvValue || 0).toFixed(0)}
+                          </TableCell>
                           <TableCell>
                             <button
                               type="button"
@@ -764,6 +781,7 @@ export const MonetizationTab: React.FC = () => {
                                   view_earn_progress: profile?.view_earn_progress ?? null,
                                   follower_count: profile?.follower_count ?? null,
                                   total_earned: profile?.total_earned ?? null,
+                                  pending_tip_earnings: profile?.pending_tip_earnings ?? null,
                                 });
                                 setDetailKind('cashback');
                               }}
