@@ -2632,6 +2632,8 @@ const TikTokFeed: React.FC = () => {
   /** Tip without relying on tip_post RPC — inserts tip_ledger (trigger applies balances) */
   const executeTip = async (postId: string, stars: number, source: string, musicTrackId?: string | null) => {
     if (!user) return { success: false, error: 'Not signed in' };
+    if (stars <= 0) return { success: false, error: 'Invalid stars' };
+
     const rates = await loadTipRates();
     const hasMusic = !!musicTrackId;
     const cPct = hasMusic ? rates.creatorMusicPct : rates.creatorPct;
@@ -2647,42 +2649,67 @@ const TikTokFeed: React.FC = () => {
     const creatorId = (postRow as any).user_id as string;
     if (creatorId === user.id) return { success: false, error: 'Cannot tip your own post' };
 
-    let usedRpc = false;
+    // PRIMARY: one server function writes tip_ledger + BOTH users' wallet_history + balances
     try {
-      const rpc = await supabase.rpc('tip_post' as any, { p_post_id: postId, p_stars: stars, p_source: source });
-      if (!rpc.error && (rpc.data as any)?.success) {
-        usedRpc = true;
-        const cashback = Number((rpc.data as any).viewer_cashback || vNgn);
-        setMyProfile((prev: any) => prev ? {
-          ...prev,
-          star_balance: Math.max(0, Number(prev.star_balance || 0) - stars),
-          pending_tip_earnings: Number(prev.pending_tip_earnings || 0) + cashback,
-        } : prev);
-        // wallet_history schema: user_id, type, amount, meta, currency (NO description)
-        const { error: whErr } = await (supabase as any).from('wallet_history').insert({
-          user_id: user.id,
-          type: 'tip_cashback',
-          amount: cashback,
-          currency: 'NGN',
-          meta: { post_id: postId, stars, source, label: `Tip cashback ⭐${stars}` },
-        });
-        if (whErr) console.warn('wallet_history', whErr.message);
-        // Viewer notification (correct columns: message not body)
+      const { data: rec, error: recErr } = await (supabase as any).rpc('record_complete_tip', {
+        p_post_id: postId,
+        p_to_user_id: creatorId,
+        p_stars: stars,
+        p_source: source || 'manual',
+        p_viewer_ngn: vNgn,
+        p_creator_ngn: cNgn,
+        p_musician_ngn: mNgn,
+        p_platform_ngn: pNgn,
+        p_rate: rates.rate,
+        p_creator_pct: cPct,
+        p_viewer_pct: rates.viewerPct,
+        p_platform_pct: rates.platformPct,
+        p_musician_pct: mPct,
+      });
+      if (!recErr && rec && (rec as any).success !== false) {
+        const cashback = Number((rec as any).viewer_cashback ?? vNgn);
+        setMyProfile((prev: any) =>
+          prev
+            ? {
+                ...prev,
+                star_balance: Math.max(0, Number(prev.star_balance || 0) - stars),
+                pending_tip_earnings: Number(prev.pending_tip_earnings || 0) + cashback,
+              }
+            : prev
+        );
+        reservedStarsRef.current = Math.max(0, reservedStarsRef.current - stars);
+        // Notify creator
+        await (supabase as any).from('user_notifications').insert({
+          user_id: creatorId,
+          type: 'tip_pending',
+          title: 'Pending tip earnings',
+          message: `@${(myProfile as any)?.username || 'Someone'} tipped you ⭐${stars} (₦${cNgn.toFixed(0)} pending)`,
+          notification_category: 'wallet',
+          action_data: { post_id: postId, stars, amount: cNgn, status: 'pending' },
+        }).then(() => {});
         await (supabase as any).from('user_notifications').insert({
           user_id: user.id,
           type: 'cashback',
-          title: 'Cashback!',
-          message: `You earned ₦${cashback.toFixed(2)} cashback!`,
+          title: 'Pending cashback',
+          message: `₦${cashback.toFixed(2)} cashback added to Pending Earnings`,
           notification_category: 'wallet',
           action_data: { post_id: postId, stars, amount: cashback },
-        });
-        return { ...(rpc.data as any), viewer_cashback: cashback };
+        }).then(() => {});
+        return {
+          success: true,
+          viewer_cashback: cashback,
+          creator_amount: cNgn,
+          platform_amount: pNgn,
+          musician_amount: mNgn,
+          rate: rates.rate,
+        };
       }
+      if (recErr) console.warn('record_complete_tip', recErr.message);
     } catch (e) {
-      console.warn('tip_post rpc', e);
+      console.warn('record_complete_tip exception', e);
     }
 
-    // tip_ledger insert
+    // FALLBACK (if RPC missing): best-effort local writes
     const { error: ledErr } = await (supabase as any).from('tip_ledger').insert({
       post_id: postId,
       from_user_id: user.id,
@@ -2702,65 +2729,23 @@ const TikTokFeed: React.FC = () => {
       status: 'pending',
       music_track_id: musicTrackId || (postRow as any).music_track_id || null,
     });
-    if (ledErr) console.warn('tip_ledger insert', ledErr.message, ledErr);
+    if (ledErr) console.warn('tip_ledger insert', ledErr.message);
 
-    // Move tipper stars only; cashback goes to Pending Earnings (not wallet until verification)
     const { data: me } = await supabase.from('user_profiles').select('star_balance, pending_tip_earnings').eq('id', user.id).maybeSingle();
     const nextStars = Math.max(0, Number((me as any)?.star_balance ?? myProfile?.star_balance ?? 0) - stars);
     const nextPendingViewer = Number((me as any)?.pending_tip_earnings || 0) + vNgn;
-    const { error: balErr } = await supabase.from('user_profiles').update({
+    await supabase.from('user_profiles').update({
       star_balance: nextStars,
       pending_tip_earnings: nextPendingViewer,
     } as any).eq('id', user.id);
-    if (balErr) console.warn('balance update', balErr.message);
 
-    // Creator share → Pending Earnings only
     try {
       const { data: cr } = await supabase.from('user_profiles').select('pending_tip_earnings').eq('id', creatorId).maybeSingle();
-      const prevPending = Number((cr as any)?.pending_tip_earnings || 0);
-      const { error: pendErr } = await supabase.from('user_profiles').update({
-        pending_tip_earnings: prevPending + cNgn,
+      await supabase.from('user_profiles').update({
+        pending_tip_earnings: Number((cr as any)?.pending_tip_earnings || 0) + cNgn,
       } as any).eq('id', creatorId);
-      if (pendErr) console.warn('pending_tip_earnings creator', pendErr.message);
-    } catch (e) {
-      console.warn('creator pending credit', e);
-    }
+    } catch {}
 
-    // Notify creator — correct schema (message, action_data)
-    const { error: n1 } = await (supabase as any).from('user_notifications').insert({
-      user_id: creatorId,
-      type: 'tip',
-      title: 'Pending tip earnings',
-      message: `@${(myProfile as any)?.username || 'Someone'} tipped you ⭐${stars} (₦${cNgn.toFixed(0)} pending until monetization unlock)`,
-      notification_category: 'tips',
-      related_id: postId,
-      action_data: { post_id: postId, stars, from_user_id: user.id, amount_ngn: cNgn },
-    });
-    if (n1) console.warn('creator notif', n1.message);
-
-    // Notify viewer cashback
-    const { error: n2 } = await (supabase as any).from('user_notifications').insert({
-      user_id: user.id,
-      type: 'cashback',
-      title: 'Cashback!',
-      message: `₦${vNgn.toFixed(2)} cashback added to Pending Earnings`,
-      notification_category: 'wallet',
-      related_id: postId,
-      action_data: { post_id: postId, stars, amount: vNgn, source },
-    });
-    if (n2) console.warn('viewer notif', n2.message);
-
-    // wallet_history — correct columns only
-    const { error: wh2 } = await (supabase as any).from('wallet_history').insert({
-      user_id: user.id,
-      type: 'tip_cashback',
-      amount: vNgn,
-      currency: 'NGN',
-      meta: { post_id: postId, stars, source, creator_id: creatorId, label: `Tip cashback ⭐${stars}` },
-    });
-    if (wh2) console.warn('wallet_history', wh2.message);
-
-    // Creator + viewer history via SECURITY DEFINER (RLS blocks cross-user wallet_history inserts)
     try {
       await (supabase as any).rpc('log_tip_histories', {
         p_from: user.id,
@@ -2771,63 +2756,39 @@ const TikTokFeed: React.FC = () => {
         p_source: source,
         p_post_id: postId,
       });
-    } catch (e) {
-      console.warn('log_tip_histories', e);
-    }
-    // Best-effort direct insert for viewer (own row)
+    } catch {}
+
     await (supabase as any).from('wallet_history').insert({
       user_id: user.id,
       type: 'tip_cashback',
       amount: vNgn,
       currency: 'NGN',
       meta: { post_id: postId, stars, status: 'pending', label: `Cashback pending ⭐${stars}` },
-    }).then(({ error }: any) => { if (error) console.warn('viewer wallet_history', error.message); });
+    }).then(({ error }: any) => { if (error) console.warn(error.message); });
 
-    setMyProfile((prev: any) => prev ? {
-      ...prev,
-      star_balance: nextStars,
-      pending_tip_earnings: Number(prev.pending_tip_earnings || 0) + vNgn,
-    } : prev);
+    setMyProfile((prev: any) =>
+      prev
+        ? {
+            ...prev,
+            star_balance: nextStars,
+            pending_tip_earnings: Number(prev.pending_tip_earnings || 0) + vNgn,
+          }
+        : prev
+    );
     reservedStarsRef.current = Math.max(0, reservedStarsRef.current - stars);
 
     return {
-      success: true,
+      success: !ledErr,
       viewer_cashback: vNgn,
       creator_amount: cNgn,
       platform_amount: pNgn,
       musician_amount: mNgn,
       rate: rates.rate,
       ledger_error: ledErr?.message || null,
+      error: ledErr ? 'Tip partially saved — run record_complete_tip SQL' : undefined,
     };
   };
 
-const confirmTip = async (amountOverride?: number) => {
-    if (!user || !tipPost) return;
-    if (tippingLockRef.current) return;
-    const amt = amountOverride ?? tipAmount;
-    if (![1,2,3,5,10,20,50,100].includes(amt)) { toast({ title: 'Invalid amount', description: 'Pick 1, 2, 3, 5, 10, 20, 50 or 100 stars' }); return; }
-    const starBal = Number(myProfile?.star_balance || 0) - reservedStarsRef.current;
-    if (starBal <= 0) { setStarNotification('no_earn'); setShowTipDialog(false); return; }
-    if (starBal < amt) { setStarNotification(starBal <= 3 ? 'low' : 'no_earn'); setShowTipDialog(false); return; }
-    tippingLockRef.current = true;
-    reservedStarsRef.current += amt;
-    setMyProfile((prev: any) => prev ? { ...prev, star_balance: Math.max(0, Number(prev.star_balance || 0) - amt) } : prev);
-    setShowTipDialog(false);
-    toast({ title: '⭐ ' + amt + ' Stars sent!', description: 'Processing…' });
-    try {
-      const res = await executeTip(tipPost.id, amt, 'manual', tipPost.music_track_id);
-      if (!res?.success) {
-        reservedStarsRef.current = Math.max(0, reservedStarsRef.current - amt);
-        setMyProfile((prev: any) => prev ? { ...prev, star_balance: Number(prev.star_balance || 0) + amt } : prev);
-        toast({ title: 'Tip failed', description: res?.error || 'Try again', variant: 'destructive' as any });
-      } else {
-        toast({ title: '⭐ ' + amt + ' Stars sent!', description: '₦' + Number(res.viewer_cashback || 0).toFixed(0) + ' to Pending Earnings' });
-        loadMyProfile();
-      }
-    } finally {
-      tippingLockRef.current = false;
-    }
-  };
 
   const requireLogin = (msg?: string) => {
     setLoginMessage(msg || 'Sign in to continue');
