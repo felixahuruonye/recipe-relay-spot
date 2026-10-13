@@ -74,116 +74,79 @@ export const WalletBalance = () => {
         });
       }
 
-      // 2) tip_ledger — one query for both roles (viewer + creator)
-      const tipsRes = await (supabase as any)
-        .from('tip_ledger')
-        .select('id, stars, viewer_ngn, creator_ngn, platform_ngn, source, status, created_at, from_user_id, to_user_id')
-        .or(`from_user_id.eq.${user.id},to_user_id.eq.${user.id}`)
-        .order('created_at', { ascending: false })
-        .limit(100);
-
-      if (tipsRes.error) {
-        console.warn('tip_ledger', tipsRes.error.message);
-        setLoadError((prev) => prev || `Tip history: ${tipsRes.error.message}`);
-
-        // Fallback: separate queries if .or fails
-        const [outFb, inFb] = await Promise.all([
-          (supabase as any).from('tip_ledger').select('*').eq('from_user_id', user.id).order('created_at', { ascending: false }).limit(100),
-          (supabase as any).from('tip_ledger').select('*').eq('to_user_id', user.id).order('created_at', { ascending: false }).limit(100),
-        ]);
-        const merged = [...(outFb.data || []), ...(inFb.data || [])];
-        if (!outFb.error && !inFb.error) setLoadError(null);
-        merged.forEach((t: any) => {
-          const isViewer = t.from_user_id === user.id;
-          const isCreator = t.to_user_id === user.id;
-          if (isViewer) {
-            const spent = Number(t.stars || 0);
-            const cash = Number(t.viewer_ngn || 0);
-            if (spent > 0) {
-              push({
-                id: `tip-spend-${t.id}`,
-                type: 'star_spend',
-                amount: spent,
-                created_at: t.created_at,
-                source: t.source || 'tip',
-                detail: `⭐${spent} tipped (${t.source || 'tip'})`,
-                unit: 'stars',
-              });
-            }
-            if (cash > 0) {
-              push({
-                id: `tip-cash-${t.id}`,
-                type: 'tip_cashback',
-                amount: cash,
-                created_at: t.created_at,
-                source: t.source || 'tip',
-                detail: `Cashback pending · ⭐${spent}`,
-                unit: 'ngn',
-              });
-            }
-          }
-          if (isCreator) {
-            const amt = Number(t.creator_ngn || 0);
-            if (amt > 0) {
-              push({
-                id: `tip-in-${t.id}`,
-                type: 'tip_pending',
-                amount: amt,
-                created_at: t.created_at,
-                source: t.source || 'tip',
-                detail: `Tip received · ⭐${t.stars || 0} · ${t.status || 'pending'}`,
-                unit: 'ngn',
-              });
-            }
-          }
-        });
-      } else {
+      // 2) Tips via SECURITY DEFINER RPC (bypasses RLS so creators see tips received)
+      let tipRows: any[] = [];
+      const rpcTips = await (supabase as any).rpc('get_my_tips');
+      if (!rpcTips.error && Array.isArray(rpcTips.data)) {
+        tipRows = rpcTips.data;
         setLoadError(null);
-        (tipsRes.data || []).forEach((t: any) => {
-          const isViewer = t.from_user_id === user.id;
-          const isCreator = t.to_user_id === user.id;
-          if (isViewer) {
-            const spent = Number(t.stars || 0);
-            const cash = Number(t.viewer_ngn || 0);
-            if (spent > 0) {
-              push({
-                id: `tip-spend-${t.id}`,
-                type: 'star_spend',
-                amount: spent,
-                created_at: t.created_at,
-                source: t.source || 'tip',
-                detail: `⭐${spent} tipped (${t.source || 'tip'})`,
-                unit: 'stars',
-              });
-            }
-            if (cash > 0) {
-              push({
-                id: `tip-cash-${t.id}`,
-                type: 'tip_cashback',
-                amount: cash,
-                created_at: t.created_at,
-                source: t.source || 'tip',
-                detail: `Cashback pending · ⭐${spent}`,
-                unit: 'ngn',
-              });
-            }
+      } else {
+        if (rpcTips.error) console.warn('get_my_tips', rpcTips.error.message);
+        // Fallback direct queries
+        const tipsRes = await (supabase as any)
+          .from('tip_ledger')
+          .select('id, stars, viewer_ngn, creator_ngn, platform_ngn, source, status, created_at, from_user_id, to_user_id')
+          .or(`from_user_id.eq.${user.id},to_user_id.eq.${user.id}`)
+          .order('created_at', { ascending: false })
+          .limit(100);
+        if (tipsRes.error) {
+          const [outFb, inFb] = await Promise.all([
+            (supabase as any).from('tip_ledger').select('*').eq('from_user_id', user.id).limit(100),
+            (supabase as any).from('tip_ledger').select('*').eq('to_user_id', user.id).limit(100),
+          ]);
+          tipRows = [...(outFb.data || []), ...(inFb.data || [])];
+          if (outFb.error || inFb.error) {
+            setLoadError((prev) => prev || `Tip history blocked — run get_my_tips SQL`);
           }
-          if (isCreator) {
-            const amt = Number(t.creator_ngn || 0);
-            if (amt > 0) {
-              push({
-                id: `tip-in-${t.id}`,
-                type: 'tip_pending',
-                amount: amt,
-                created_at: t.created_at,
-                source: t.source || 'tip',
-                detail: `Tip received · ⭐${t.stars || 0} · ${t.status || 'pending'}`,
-                unit: 'ngn',
-              });
-            }
-          }
-        });
+        } else {
+          tipRows = tipsRes.data || [];
+        }
       }
+
+      tipRows.forEach((t: any) => {
+        const isViewer = t.from_user_id === user.id;
+        const isCreator = t.to_user_id === user.id;
+        if (isViewer) {
+          const spent = Number(t.stars || 0);
+          const cash = Number(t.viewer_ngn || 0);
+          if (spent > 0) {
+            push({
+              id: `tip-spend-${t.id}`,
+              type: 'star_spend',
+              amount: spent,
+              created_at: t.created_at,
+              source: t.source || 'tip',
+              detail: `⭐${spent} tipped (${t.source || 'tip'})`,
+              unit: 'stars',
+            });
+          }
+          if (cash > 0) {
+            push({
+              id: `tip-cash-${t.id}`,
+              type: 'tip_cashback',
+              amount: cash,
+              created_at: t.created_at,
+              source: t.source || 'tip',
+              detail: `Cashback pending · ⭐${spent}`,
+              unit: 'ngn',
+            });
+          }
+        }
+        if (isCreator) {
+          const amt = Number(t.creator_ngn || 0);
+          if (amt > 0) {
+            push({
+              id: `tip-in-${t.id}`,
+              type: 'tip_pending',
+              amount: amt,
+              created_at: t.created_at,
+              source: t.source || 'tip',
+              detail: `Tip received · ⭐${t.stars || 0} · ${t.status || 'pending'}`,
+              unit: 'ngn',
+            });
+          }
+        }
+      });
 
       rows.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
       setTransactions(rows.slice(0, 120));
