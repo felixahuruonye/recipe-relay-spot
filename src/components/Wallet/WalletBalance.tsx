@@ -51,28 +51,33 @@ export const WalletBalance = () => {
         rows.push(row);
       };
 
-      // 1) wallet_history (own rows)
-      const histRes = await supabase
-        .from('wallet_history')
-        .select('*')
-        .eq('user_id', user.id)
-        .order('created_at', { ascending: false })
-        .limit(100);
-      if (histRes.error) {
-        console.warn('wallet_history', histRes.error.message);
+      // 1) wallet_history — RPC first (reliable), then table
+      let histRows: any[] = [];
+      const histRpc = await (supabase as any).rpc('get_my_wallet_history');
+      if (!histRpc.error && Array.isArray(histRpc.data)) {
+        histRows = histRpc.data;
       } else {
-        (histRes.data || []).forEach((t: any) => {
-          push({
-            id: `wh-${t.id}`,
-            type: t.type || t.transaction_type || 'wallet',
-            amount: Number(t.amount || 0),
-            created_at: t.created_at,
-            source: 'wallet_history',
-            detail: t.meta?.label || t.description || undefined,
-            unit: 'ngn',
-          });
-        });
+        const histRes = await supabase
+          .from('wallet_history')
+          .select('*')
+          .eq('user_id', user.id)
+          .order('created_at', { ascending: false })
+          .limit(100);
+        if (histRes.error) console.warn('wallet_history', histRes.error.message);
+        else histRows = histRes.data || [];
       }
+      histRows.forEach((t: any) => {
+        const meta = t.meta || {};
+        push({
+          id: `wh-${t.id}`,
+          type: t.type || t.transaction_type || 'wallet',
+          amount: Number(t.amount || 0),
+          created_at: t.created_at,
+          source: 'wallet_history',
+          detail: meta.label || meta.source || t.description || undefined,
+          unit: 'ngn',
+        });
+      });
 
       // 2) Tips via SECURITY DEFINER RPC (bypasses RLS so creators see tips received)
       let tipRows: any[] = [];
