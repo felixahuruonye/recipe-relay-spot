@@ -2680,6 +2680,7 @@ const TikTokFeed: React.FC = () => {
       viewer_ngn: vNgn,
       platform_ngn: pNgn,
       source,
+      status: 'pending',
       music_track_id: musicTrackId || (postRow as any).music_track_id || null,
     });
     if (ledErr) console.warn('tip_ledger insert', ledErr.message, ledErr);
@@ -2694,23 +2695,24 @@ const TikTokFeed: React.FC = () => {
     } as any).eq('id', user.id);
     if (balErr) console.warn('balance update', balErr.message);
 
-    // Credit creator best-effort
+    // Creator share → Pending Tip Earnings only (not wallet / not lifetime until monetization unlock)
     try {
-      const { data: cr } = await supabase.from('user_profiles').select('total_earned, tip_earnings').eq('id', creatorId).maybeSingle();
-      if (cr) {
-        await supabase.from('user_profiles').update({
-          total_earned: Number((cr as any).total_earned || 0) + cNgn,
-          tip_earnings: Number((cr as any).tip_earnings || 0) + cNgn,
-        } as any).eq('id', creatorId);
-      }
-    } catch {}
+      const { data: cr } = await supabase.from('user_profiles').select('pending_tip_earnings').eq('id', creatorId).maybeSingle();
+      const prevPending = Number((cr as any)?.pending_tip_earnings || 0);
+      const { error: pendErr } = await supabase.from('user_profiles').update({
+        pending_tip_earnings: prevPending + cNgn,
+      } as any).eq('id', creatorId);
+      if (pendErr) console.warn('pending_tip_earnings', pendErr.message);
+    } catch (e) {
+      console.warn('creator pending credit', e);
+    }
 
     // Notify creator — correct schema (message, action_data)
     const { error: n1 } = await (supabase as any).from('user_notifications').insert({
       user_id: creatorId,
       type: 'tip',
-      title: 'You received a tip!',
-      message: `@${(myProfile as any)?.username || 'Someone'} sent you ⭐${stars} (₦${cNgn.toFixed(0)})`,
+      title: 'Pending tip earnings',
+      message: `@${(myProfile as any)?.username || 'Someone'} tipped you ⭐${stars} (₦${cNgn.toFixed(0)} pending until monetization unlock)`,
       notification_category: 'tips',
       related_id: postId,
       action_data: { post_id: postId, stars, from_user_id: user.id, amount_ngn: cNgn },
@@ -2739,13 +2741,13 @@ const TikTokFeed: React.FC = () => {
     });
     if (wh2) console.warn('wallet_history', wh2.message);
 
-    // Creator earn history (best-effort)
+    // Creator pending tip history (not available for withdrawal yet)
     await (supabase as any).from('wallet_history').insert({
       user_id: creatorId,
-      type: 'tip_earn',
+      type: 'tip_pending',
       amount: cNgn,
       currency: 'NGN',
-      meta: { post_id: postId, stars, from_user_id: user.id, label: `Tip received ⭐${stars}` },
+      meta: { post_id: postId, stars, from_user_id: user.id, status: 'pending', label: `Pending tip ⭐${stars}` },
     }).then(({ error }: any) => { if (error) console.warn('creator wallet_history', error.message); });
 
     setMyProfile((prev: any) => prev ? {
