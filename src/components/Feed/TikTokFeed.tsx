@@ -2787,21 +2787,33 @@ const TikTokFeed: React.FC = () => {
     };
   };
 
-const confirmTip = async () => {
+const confirmTip = async (amountOverride?: number) => {
     if (!user || !tipPost) return;
-    if (![1,2,3,5,10,20,50,100].includes(tipAmount)) { toast({ title: 'Invalid amount', description: 'Pick 1, 2, 3, 5, 10, 20, 50 or 100 stars' }); return; }
-    const starBal = myProfile?.star_balance || 0;
-    if (starBal < tipAmount) { setStarNotification('no_earn'); setShowTipDialog(false); return; }
-    const res = await executeTip(tipPost.id, tipAmount, 'manual', tipPost.music_track_id);
-    if (!res?.success) {
-      toast({ title: 'Tip failed', description: res?.error || 'Try again', variant: 'destructive' as any });
-      return;
-    }
-    toast({ title: '⭐ ' + tipAmount + ' Stars sent!', description: '₦' + Number(res.viewer_cashback || 0).toFixed(0) + ' cashback' });
+    if (tippingLockRef.current) return;
+    const amt = amountOverride ?? tipAmount;
+    if (![1,2,3,5,10,20,50,100].includes(amt)) { toast({ title: 'Invalid amount', description: 'Pick 1, 2, 3, 5, 10, 20, 50 or 100 stars' }); return; }
+    const starBal = Number(myProfile?.star_balance || 0) - reservedStarsRef.current;
+    if (starBal <= 0) { setStarNotification('no_earn'); setShowTipDialog(false); return; }
+    if (starBal < amt) { setStarNotification(starBal <= 3 ? 'low' : 'no_earn'); setShowTipDialog(false); return; }
+    tippingLockRef.current = true;
+    reservedStarsRef.current += amt;
+    setMyProfile((prev: any) => prev ? { ...prev, star_balance: Math.max(0, Number(prev.star_balance || 0) - amt) } : prev);
     setShowTipDialog(false);
-    loadMyProfile();
+    toast({ title: '⭐ ' + amt + ' Stars sent!', description: 'Processing…' });
+    try {
+      const res = await executeTip(tipPost.id, amt, 'manual', tipPost.music_track_id);
+      if (!res?.success) {
+        reservedStarsRef.current = Math.max(0, reservedStarsRef.current - amt);
+        setMyProfile((prev: any) => prev ? { ...prev, star_balance: Number(prev.star_balance || 0) + amt } : prev);
+        toast({ title: 'Tip failed', description: res?.error || 'Try again', variant: 'destructive' as any });
+      } else {
+        toast({ title: '⭐ ' + amt + ' Stars sent!', description: '₦' + Number(res.viewer_cashback || 0).toFixed(0) + ' to Pending Earnings' });
+        loadMyProfile();
+      }
+    } finally {
+      tippingLockRef.current = false;
+    }
   };
-
 
   const requireLogin = (msg?: string) => {
     setLoginMessage(msg || 'Sign in to continue');
