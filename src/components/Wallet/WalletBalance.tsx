@@ -5,7 +5,6 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Wallet, Star, TrendingUp, ArrowUpRight, ArrowDownRight, RefreshCw } from 'lucide-react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 
 export const WalletBalance = () => {
   const { user } = useAuth();
@@ -45,92 +44,149 @@ export const WalletBalance = () => {
     if (!user) return;
     try {
       const rows: any[] = [];
+      const seen = new Set<string>();
+      const push = (row: any) => {
+        if (!row?.id || seen.has(row.id)) return;
+        seen.add(row.id);
+        rows.push(row);
+      };
 
-      // 1) wallet_history
+      // 1) wallet_history (own rows)
       const histRes = await supabase
         .from('wallet_history')
         .select('*')
         .eq('user_id', user.id)
         .order('created_at', { ascending: false })
-        .limit(50);
+        .limit(100);
       if (histRes.error) {
         console.warn('wallet_history', histRes.error.message);
       } else {
         (histRes.data || []).forEach((t: any) => {
-          rows.push({
+          push({
             id: `wh-${t.id}`,
             type: t.type || t.transaction_type || 'wallet',
             amount: Number(t.amount || 0),
             created_at: t.created_at,
             source: 'wallet_history',
+            detail: t.meta?.label || t.description || undefined,
+            unit: 'ngn',
           });
         });
       }
 
-      // 2) tip_ledger as viewer (cashback)
-      const tipsOut = await (supabase as any)
+      // 2) tip_ledger — one query for both roles (viewer + creator)
+      const tipsRes = await (supabase as any)
         .from('tip_ledger')
-        .select('id, stars, viewer_ngn, creator_ngn, source, created_at, from_user_id, to_user_id')
-        .eq('from_user_id', user.id)
+        .select('id, stars, viewer_ngn, creator_ngn, platform_ngn, source, status, created_at, from_user_id, to_user_id')
+        .or(`from_user_id.eq.${user.id},to_user_id.eq.${user.id}`)
         .order('created_at', { ascending: false })
-        .limit(50);
-      if (tipsOut.error) {
-        console.warn('tip_ledger out', tipsOut.error.message);
-        setLoadError((prev) => prev || `Tips read blocked: ${tipsOut.error.message}`);
-      } else {
-        (tipsOut.data || []).forEach((t: any) => {
-          const cash = Number(t.viewer_ngn || 0);
-          const spent = Number(t.stars || 0);
-          if (spent > 0) {
-            rows.push({
-              id: `tip-spend-${t.id}`,
-              type: 'star_spend',
-              amount: -spent,
-              created_at: t.created_at,
-              source: t.source || 'tip',
-              detail: `⭐${spent} tipped`,
-            });
+        .limit(100);
+
+      if (tipsRes.error) {
+        console.warn('tip_ledger', tipsRes.error.message);
+        setLoadError((prev) => prev || `Tip history: ${tipsRes.error.message}`);
+
+        // Fallback: separate queries if .or fails
+        const [outFb, inFb] = await Promise.all([
+          (supabase as any).from('tip_ledger').select('*').eq('from_user_id', user.id).order('created_at', { ascending: false }).limit(100),
+          (supabase as any).from('tip_ledger').select('*').eq('to_user_id', user.id).order('created_at', { ascending: false }).limit(100),
+        ]);
+        const merged = [...(outFb.data || []), ...(inFb.data || [])];
+        if (!outFb.error && !inFb.error) setLoadError(null);
+        merged.forEach((t: any) => {
+          const isViewer = t.from_user_id === user.id;
+          const isCreator = t.to_user_id === user.id;
+          if (isViewer) {
+            const spent = Number(t.stars || 0);
+            const cash = Number(t.viewer_ngn || 0);
+            if (spent > 0) {
+              push({
+                id: `tip-spend-${t.id}`,
+                type: 'star_spend',
+                amount: spent,
+                created_at: t.created_at,
+                source: t.source || 'tip',
+                detail: `⭐${spent} tipped (${t.source || 'tip'})`,
+                unit: 'stars',
+              });
+            }
+            if (cash > 0) {
+              push({
+                id: `tip-cash-${t.id}`,
+                type: 'tip_cashback',
+                amount: cash,
+                created_at: t.created_at,
+                source: t.source || 'tip',
+                detail: `Cashback pending · ⭐${spent}`,
+                unit: 'ngn',
+              });
+            }
           }
-          if (cash > 0) {
-            rows.push({
-              id: `tip-out-${t.id}`,
-              type: 'tip_cashback',
-              amount: cash,
-              created_at: t.created_at,
-              source: t.source || 'tip',
-              detail: `⭐${spent} spent · ₦${cash} cashback (pending)`,
-            });
+          if (isCreator) {
+            const amt = Number(t.creator_ngn || 0);
+            if (amt > 0) {
+              push({
+                id: `tip-in-${t.id}`,
+                type: 'tip_pending',
+                amount: amt,
+                created_at: t.created_at,
+                source: t.source || 'tip',
+                detail: `Tip received · ⭐${t.stars || 0} · ${t.status || 'pending'}`,
+                unit: 'ngn',
+              });
+            }
           }
         });
-      }
-
-      // 3) tip_ledger as creator (earnings)
-      const tipsIn = await (supabase as any)
-        .from('tip_ledger')
-        .select('id, stars, viewer_ngn, creator_ngn, source, created_at, from_user_id, to_user_id')
-        .eq('to_user_id', user.id)
-        .order('created_at', { ascending: false })
-        .limit(50);
-      if (tipsIn.error) {
-        console.warn('tip_ledger in', tipsIn.error.message);
       } else {
-        (tipsIn.data || []).forEach((t: any) => {
-          const amt = Number(t.creator_ngn || 0);
-          if (amt <= 0) return;
-          rows.push({
-            id: `tip-in-${t.id}`,
-            type: 'tip_pending',
-            amount: amt,
-            created_at: t.created_at,
-            source: t.source || 'tip',
-            detail: `⭐${t.stars} tip received (pending)`,
-          });
+        setLoadError(null);
+        (tipsRes.data || []).forEach((t: any) => {
+          const isViewer = t.from_user_id === user.id;
+          const isCreator = t.to_user_id === user.id;
+          if (isViewer) {
+            const spent = Number(t.stars || 0);
+            const cash = Number(t.viewer_ngn || 0);
+            if (spent > 0) {
+              push({
+                id: `tip-spend-${t.id}`,
+                type: 'star_spend',
+                amount: spent,
+                created_at: t.created_at,
+                source: t.source || 'tip',
+                detail: `⭐${spent} tipped (${t.source || 'tip'})`,
+                unit: 'stars',
+              });
+            }
+            if (cash > 0) {
+              push({
+                id: `tip-cash-${t.id}`,
+                type: 'tip_cashback',
+                amount: cash,
+                created_at: t.created_at,
+                source: t.source || 'tip',
+                detail: `Cashback pending · ⭐${spent}`,
+                unit: 'ngn',
+              });
+            }
+          }
+          if (isCreator) {
+            const amt = Number(t.creator_ngn || 0);
+            if (amt > 0) {
+              push({
+                id: `tip-in-${t.id}`,
+                type: 'tip_pending',
+                amount: amt,
+                created_at: t.created_at,
+                source: t.source || 'tip',
+                detail: `Tip received · ⭐${t.stars || 0} · ${t.status || 'pending'}`,
+                unit: 'ngn',
+              });
+            }
+          }
         });
       }
 
       rows.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
-      setTransactions(rows.slice(0, 80));
-      if (rows.length > 0) setLoadError(null);
+      setTransactions(rows.slice(0, 120));
     } catch (error: any) {
       console.error('Error fetching transactions:', error);
       setLoadError(error?.message || 'Failed to load history');
@@ -146,46 +202,62 @@ export const WalletBalance = () => {
 
   useEffect(() => {
     if (!user) return;
-    refreshAll();
+    fetchBalances();
+    fetchTransactions();
 
-    const channel = supabase
-      .channel('wallet-live-' + user.id)
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'user_profiles', filter: `id=eq.${user.id}` }, () => { fetchBalances(); })
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'wallet_history', filter: `user_id=eq.${user.id}` }, () => { fetchTransactions(); fetchBalances(); })
-      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'tip_ledger' }, () => { fetchTransactions(); fetchBalances(); })
+    const ch = supabase
+      .channel(`wallet-${user.id}`)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'wallet_history', filter: `user_id=eq.${user.id}` }, () => {
+        fetchTransactions();
+        fetchBalances();
+      })
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'tip_ledger' }, () => {
+        fetchTransactions();
+        fetchBalances();
+      })
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'user_profiles', filter: `id=eq.${user.id}` }, () => {
+        fetchBalances();
+      })
       .subscribe();
 
     const poll = setInterval(() => {
-      fetchBalances();
       fetchTransactions();
-    }, 3000);
+      fetchBalances();
+    }, 4000);
 
     return () => {
-      supabase.removeChannel(channel);
+      supabase.removeChannel(ch);
       clearInterval(poll);
     };
-  }, [user, refreshAll, fetchBalances, fetchTransactions]);
+  }, [user, fetchBalances, fetchTransactions]);
 
   const formatCurrency = (amount: number) =>
-    `₦${amount.toLocaleString('en-NG', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+    new Intl.NumberFormat('en-NG', { style: 'currency', currency: 'NGN' }).format(amount);
 
-  const getTransactionIcon = (type: string) =>
-    type.includes('earn') || type.includes('credit') || type.includes('cashback') || type.includes('pending') ? (
-      <ArrowDownRight className="w-4 h-4 text-green-500" />
-    ) : (
-      <ArrowUpRight className="w-4 h-4 text-red-500" />
-    );
+  const formatAmount = (tx: any) => {
+    if (tx.unit === 'stars' || String(tx.type).includes('star_spend')) {
+      return `${tx.amount >= 0 ? '' : '-'}⭐${Math.abs(Number(tx.amount || 0))}`;
+    }
+    const n = Number(tx.amount || 0);
+    return `${n >= 0 ? '+' : '-'}${formatCurrency(Math.abs(n))}`;
+  };
+
+  const getTransactionIcon = (type: string) => {
+    const t = String(type || '').toLowerCase();
+    if (t.includes('pending') || t.includes('earn') || t.includes('credit') || t.includes('cashback')) {
+      return <ArrowUpRight className="w-4 h-4 text-green-500" />;
+    }
+    if (t.includes('spend') || t.includes('debit') || t.includes('withdraw')) {
+      return <ArrowDownRight className="w-4 h-4 text-red-500" />;
+    }
+    return <Wallet className="w-4 h-4 text-muted-foreground" />;
+  };
 
   if (loading) {
     return (
-      <Card className="glass-card">
-        <CardContent className="p-6">
-          <div className="animate-pulse space-y-4">
-            <div className="h-8 bg-muted rounded w-1/2" />
-            <div className="h-12 bg-muted rounded" />
-          </div>
-        </CardContent>
-      </Card>
+      <div className="flex items-center justify-center p-8">
+        <RefreshCw className="w-6 h-6 animate-spin text-muted-foreground" />
+      </div>
     );
   }
 
@@ -196,7 +268,7 @@ export const WalletBalance = () => {
           <CardHeader className="pb-3">
             <CardTitle className="text-sm font-medium flex items-center gap-2">
               <Wallet className="w-4 h-4" />
-              Wallet Balance
+              Wallet
             </CardTitle>
           </CardHeader>
           <CardContent>
@@ -214,8 +286,7 @@ export const WalletBalance = () => {
           </CardHeader>
           <CardContent>
             <p className="text-2xl font-bold flex items-center gap-1">
-              <Star className="w-5 h-5 fill-yellow-400 text-yellow-400" />
-              {starBalance.toLocaleString()}
+              <span className="text-yellow-500">⭐</span> {starBalance}
             </p>
             <p className="text-xs text-muted-foreground mt-1">For tips & auto-spend</p>
           </CardContent>
@@ -250,31 +321,22 @@ export const WalletBalance = () => {
 
       <Card className="glass-card">
         <CardHeader>
-          <CardTitle className="flex items-center justify-between gap-2">
+          <CardTitle className="flex items-center justify-between gap-2 flex-wrap">
             <span>Transaction History</span>
             <div className="flex items-center gap-2">
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                className="h-8 gap-1"
-                disabled={refreshing}
-                onClick={() => refreshAll()}
-              >
+              <Button type="button" size="sm" variant="secondary" className="gap-1" onClick={() => refreshAll()} disabled={refreshing}>
                 <RefreshCw className={`w-3.5 h-3.5 ${refreshing ? 'animate-spin' : ''}`} />
-                {refreshing ? 'Refreshing…' : 'Refresh'}
+                Refresh
               </Button>
               <Dialog>
                 <DialogTrigger asChild>
-                  <Button type="button" variant="ghost" size="sm" className="h-8">
-                    View all
-                  </Button>
+                  <Button type="button" size="sm" variant="outline">View all</Button>
                 </DialogTrigger>
                 <DialogContent className="max-h-[80vh] overflow-y-auto">
                   <DialogHeader>
                     <DialogTitle>All transactions</DialogTitle>
                   </DialogHeader>
-                  <div className="space-y-2 mt-2">
+                  <div className="space-y-2">
                     {transactions.map((tx) => (
                       <div key={tx.id} className="flex items-center justify-between p-3 glass-card rounded-lg">
                         <div className="flex items-center gap-3">
@@ -285,8 +347,8 @@ export const WalletBalance = () => {
                             <p className="text-xs text-muted-foreground">{new Date(tx.created_at).toLocaleString()}</p>
                           </div>
                         </div>
-                        <p className={`font-bold ${tx.amount >= 0 ? 'text-green-500' : 'text-red-500'}`}>
-                          {tx.amount >= 0 ? '+' : ''}{formatCurrency(Math.abs(tx.amount))}
+                        <p className={`font-bold ${Number(tx.amount) >= 0 && tx.unit !== 'stars' ? 'text-green-500' : tx.unit === 'stars' ? 'text-red-500' : Number(tx.amount) >= 0 ? 'text-green-500' : 'text-red-500'}`}>
+                          {formatAmount(tx)}
                         </p>
                       </div>
                     ))}
@@ -301,11 +363,9 @@ export const WalletBalance = () => {
         </CardHeader>
         <CardContent className="space-y-2">
           {loadError && (
-            <p className="text-xs text-amber-600 bg-amber-500/10 rounded-md p-2">
-              {loadError}
-            </p>
+            <p className="text-xs text-amber-600 bg-amber-500/10 rounded-md p-2">{loadError}</p>
           )}
-          {transactions.slice(0, 8).map((tx) => (
+          {transactions.slice(0, 12).map((tx) => (
             <div key={tx.id} className="flex items-center justify-between p-3 glass-card rounded-lg">
               <div className="flex items-center gap-3">
                 {getTransactionIcon(tx.type)}
@@ -315,8 +375,8 @@ export const WalletBalance = () => {
                   <p className="text-xs text-muted-foreground">{new Date(tx.created_at).toLocaleString()}</p>
                 </div>
               </div>
-              <p className={`font-bold ${tx.amount >= 0 ? 'text-green-500' : 'text-red-500'}`}>
-                {tx.amount >= 0 ? '+' : ''}{formatCurrency(Math.abs(tx.amount))}
+              <p className={`font-bold ${tx.unit === 'stars' ? 'text-red-500' : Number(tx.amount) >= 0 ? 'text-green-500' : 'text-red-500'}`}>
+                {formatAmount(tx)}
               </p>
             </div>
           ))}
@@ -328,3 +388,5 @@ export const WalletBalance = () => {
     </div>
   );
 };
+
+export default WalletBalance;
