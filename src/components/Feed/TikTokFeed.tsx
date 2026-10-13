@@ -2763,7 +2763,7 @@ const TikTokFeed: React.FC = () => {
       type: 'tip_cashback',
       amount: vNgn,
       currency: 'NGN',
-      meta: { post_id: postId, stars, status: 'pending', label: `Cashback pending ⭐${stars}` },
+      meta: { post_id: postId, stars, status: 'pending', creator_id: creatorId, creator_ngn: cNgn, label: `Cashback pending ⭐${stars}` },
     }).then(({ error }: any) => { if (error) console.warn(error.message); });
 
     setMyProfile((prev: any) =>
