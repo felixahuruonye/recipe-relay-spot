@@ -2764,6 +2764,39 @@ const TikTokFeed: React.FC = () => {
       console.warn('record_complete_tip exception', e);
     }
 
+    // SECONDARY: try existing tip_post RPC if present
+    try {
+      const { data: tipRes, error: tipErr } = await (supabase as any).rpc('tip_post', {
+        p_post_id: postId,
+        p_stars: stars,
+        p_source: source || 'manual',
+      });
+      if (!tipErr && tipRes && (tipRes as any).success !== false) {
+        const cashback = Number((tipRes as any).viewer_cashback ?? vNgn);
+        setMyProfile((prev: any) =>
+          prev
+            ? {
+                ...prev,
+                star_balance: Math.max(0, Number(prev.star_balance || 0) - stars),
+                pending_tip_earnings: Number(prev.pending_tip_earnings || 0) + cashback,
+              }
+            : prev
+        );
+        reservedStarsRef.current = Math.max(0, reservedStarsRef.current - stars);
+        return {
+          success: true,
+          viewer_cashback: cashback,
+          creator_amount: Number((tipRes as any).creator_amount ?? cNgn),
+          platform_amount: Number((tipRes as any).platform_amount ?? pNgn),
+          musician_amount: Number((tipRes as any).musician_amount ?? mNgn),
+          rate: rates.rate,
+        };
+      }
+      if (tipErr) console.warn('tip_post', tipErr.message);
+    } catch (e) {
+      console.warn('tip_post exception', e);
+    }
+
     // FALLBACK (if RPC missing): best-effort local writes
     const { error: ledErr } = await (supabase as any).from('tip_ledger').insert({
       post_id: postId,
@@ -2781,7 +2814,6 @@ const TikTokFeed: React.FC = () => {
       viewer_ngn: vNgn,
       platform_ngn: pNgn,
       source,
-      status: 'pending',
       music_track_id: musicTrackId || (postRow as any).music_track_id || null,
     });
     if (ledErr) console.warn('tip_ledger insert', ledErr.message);
@@ -2840,7 +2872,7 @@ const TikTokFeed: React.FC = () => {
       musician_amount: mNgn,
       rate: rates.rate,
       ledger_error: ledErr?.message || null,
-      error: ledErr ? 'Tip partially saved — run record_complete_tip SQL' : undefined,
+      error: ledErr ? (ledErr.message || 'Tip partially saved') : undefined,
     };
   };
 
@@ -3175,7 +3207,7 @@ const TikTokFeed: React.FC = () => {
               <div className="flex items-center gap-2">
                 {user && myProfile && (
                   <Badge className="bg-yellow-500 text-black text-[11px] gap-1 font-bold shadow-lg px-3 py-1 rounded-full">
-                    <Star className="w-3 h-3 fill-current" /> {myProfile.star_balance || 0} Stars
+                    <Star className="w-3 h-3 fill-current" /> {Math.max(0, Number(myProfile.star_balance || 0) - (reservedStarsRef.current || 0))} Stars
                   </Badge>
                 )}
                 {user && (
