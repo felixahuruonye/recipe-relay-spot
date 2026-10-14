@@ -65,19 +65,45 @@ serve(async (req) => {
     const creditData = creditResult as any;
     const creditsRemaining = creditData?.credits_remaining ?? 0;
 
-    if (!lovableApiKey) {
-      throw new Error('Lovable API key not configured');
+    // Prefer API key from bot_settings (admin panel) so plugging a key works immediately
+    let apiKey = lovableApiKey || '';
+    try {
+      const { data: botRow } = await supabase
+        .from('bot_settings')
+        .select('api_key, enabled, model')
+        .eq('id', 'lenory_chat')
+        .maybeSingle();
+      if (botRow?.api_key) {
+        apiKey = botRow.api_key;
+      }
+      // Also accept any bot row that has a key
+      if (!apiKey) {
+        const { data: anyBot } = await supabase
+          .from('bot_settings')
+          .select('api_key')
+          .not('api_key', 'is', null)
+          .limit(1)
+          .maybeSingle();
+        if (anyBot?.api_key) apiKey = anyBot.api_key;
+      }
+    } catch (e) {
+      console.warn('bot_settings lookup', e);
+    }
+
+    if (!apiKey) {
+      throw new Error('AI API key not configured. Add a key in Admin → Bots.');
     }
 
     // Build context from Supabase data
     let supabaseContext = '';
     
+    const like = `%${sanitizedQuery.split(' ')[0]}%`;
     const { data: relatedPosts } = await supabase
       .from('posts')
       .select('title, body, category, view_count, likes_count')
       .eq('status', 'approved')
-      .textSearch('title', sanitizedQuery.split(' ').join(' | '), { type: 'plain' })
-      .limit(5);
+      .or(`title.ilike.${like},body.ilike.${like}`)
+      .limit(8);
 
     if (relatedPosts && relatedPosts.length > 0) {
       supabaseContext += '\nRelated posts found:\n' + relatedPosts.map(p => `- "${p.title}" (${p.category}, ${p.view_count || 0} views, ${p.likes_count || 0} likes)`).join('\n');
@@ -159,7 +185,7 @@ ${trendingKeywords ? `\nTrending now: ${trendingKeywords}` : ''}`;
     const response = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
       method: 'POST',
       headers: {
-        'Authorization': `Bearer ${lovableApiKey}`,
+        'Authorization': `Bearer ${apiKey}`,
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
