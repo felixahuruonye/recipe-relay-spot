@@ -165,16 +165,17 @@ export const SearchOverlayV2: React.FC<Props> = ({ open, onClose }) => {
   };
 
   const openPost = (id: string) => {
-    navigate(`/?post=${encodeURIComponent(id)}`);
     onClose();
+    // Always navigate so feed can pick up ?post= even when already on /
+    navigate(`/?post=${encodeURIComponent(id)}`, { replace: false, state: { openPostId: id, t: Date.now() } });
   };
   const openProfile = (id: string) => {
-    navigate(`/profile/${id}`);
     onClose();
+    navigate(`/profile/${id}`);
   };
   const openProduct = (id: string) => {
-    navigate(`/marketplace?product=${encodeURIComponent(id)}`);
     onClose();
+    navigate(`/marketplace?product=${encodeURIComponent(id)}`);
   };
 
   const askAi = async () => {
