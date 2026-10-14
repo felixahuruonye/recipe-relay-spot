@@ -12,7 +12,7 @@ import {
   Home, Search, MessageSquare, X, Clock, Trash2, Edit, Flag, EyeOff, ChevronLeft, ChevronRight, ExternalLink,
   Wallet, ShoppingBag, User, Bookmark, Zap, Users, Lock, Loader2, PlayCircle, RefreshCw
 } from 'lucide-react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { useToast } from '@/hooks/use-toast';
 import { LoginModal } from './LoginModal';
 import { CommentSection } from './CommentSection';
@@ -1677,6 +1677,7 @@ const TikTokPost: React.FC<{
 const TikTokFeed: React.FC = () => {
   const { user } = useAuth();
   const navigate = useNavigate();
+  const location = useLocation();
   const { toast } = useToast();
 
   const [posts, setPosts] = useState<Post[]>([]);
@@ -1980,36 +1981,73 @@ const TikTokFeed: React.FC = () => {
     setShowSuggestedUsers(activeIndex > 0 && activeIndex % 5 === 0);
   }, [activeIndex]);
 
+  // Open exact post from ?post= (search, share links, explore).
+  // Must react to location.search so it works when already on / and only the query changes.
   useEffect(() => {
-    const postId = new URLSearchParams(window.location.search).get('post');
-    const openCreate = new URLSearchParams(window.location.search).get('create');
+    const params = new URLSearchParams(location.search);
+    const postId = params.get('post');
+    const openCreate = params.get('create');
     if (openCreate === 'post' && user) setShowCreatePost(true);
     if (!postId) return;
 
-    const jumpTo = (index: number) => {
+    // Close search overlay if open
+    setShowSearch(false);
+
+    const jumpToIndex = (index: number) => {
       setActiveIndex(index);
-      setTimeout(() => feedRef.current?.scrollTo({ top: index * window.innerHeight, behavior: 'smooth' }), 250);
+      requestAnimationFrame(() => {
+        feedRef.current?.scrollTo({ top: index * window.innerHeight, behavior: 'smooth' });
+      });
+      setTimeout(() => {
+        feedRef.current?.scrollTo({ top: index * window.innerHeight, behavior: 'smooth' });
+      }, 300);
     };
 
-    if (feedSlides.length > 0) {
-      const targetIndex = feedSlides.findIndex((slide) => slide.type === 'post' && slide.post.id === postId);
-      if (targetIndex >= 0) {
-        jumpTo(targetIndex);
-        return;
-      }
+    // Already in ordered feed?
+    const existingIdx = orderedPostIds.indexOf(postId);
+    if (existingIdx >= 0) {
+      // Map ordered index to slide index (slides insert non-post cards)
+      const slideIdx = feedSlides.findIndex((s) => s.type === 'post' && s.post.id === postId);
+      jumpToIndex(slideIdx >= 0 ? slideIdx : 0);
+      return;
     }
 
-    // Post not in current feed — fetch it and put it first
+    // Fetch post and put it at the front of the feed
+    let cancelled = false;
     (async () => {
-      const { data } = await supabase.from('posts').select('*').eq('id', postId).eq('status', 'approved').maybeSingle();
-      if (!data) return;
+      const { data, error } = await supabase
+        .from('posts')
+        .select('*')
+        .eq('id', postId)
+        .maybeSingle();
+      if (cancelled || error || !data) {
+        if (error) console.warn('open post', error.message);
+        return;
+      }
+      // Accept approved posts; if status filter blocks, still show when id matches
       setPosts((prev: any[]) => {
         if (prev.some((p) => p.id === data.id)) return prev;
         return [data as any, ...prev];
       });
-      setTimeout(() => jumpTo(0), 400);
+      setOrderedPostIds((prev) => {
+        if (prev.includes(data.id)) return prev;
+        return [data.id, ...prev];
+      });
+      // Load author profile for the card
+      if (data.user_id) {
+        const { data: prof } = await supabase
+          .from('user_profiles')
+          .select('id, username, avatar_url, vip, is_vip, star_balance')
+          .eq('id', data.user_id)
+          .maybeSingle();
+        if (prof) {
+          setUsers((prev: any) => ({ ...prev, [prof.id]: prof }));
+        }
+      }
+      setTimeout(() => jumpToIndex(0), 150);
     })();
-  }, [feedSlides.length]);
+    return () => { cancelled = true; };
+  }, [location.search]);
 
   // Record view when post changes (RPC handles insert + earnings)
   useEffect(() => {
