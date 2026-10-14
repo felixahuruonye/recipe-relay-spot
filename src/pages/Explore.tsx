@@ -67,6 +67,7 @@ const Explore = () => {
   const [searchQuery, setSearchQuery] = useState('');
   const [searchResults, setSearchResults] = useState<TrendingPost[]>([]);
   const [searchUsers, setSearchUsers] = useState<TopCreator[]>([]);
+  const [searchProducts, setSearchProducts] = useState<any[]>([]);
   const [searchType, setSearchType] = useState<'tag' | 'category' | 'text' | null>(null);
 
   // Read ?q= and ?type= from URL (deep-link from clicking tags/category in feed)
@@ -94,6 +95,14 @@ const Explore = () => {
           .order('follower_count', { ascending: false })
           .limit(20);
         setSearchUsers((users as any) || []);
+
+        const { data: products } = await supabase
+          .from('products')
+          .select('id, title, price_ngn, images, seller_user_id')
+          .eq('status', 'active')
+          .or(`title.ilike.%${q}%,description.ilike.%${q}%`)
+          .limit(20);
+        setSearchProducts((products as any) || []);
       }
 
       // Track popularity
@@ -236,6 +245,41 @@ const Explore = () => {
           </CardContent>
         </Card>
       )}
+
+      {searchQuery && searchProducts.length > 0 && (
+        <Card className="border-primary/40">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-base flex items-center justify-between">
+              <span>Products matching <span className="text-primary">{searchQuery}</span></span>
+              <Badge variant="secondary">{searchProducts.length} products</Badge>
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+              {searchProducts.map((pr: any) => (
+                <button
+                  key={pr.id}
+                  onClick={() => navigate(`/marketplace?product=${encodeURIComponent(pr.id)}`)}
+                  className="rounded-lg overflow-hidden bg-muted text-left hover:opacity-90"
+                >
+                  <div className="aspect-square bg-muted">
+                    {pr.images?.[0] ? (
+                      <img src={pr.images[0]} alt={pr.title} className="w-full h-full object-cover" />
+                    ) : (
+                      <div className="w-full h-full bg-gradient-to-br from-primary/20 to-accent/20" />
+                    )}
+                  </div>
+                  <div className="p-2">
+                    <p className="text-xs font-semibold line-clamp-1">{pr.title}</p>
+                    <p className="text-xs text-primary font-bold">₦{(pr.price_ngn || 0).toLocaleString()}</p>
+                  </div>
+                </button>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
 
       {searchQuery && (
         <Card className="border-primary/40">
