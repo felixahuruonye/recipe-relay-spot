@@ -14,11 +14,13 @@ import { MediaThumb } from '@/components/Feed/MediaThumb';
 interface Props {
   open: boolean;
   onClose: () => void;
+  /** Called with the full post row when user taps a video — parent opens it in the feed */
+  onSelectPost?: (post: any) => void;
 }
 
 type TabKey = 'history' | 'videos' | 'people' | 'products' | 'music' | 'ai';
 
-export const SearchOverlayV2: React.FC<Props> = ({ open, onClose }) => {
+export const SearchOverlayV2: React.FC<Props> = ({ open, onClose, onSelectPost }) => {
   const { user } = useAuth();
   const navigate = useNavigate();
   const [query, setQuery] = useState('');
@@ -164,9 +166,15 @@ export const SearchOverlayV2: React.FC<Props> = ({ open, onClose }) => {
     onClose();
   };
 
-  const openPost = (id: string) => {
+  const openPost = (postOrId: any) => {
+    const post = typeof postOrId === 'string' ? { id: postOrId } : postOrId;
+    const id = post?.id;
+    if (!id) return;
     onClose();
-    // Always navigate so feed can pick up ?post= even when already on /
+    if (onSelectPost) {
+      onSelectPost(post);
+      return;
+    }
     navigate(`/?post=${encodeURIComponent(id)}`, { replace: false, state: { openPostId: id, t: Date.now() } });
   };
   const openProfile = (id: string) => {
@@ -335,7 +343,7 @@ export const SearchOverlayV2: React.FC<Props> = ({ open, onClose }) => {
               ) : (
                 <div className="grid grid-cols-3 gap-2">
                   {videos.map(v => (
-                    <button key={v.id} onClick={() => openPost(v.id)} className="aspect-[9/16] rounded-lg overflow-hidden bg-muted relative text-left">
+                    <button key={v.id} type="button" onClick={() => openPost(v)} className="aspect-[9/16] rounded-lg overflow-hidden bg-muted relative text-left">
                       <MediaThumb url={v.media_urls?.[0]} thumbnailUrl={v.thumbnail_url} mediaType={v.media_type} alt={v.title} className="w-full h-full" />
                       <div className="absolute bottom-1 left-1 flex items-center gap-1 text-white text-[10px] bg-black/40 px-1 rounded">
                         <Eye className="w-3 h-3" /> {v.view_count || 0}
