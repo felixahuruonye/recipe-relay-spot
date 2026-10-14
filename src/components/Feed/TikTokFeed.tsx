@@ -1710,6 +1710,7 @@ const TikTokFeed: React.FC = () => {
   const [showSendToFriend, setShowSendToFriend] = useState(false);
   const [activeSendPost, setActiveSendPost] = useState<Post | null>(null);
   const [showSearch, setShowSearch] = useState(false);
+  const [focusPostId, setFocusPostId] = useState<string | null>(null);
   // Pause ALL feed media while search overlay is open (videos + audio)
   useEffect(() => {
     if (!showSearch) return;
@@ -1821,7 +1822,7 @@ const TikTokFeed: React.FC = () => {
       if ((index + 1) % 6 === 0) slides.push({ type: 'trending-stories', key: `trending-stories-${index}` });
     });
     return slides;
-  }, [posts, products, user?.id, myProductBookmarks, followingCount]);
+  }, [posts, orderedPostIds, products, user?.id, myProductBookmarks, followingCount]);
 
   // Fetch posts
   useEffect(() => { fetchPosts(); fetchProducts(); fetchProductSounds(); }, []);
@@ -1981,73 +1982,79 @@ const TikTokFeed: React.FC = () => {
     setShowSuggestedUsers(activeIndex > 0 && activeIndex % 5 === 0);
   }, [activeIndex]);
 
-  // Open exact post from ?post= (search, share links, explore).
-  // Must react to location.search so it works when already on / and only the query changes.
+
+  // Open a specific post in the feed (from search, explore, or share link)
+  const openPostInFeed = useCallback(async (postInput: any) => {
+    const postId = typeof postInput === 'string' ? postInput : postInput?.id;
+    if (!postId) return;
+    setShowSearch(false);
+
+    let post = typeof postInput === 'object' && postInput?.id ? postInput : null;
+    if (!post) {
+      const { data } = await supabase.from('posts').select('*').eq('id', postId).maybeSingle();
+      post = data;
+    }
+    if (!post) {
+      console.warn('openPostInFeed: post not found', postId);
+      return;
+    }
+
+    // Put this post first in the feed order
+    setPosts((prev: any[]) => {
+      const rest = prev.filter((p) => p.id !== post.id);
+      return [post as any, ...rest];
+    });
+    setOrderedPostIds((prev) => {
+      const rest = prev.filter((id) => id !== post.id);
+      return [post.id, ...rest];
+    });
+
+    if (post.user_id) {
+      const { data: prof } = await supabase
+        .from('user_profiles')
+        .select('id, username, avatar_url, vip, is_vip, star_balance')
+        .eq('id', post.user_id)
+        .maybeSingle();
+      if (prof) setUsers((prev: any) => ({ ...prev, [prof.id]: prof }));
+    }
+
+    setFocusPostId(post.id);
+    // Update URL without relying on it to open the post
+    try {
+      const url = new URL(window.location.href);
+      url.searchParams.set('post', post.id);
+      window.history.replaceState({}, '', url.toString());
+    } catch {}
+  }, []);
+
+  // When focusPostId is set and present in slides, scroll to it
+  useEffect(() => {
+    if (!focusPostId) return;
+    const slideIdx = feedSlides.findIndex((s) => s.type === 'post' && s.post.id === focusPostId);
+    if (slideIdx < 0) return;
+    setActiveIndex(slideIdx);
+    const scroll = () => {
+      const el = feedRef.current;
+      if (!el) return;
+      el.scrollTo({ top: slideIdx * window.innerHeight, behavior: 'auto' });
+    };
+    scroll();
+    requestAnimationFrame(scroll);
+    setTimeout(scroll, 50);
+    setTimeout(scroll, 200);
+    setFocusPostId(null);
+  }, [focusPostId, feedSlides]);
+
+  // Share links / external ?post= URL
   useEffect(() => {
     const params = new URLSearchParams(location.search);
     const postId = params.get('post');
     const openCreate = params.get('create');
     if (openCreate === 'post' && user) setShowCreatePost(true);
     if (!postId) return;
-
-    // Close search overlay if open
-    setShowSearch(false);
-
-    const jumpToIndex = (index: number) => {
-      setActiveIndex(index);
-      requestAnimationFrame(() => {
-        feedRef.current?.scrollTo({ top: index * window.innerHeight, behavior: 'smooth' });
-      });
-      setTimeout(() => {
-        feedRef.current?.scrollTo({ top: index * window.innerHeight, behavior: 'smooth' });
-      }, 300);
-    };
-
-    // Already in ordered feed?
-    const existingIdx = orderedPostIds.indexOf(postId);
-    if (existingIdx >= 0) {
-      // Map ordered index to slide index (slides insert non-post cards)
-      const slideIdx = feedSlides.findIndex((s) => s.type === 'post' && s.post.id === postId);
-      jumpToIndex(slideIdx >= 0 ? slideIdx : 0);
-      return;
-    }
-
-    // Fetch post and put it at the front of the feed
-    let cancelled = false;
-    (async () => {
-      const { data, error } = await supabase
-        .from('posts')
-        .select('*')
-        .eq('id', postId)
-        .maybeSingle();
-      if (cancelled || error || !data) {
-        if (error) console.warn('open post', error.message);
-        return;
-      }
-      // Accept approved posts; if status filter blocks, still show when id matches
-      setPosts((prev: any[]) => {
-        if (prev.some((p) => p.id === data.id)) return prev;
-        return [data as any, ...prev];
-      });
-      setOrderedPostIds((prev) => {
-        if (prev.includes(data.id)) return prev;
-        return [data.id, ...prev];
-      });
-      // Load author profile for the card
-      if (data.user_id) {
-        const { data: prof } = await supabase
-          .from('user_profiles')
-          .select('id, username, avatar_url, vip, is_vip, star_balance')
-          .eq('id', data.user_id)
-          .maybeSingle();
-        if (prof) {
-          setUsers((prev: any) => ({ ...prev, [prof.id]: prof }));
-        }
-      }
-      setTimeout(() => jumpToIndex(0), 150);
-    })();
-    return () => { cancelled = true; };
+    openPostInFeed(postId);
   }, [location.search]);
+
 
   // Record view when post changes (RPC handles insert + earnings)
   useEffect(() => {
@@ -3504,7 +3511,7 @@ const TikTokFeed: React.FC = () => {
 
       {/* Search overlay */}
       <AnimatePresence>
-        {showSearch && <SearchOverlayV2 open={showSearch} onClose={() => setShowSearch(false)} />}
+        {showSearch && <SearchOverlayV2 open={showSearch} onClose={() => setShowSearch(false)} onSelectPost={(p) => openPostInFeed(p)} />}
       </AnimatePresence>
 
       {/* Login modal */}
