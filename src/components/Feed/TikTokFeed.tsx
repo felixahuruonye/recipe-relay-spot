@@ -1709,6 +1709,13 @@ const TikTokFeed: React.FC = () => {
   const [showSendToFriend, setShowSendToFriend] = useState(false);
   const [activeSendPost, setActiveSendPost] = useState<Post | null>(null);
   const [showSearch, setShowSearch] = useState(false);
+  // Pause ALL feed media while search overlay is open (videos + audio)
+  useEffect(() => {
+    if (!showSearch) return;
+    document.querySelectorAll('video').forEach((v) => { try { (v as HTMLVideoElement).pause(); } catch {} });
+    document.querySelectorAll('audio').forEach((a) => { try { (a as HTMLAudioElement).pause(); } catch {} });
+  }, [showSearch]);
+
   const [showSoundDrilldown, setShowSoundDrilldown] = useState(false);
   const [activeSoundTrack, setActiveSoundTrack] = useState<{ name: string; artist: string; id?: string; artistId?: string; sourceLabel: string; coverUrl?: string; artistAvatar?: string }>({ name: '', artist: '', sourceLabel: 'Original sound' });
   const [useSoundTrack, setUseSoundTrack] = useState<any>(null);
@@ -1977,13 +1984,32 @@ const TikTokFeed: React.FC = () => {
     const postId = new URLSearchParams(window.location.search).get('post');
     const openCreate = new URLSearchParams(window.location.search).get('create');
     if (openCreate === 'post' && user) setShowCreatePost(true);
-    if (!postId || feedSlides.length === 0 || !feedRef.current) return;
-    const targetIndex = feedSlides.findIndex((slide) => slide.type === 'post' && slide.post.id === postId);
-    if (targetIndex >= 0) {
-      setActiveIndex(targetIndex);
-      setTimeout(() => feedRef.current?.scrollTo({ top: targetIndex * window.innerHeight, behavior: 'smooth' }), 250);
+    if (!postId) return;
+
+    const jumpTo = (index: number) => {
+      setActiveIndex(index);
+      setTimeout(() => feedRef.current?.scrollTo({ top: index * window.innerHeight, behavior: 'smooth' }), 250);
+    };
+
+    if (feedSlides.length > 0) {
+      const targetIndex = feedSlides.findIndex((slide) => slide.type === 'post' && slide.post.id === postId);
+      if (targetIndex >= 0) {
+        jumpTo(targetIndex);
+        return;
+      }
     }
-  }, [feedSlides]);
+
+    // Post not in current feed — fetch it and put it first
+    (async () => {
+      const { data } = await supabase.from('posts').select('*').eq('id', postId).eq('status', 'approved').maybeSingle();
+      if (!data) return;
+      setPosts((prev: any[]) => {
+        if (prev.some((p) => p.id === data.id)) return prev;
+        return [data as any, ...prev];
+      });
+      setTimeout(() => jumpTo(0), 400);
+    })();
+  }, [feedSlides.length]);
 
   // Record view when post changes (RPC handles insert + earnings)
   useEffect(() => {
@@ -3106,7 +3132,7 @@ const TikTokFeed: React.FC = () => {
                 }
 
                 if (slide.type === 'suggested' || slide.type === 'trending-stories') {
-                  return <MixedFeedCard key={slide.key} type={slide.type} isActive={index === activeIndex} isMuted={isMuted} />;
+                  return <MixedFeedCard key={slide.key} type={slide.type} isActive={!showSearch && index === activeIndex} isMuted={isMuted} />;
                 }
                 if (slide.type === 'product') {
                   const soundUrl = productSounds.length
@@ -3118,7 +3144,7 @@ const TikTokFeed: React.FC = () => {
                       key={slide.key}
                       type="product"
                       product={slide.product}
-                      isActive={index === activeIndex}
+                      isActive={!showSearch && index === activeIndex}
                       isMuted={isMuted}
                       soundUrl={soundUrl}
                       likeCount={productLikeCounts[pid] || 0}
@@ -3138,7 +3164,7 @@ const TikTokFeed: React.FC = () => {
                     post={post}
                     postUser={users[post.user_id]}
                     musicTrack={post.music_track_id ? musicTracks[post.music_track_id] : undefined}
-                    isActive={index === activeIndex}
+                    isActive={!showSearch && index === activeIndex}
                     isLiked={(postLikes[post.id] || []).some((l: any) => l.user_id === user?.id)}
                     likesCount={postLikes[post.id]?.length || 0}
                     commentsCount={postCommentCounts[post.id] || 0}
