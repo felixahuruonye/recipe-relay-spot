@@ -53,6 +53,8 @@ export const WithdrawalForm: React.FC<WithdrawalFormProps> = ({ embedded = false
 
   const [records, setRecords] = useState<any[]>([]);
   const [recordsLoading, setRecordsLoading] = useState(false);
+  const [appealMsg, setAppealMsg] = useState('');
+  const [appealSending, setAppealSending] = useState(false);
 
   const amountNum = Number(withdrawAmount) || 0;
   const feePreview = useMemo(() => {
@@ -400,6 +402,49 @@ export const WithdrawalForm: React.FC<WithdrawalFormProps> = ({ embedded = false
             ))}
           </div>
         )}
+
+        <div className="rounded-xl border border-border p-3 space-y-2 mt-3">
+          <p className="text-xs font-semibold">Appeal a restriction</p>
+          <p className="text-[11px] text-muted-foreground">
+            If withdrawals or rewards were held, explain why this should be reviewed. Legitimate funds are not erased by risk holds.
+          </p>
+          <Input
+            placeholder="Your appeal message…"
+            value={appealMsg}
+            onChange={(e) => setAppealMsg(e.target.value)}
+          />
+          <Button
+            size="sm"
+            variant="outline"
+            disabled={appealSending || appealMsg.trim().length < 5}
+            onClick={async () => {
+              if (!user) return;
+              setAppealSending(true);
+              try {
+                const { data, error } = await supabase.rpc('submit_appeal' as any, {
+                  p_message: appealMsg.trim(),
+                  p_case_id: null,
+                  p_restriction_id: null,
+                });
+                if (error || (data as any)?.success === false) throw new Error(error?.message || (data as any)?.error);
+                toast({ title: 'Appeal submitted' });
+                setAppealMsg('');
+              } catch (e: any) {
+                // fallback insert
+                try {
+                  await (supabase as any).from('appeals').insert({ user_id: user.id, message: appealMsg.trim() });
+                  toast({ title: 'Appeal submitted' });
+                  setAppealMsg('');
+                } catch (e2: any) {
+                  toast({ title: 'Error', description: e2?.message || e?.message, variant: 'destructive' });
+                }
+              }
+              setAppealSending(false);
+            }}
+          >
+            {appealSending ? 'Sending…' : 'Submit appeal'}
+          </Button>
+        </div>
       </TabsContent>
     </Tabs>
   );
