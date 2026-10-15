@@ -11,6 +11,7 @@ import { VIPManager } from '@/components/Admin/VIPManager';
 import { AdminChat } from '@/components/Admin/AdminChat';
 import { UserBalancesTab } from '@/components/Admin/UserBalancesTab';
 import { WithdrawalsTab } from '@/components/Admin/WithdrawalsTab';
+import { FraudRiskTab } from '@/components/Admin/FraudRiskTab';
 import { BroadcastTab } from '@/components/Admin/BroadcastTab';
 import { StarPackagesTab } from '@/components/Admin/StarPackagesTab';
 import { PostsTab } from '@/components/Admin/PostsTab';
@@ -168,6 +169,7 @@ const AdminPanel = () => {
               <TabsTrigger value="tasks">Tasks</TabsTrigger>
               <TabsTrigger value="monetization">Monetization</TabsTrigger>
               <TabsTrigger value="withdrawals">Withdrawals</TabsTrigger>
+              <TabsTrigger value="fraud">Fraud & Risk</TabsTrigger>
               <TabsTrigger value="broadcast">Broadcast</TabsTrigger>
               <TabsTrigger value="messages">Admin Chat</TabsTrigger>
               <TabsTrigger value="user-messages">User Messages</TabsTrigger>
@@ -195,6 +197,7 @@ const AdminPanel = () => {
           <TabsContent value="tasks"><TaskAdminTab /></TabsContent>
           <TabsContent value="monetization"><MonetizationTab /></TabsContent>
           <TabsContent value="withdrawals"><WithdrawalsTab /></TabsContent>
+          <TabsContent value="fraud"><FraudRiskTab /></TabsContent>
           <TabsContent value="broadcast"><BroadcastTab /></TabsContent>
           <TabsContent value="messages"><Card><CardContent className="pt-6"><AdminChat /></CardContent></Card></TabsContent>
           <TabsContent value="user-messages"><UserMessagesTab /></TabsContent>
