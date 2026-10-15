@@ -559,11 +559,11 @@ const Profile = () => {
       </Card>
 
       {/* VIP Section */}
-      {/* Creator Dashboard Button */}
+      {/* Dashboard Button */}
       {isOwnProfile && (
-        <Button onClick={() => navigate('/creator-dashboard')} className="w-full bg-gradient-to-r from-blue-500 to-cyan-500 hover:from-blue-600 hover:to-cyan-600 h-12 text-white font-semibold">
+        <Button onClick={() => navigate('/creator-dashboard')} className="w-full bg-gradient-to-r from-violet-600 to-indigo-600 hover:from-violet-500 hover:to-indigo-500 h-12 text-white font-semibold">
           <BarChart3 className="w-5 h-5 mr-2" />
-          Creator Dashboard
+          Dashboard
         </Button>
       )}
 
