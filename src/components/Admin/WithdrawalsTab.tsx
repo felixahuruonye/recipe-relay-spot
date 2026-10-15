@@ -4,6 +4,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Textarea } from '@/components/ui/textarea';
 import { useToast } from '@/hooks/use-toast';
@@ -26,6 +27,8 @@ type ProfileMini = { id: string; username: string; avatar_url: string | null };
 export const WithdrawalsTab: React.FC = () => {
   const { toast } = useToast();
   const [loading, setLoading] = useState(true);
+  const [policySettings, setPolicySettings] = useState<Record<string, number>>({});
+  const [policySaving, setPolicySaving] = useState(false);
   const [rows, setRows] = useState<PaymentRequestRow[]>([]);
   const [profiles, setProfiles] = useState<Record<string, ProfileMini>>({});
 
@@ -49,6 +52,13 @@ export const WithdrawalsTab: React.FC = () => {
 
   const load = async () => {
     setLoading(true);
+
+    try {
+      const { data: settings } = await (supabase as any).from('withdrawal_settings').select('setting_key, setting_value');
+      const map: Record<string, number> = {};
+      ((settings as any[]) || []).forEach((s: any) => { map[s.setting_key] = Number(s.setting_value); });
+      if (Object.keys(map).length) setPolicySettings(map);
+    } catch { /* table may not exist yet */ }
 
     const { data, error } = await supabase
       .from('payment_requests')
@@ -97,19 +107,53 @@ export const WithdrawalsTab: React.FC = () => {
   const applyAction = async () => {
     if (!selected) return;
 
-    // Update payment request directly
-    const { error: updateError } = await supabase
-      .from('payment_requests')
-      .update({ 
-        status: nextStatus, 
-        admin_notes: notes || null,
-        processed_at: new Date().toISOString()
-      })
-      .eq('id', selected.id);
+    // Prefer secure RPCs for paid / rejected so reserves stay correct
+    if (nextStatus === 'paid') {
+      const { data, error } = await supabase.rpc('mark_withdrawal_paid' as any, {
+        p_request_id: selected.id,
+        p_admin_notes: notes || null,
+      });
+      if (error || (data as any)?.success === false) {
+        // fallback to direct update
+        const { error: updateError } = await supabase
+          .from('payment_requests')
+          .update({ status: 'paid', admin_notes: notes || null, processed_at: new Date().toISOString() })
+          .eq('id', selected.id);
+        if (updateError) {
+          toast({ title: 'Error', description: error?.message || updateError.message || (data as any)?.error, variant: 'destructive' });
+          return;
+        }
+      }
+    } else if (nextStatus === 'rejected') {
+      const { data, error } = await supabase.rpc('release_withdrawal_reserve' as any, {
+        p_request_id: selected.id,
+        p_new_status: 'rejected',
+        p_admin_notes: notes || null,
+      });
+      if (error || (data as any)?.success === false) {
+        const { error: updateError } = await supabase
+          .from('payment_requests')
+          .update({ status: 'rejected', admin_notes: notes || null, processed_at: new Date().toISOString() })
+          .eq('id', selected.id);
+        if (updateError) {
+          toast({ title: 'Error', description: error?.message || updateError.message || (data as any)?.error, variant: 'destructive' });
+          return;
+        }
+      }
+    } else {
+      const { error: updateError } = await supabase
+        .from('payment_requests')
+        .update({ 
+          status: nextStatus, 
+          admin_notes: notes || null,
+          processed_at: new Date().toISOString()
+        })
+        .eq('id', selected.id);
 
-    if (updateError) {
-      toast({ title: 'Error', description: updateError.message, variant: 'destructive' });
-      return;
+      if (updateError) {
+        toast({ title: 'Error', description: updateError.message, variant: 'destructive' });
+        return;
+      }
     }
 
     // Send notification to user about status update
@@ -186,8 +230,64 @@ export const WithdrawalsTab: React.FC = () => {
     );
   };
 
+  const savePolicy = async () => {
+    setPolicySaving(true);
+    try {
+      const rows = Object.entries(policySettings).map(([setting_key, setting_value]) => ({
+        setting_key,
+        setting_value,
+        updated_at: new Date().toISOString(),
+      }));
+      const { error } = await (supabase as any).from('withdrawal_settings').upsert(rows);
+      if (error) throw error;
+      toast({ title: 'Policy saved', description: 'Withdrawal limits updated.' });
+    } catch (e: any) {
+      toast({ title: 'Save failed', description: e?.message || 'Run Stage 4 SQL migration first.', variant: 'destructive' });
+    }
+    setPolicySaving(false);
+  };
+
+  const policyFields: { key: string; label: string }[] = [
+    { key: 'min_withdrawal_ngn', label: 'Min withdrawal (NGN)' },
+    { key: 'level2_monthly_limit_ngn', label: 'Level 2 monthly limit' },
+    { key: 'level3_monthly_limit_ngn', label: 'Level 3 monthly limit' },
+    { key: 'daily_limit_ngn', label: 'Daily limit (0 = off)' },
+    { key: 'per_transaction_limit_ngn', label: 'Per-transaction limit (0 = off)' },
+    { key: 'fee_percent', label: 'Fee %' },
+    { key: 'fee_flat_ngn', label: 'Flat fee (NGN)' },
+  ];
+
   return (
     <>
+      <Card className="mb-4">
+        <CardHeader>
+          <CardTitle className="text-base">Withdrawal policy</CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          <p className="text-xs text-muted-foreground">
+            Configurable limits. Level 1 cannot withdraw. Defaults: min ₦5,000 · L2 monthly ₦7,000 · L3 monthly ₦250,000.
+          </p>
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+            {policyFields.map((f) => (
+              <div key={f.key}>
+                <label className="text-xs text-muted-foreground">{f.label}</label>
+                <Input
+                  type="number"
+                  className="mt-1"
+                  value={policySettings[f.key] ?? ''}
+                  onChange={(e) =>
+                    setPolicySettings((prev) => ({ ...prev, [f.key]: Number(e.target.value) }))
+                  }
+                />
+              </div>
+            ))}
+          </div>
+          <Button size="sm" onClick={savePolicy} disabled={policySaving}>
+            {policySaving ? 'Saving…' : 'Save policy'}
+          </Button>
+        </CardContent>
+      </Card>
+
       <Card>
         <CardHeader className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
           <CardTitle>Withdrawals ({pendingCount} pending)</CardTitle>
