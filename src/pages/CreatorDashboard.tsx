@@ -14,6 +14,7 @@ import { CreatorMonetizationCard } from '@/components/Profile/CreatorMonetizatio
 import { WithdrawalForm } from '@/components/Profile/WithdrawalForm';
 import { CreatorAnalytics } from '@/components/Profile/CreatorAnalytics';
 import { useToast } from '@/hooks/use-toast';
+import { VerificationPanel, type VerifyInfo } from '@/components/Profile/VerificationPanel';
 
 type RoleTab = 'viewer' | 'creator';
 type HeaderTab = 'overview' | 'details' | 'ads';
@@ -74,6 +75,10 @@ const CreatorDashboard = () => {
 
   const [verifyLevel, setVerifyLevel] = useState(0);
   const [earningStatus, setEarningStatus] = useState<'active' | 'paused' | 'suspended' | 'banned' | 'not_verified'>('not_verified');
+  const [verifyOpen, setVerifyOpen] = useState(false);
+  const [verifyInfo, setVerifyInfo] = useState<VerifyInfo>({
+    level: 0, status: 'NOT_STARTED', earningStatus: 'not_verified', hasAvatar: false, termsAccepted: false,
+  });
 
   const [viewedPosts, setViewedPosts] = useState<{ post: any; times: number; lastAt?: string }[]>([]);
   const [starSpendRows, setStarSpendRows] = useState<any[]>([]);
@@ -143,12 +148,29 @@ const CreatorDashboard = () => {
         );
         const lvl = Number((profile as any).verification_level ?? (profile as any).verify_level ?? 0);
         setVerifyLevel(Number.isFinite(lvl) ? lvl : 0);
+        const vStatus = String((profile as any).verification_status || 'NOT_STARTED').toUpperCase();
         const status = String((profile as any).earning_status || (profile as any).account_status || '').toLowerCase();
         if (status.includes('ban')) setEarningStatus('banned');
         else if (status.includes('suspend')) setEarningStatus('suspended');
         else if (status.includes('pause')) setEarningStatus('paused');
-        else if (lvl >= 2) setEarningStatus('active');
+        else if (lvl >= 2 && vStatus === 'VERIFIED') setEarningStatus('active');
         else setEarningStatus('not_verified');
+        const avatar = (profile as any).avatar_url || '';
+        setVerifyInfo({
+          level: Number.isFinite(lvl) ? lvl : 0,
+          status: vStatus || 'NOT_STARTED',
+          earningStatus: status || 'not_verified',
+          fullName: (profile as any).full_name,
+          dateOfBirth: (profile as any).date_of_birth,
+          addressLine: (profile as any).address_line,
+          city: (profile as any).city,
+          stateRegion: (profile as any).state_region,
+          country: (profile as any).country,
+          phone: (profile as any).phone,
+          avatarUrl: avatar,
+          hasAvatar: !!(avatar && String(avatar).trim()),
+          termsAccepted: !!(profile as any).terms_rewards_accepted_at,
+        });
       }
 
       // ---- post views (current + previous window) ----
@@ -761,7 +783,7 @@ const CreatorDashboard = () => {
         </button>
       </div>
 
-      <div className="rounded-2xl border border-white/10 bg-[#1a1b3a]/90 p-4 space-y-3">
+      <div className="rounded-2xl border border-white/10 bg-[#1a1b3a]/90 p-4 space-y-3 cursor-pointer" onClick={() => setVerifyOpen(true)}>
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
             <Shield className="w-4 h-4 text-violet-300" />
@@ -770,9 +792,9 @@ const CreatorDashboard = () => {
               <p className="text-[11px] text-white/45">Complete steps to unlock higher rewards.</p>
             </div>
           </div>
-          <button type="button" onClick={() => navigate('/settings')}
+          <button type="button" onClick={(e) => { e.stopPropagation(); setVerifyOpen(true); }}
             className="text-[11px] font-semibold px-2.5 py-1 rounded-full bg-violet-600 text-white">
-            Level {Math.min(Math.max(verifyLevel, 0), 3) || 1} of 3 ›
+            Level {Math.min(Math.max(verifyLevel, 0), 3) || (verifyInfo.status === 'NOT_STARTED' ? 0 : 1)} of 3 ›
           </button>
         </div>
         <div className="flex items-center justify-between px-1">
@@ -801,7 +823,7 @@ const CreatorDashboard = () => {
         </div>
       </div>
 
-      <div className="rounded-2xl border border-white/10 bg-[#1a1b3a]/90 p-4 flex items-center justify-between">
+      <div className="rounded-2xl border border-white/10 bg-[#1a1b3a]/90 p-4 flex items-center justify-between cursor-pointer" onClick={() => earningStatus === 'not_verified' && setVerifyOpen(true)}>
         <div className="flex items-center gap-2">
           <Ban className="w-4 h-4 text-red-400" />
           <div>
@@ -918,6 +940,13 @@ const CreatorDashboard = () => {
           </div>
         )}
       </div>
+
+      <VerificationPanel
+        open={verifyOpen}
+        onClose={() => setVerifyOpen(false)}
+        info={verifyInfo}
+        onUpdated={() => { setVerifyOpen(false); loadViewerStats(); }}
+      />
     </div>
   );
 };
