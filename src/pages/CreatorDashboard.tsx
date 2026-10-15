@@ -921,7 +921,7 @@ const CreatorDashboard = () => {
             {user?.id && <CreatorMonetizationCard userId={user.id} />}
             <div className="rounded-2xl border border-white/10 bg-[#1a1b3a]/90 p-4">
               <p className="text-sm font-bold text-white mb-2">Withdrawal</p>
-              {user?.id && <WithdrawalForm userId={user.id} />}
+              {user?.id && <WithdrawalForm userId={user.id} embedded />}
             </div>
             <Button variant="secondary" className="w-full" onClick={() => navigate('/creator-earnings')}>
               Full earnings breakdown
