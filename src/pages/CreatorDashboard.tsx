@@ -143,9 +143,8 @@ const CreatorDashboard = () => {
       if (profile) {
         setAvailable(Number((profile as any).wallet_balance || 0));
         setPendingCashback(Number((profile as any).pending_tip_earnings || 0));
-        setLifetimeRewards(
-          Number((profile as any).total_earned || 0) + Number((profile as any).pending_tip_earnings || 0)
-        );
+        // Same source as Wallet page: total_earned = Available / Lifetime card
+        setLifetimeRewards(Number((profile as any).total_earned || 0));
         const lvl = Number((profile as any).verification_level ?? (profile as any).verify_level ?? 0);
         setVerifyLevel(Number.isFinite(lvl) ? lvl : 0);
         const vStatus = String((profile as any).verification_status || 'NOT_STARTED').toUpperCase();
@@ -173,20 +172,28 @@ const CreatorDashboard = () => {
         });
       }
 
-      // ---- post views (current + previous window) ----
+
+      // ---- post views (post_views.viewed_at) ----
       const fetchViews = async (a: string, b: string) => {
-        const tryTables = ['post_views', 'post_view_events'];
-        for (const table of tryTables) {
-          const res = await (supabase as any)
-            .from(table)
-            .select('post_id, created_at')
-            .eq('user_id', uid)
-            .gte('created_at', a)
-            .lte('created_at', b)
-            .limit(1000);
-          if (!res.error) return (res.data || []) as any[];
-        }
-        return [] as any[];
+        const res = await (supabase as any)
+          .from('post_views')
+          .select('post_id, viewed_at, created_at')
+          .eq('user_id', uid)
+          .gte('viewed_at', a)
+          .lte('viewed_at', b)
+          .limit(1000);
+        if (!res.error) return (res.data || []) as any[];
+        // fallback: created_at column name variants
+        const res2 = await (supabase as any)
+          .from('post_views')
+          .select('post_id, viewed_at, created_at')
+          .eq('user_id', uid)
+          .limit(1000);
+        if (res2.error) return [] as any[];
+        return ((res2.data || []) as any[]).filter((r) => {
+          const t = new Date(r.viewed_at || r.created_at || 0).getTime();
+          return t >= new Date(a).getTime() && t <= new Date(b).getTime();
+        });
       };
 
       const [curViews, prevViews] = await Promise.all([fetchViews(from, to), fetchViews(prevFrom, prevTo)]);
@@ -196,8 +203,8 @@ const CreatorDashboard = () => {
       const timesMap = new Map<string, { times: number; lastAt: string }>();
       curViews.forEach((r: any) => {
         if (!r.post_id) return;
+        const at = r.viewed_at || r.created_at || '';
         const prev = timesMap.get(r.post_id);
-        const at = r.created_at || '';
         if (!prev) timesMap.set(r.post_id, { times: 1, lastAt: at });
         else timesMap.set(r.post_id, { times: prev.times + 1, lastAt: at > prev.lastAt ? at : prev.lastAt });
       });
@@ -218,17 +225,20 @@ const CreatorDashboard = () => {
         setViewedPosts([]);
       }
 
-      // ---- tips / cashback as viewer ----
+      // ---- tips spent + viewer cashback (tip_ledger) ----
       const fetchTips = async (a: string, b: string) => {
         const res = await (supabase as any)
           .from('tip_ledger')
-          .select('id, viewer_ngn, stars, created_at, post_id, source')
+          .select('id, viewer_ngn, stars, created_at, post_id, source, status')
           .eq('from_user_id', uid)
           .gte('created_at', a)
           .lte('created_at', b)
           .order('created_at', { ascending: false })
-          .limit(300);
-        if (res.error) return [] as any[];
+          .limit(500);
+        if (res.error) {
+          console.warn('tip_ledger', res.error.message);
+          return [] as any[];
+        }
         return res.data || [];
       };
       const [curTips, prevTips] = await Promise.all([fetchTips(from, to), fetchTips(prevFrom, prevTo)]);
@@ -243,75 +253,57 @@ const CreatorDashboard = () => {
         if (!k) return;
         seriesMap.set(k, (seriesMap.get(k) || 0) + Number(t.viewer_ngn || 0));
       });
-      const series = [...seriesMap.entries()]
-        .sort((a, b) => a[0].localeCompare(b[0]))
-        .map(([day, amount]) => ({ day, amount }));
-      setTipSeries(series);
+      setTipSeries(
+        [...seriesMap.entries()]
+          .sort((a, b) => a[0].localeCompare(b[0]))
+          .map(([day, amount]) => ({ day, amount }))
+      );
 
       const starsSum = curTips.reduce((s: number, t: any) => s + Number(t.stars || 0), 0);
       const prevStarsSum = prevTips.reduce((s: number, t: any) => s + Number(t.stars || 0), 0);
       setStarsSpent(starsSum);
       setStarsSpentDelta(pctChange(starsSum, prevStarsSum));
 
-      // merge wallet_history star spends if table allows
-      let walletSpends: any[] = [];
-      try {
-        const wh = await (supabase as any)
-          .from('wallet_history')
-          .select('id, type, amount, created_at, meta')
-          .eq('user_id', uid)
-          .gte('created_at', from)
-          .lte('created_at', to)
-          .order('created_at', { ascending: false })
-          .limit(100);
-        if (!wh.error && wh.data) {
-          walletSpends = (wh.data as any[]).filter((r) =>
-            String(r.type || '').toLowerCase().includes('star') ||
-            String(r.meta?.label || '').toLowerCase().includes('star')
-          );
-        }
-      } catch { /* ignore */ }
-
-      const spendRows = [
-        ...curTips.map((t: any) => ({
+      setStarSpendRows(
+        curTips.map((t: any) => ({
           id: `tip-${t.id || t.created_at}`,
           stars: Number(t.stars || 0),
           amount: Number(t.viewer_ngn || 0),
           created_at: t.created_at,
-          label: t.source === 'auto' ? `Auto-spend tip ⭐${t.stars}` : `Tip ⭐${t.stars}`,
+          label: `Tip ⭐${t.stars || 0}${t.status ? ` · ${t.status}` : ''}`,
           kind: 'tip' as const,
-        })),
-        ...walletSpends.map((r: any) => ({
-          id: `wh-${r.id}`,
-          stars: Math.abs(Number(r.amount || 0)),
-          amount: 0,
-          created_at: r.created_at,
-          label: r.meta?.label || r.type || 'Star spend',
-          kind: 'other' as const,
-        })),
-      ].sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
-      setStarSpendRows(spendRows);
+        }))
+      );
 
-      // ---- engagements ----
-      const countRows = async (table: string, col: string, a: string, b: string) => {
-        const res = await (supabase as any)
-          .from(table)
-          .select('id', { count: 'exact', head: true })
-          .eq(col, uid)
-          .gte('created_at', a)
-          .lte('created_at', b);
-        if (res.error) return 0;
-        return res.count || 0;
+      // ---- engagements: likes, comments, follows ----
+      const countInRange = async (table: string, col: string, a: string, b: string) => {
+        try {
+          const res = await (supabase as any)
+            .from(table)
+            .select('id', { count: 'exact', head: true })
+            .eq(col, uid)
+            .gte('created_at', a)
+            .lte('created_at', b);
+          if (res.error) return 0;
+          return res.count || 0;
+        } catch {
+          return 0;
+        }
       };
 
-      const [lc, cc, fc, plc, pcc, pfc] = await Promise.all([
-        countRows('post_likes', 'user_id', from, to),
-        countRows('comments', 'user_id', from, to),
-        countRows('followers', 'follower_id', from, to),
-        countRows('post_likes', 'user_id', prevFrom, prevTo),
-        countRows('comments', 'user_id', prevFrom, prevTo),
-        countRows('followers', 'follower_id', prevFrom, prevTo),
-      ]);
+      // post_likes / likes tables; comments / post_comments
+      let lc = await countInRange('post_likes', 'user_id', from, to);
+      if (lc === 0) lc = await countInRange('likes', 'user_id', from, to);
+      let cc = await countInRange('comments', 'user_id', from, to);
+      if (cc === 0) cc = await countInRange('post_comments', 'user_id', from, to);
+      const fc = await countInRange('followers', 'follower_id', from, to);
+
+      let plc = await countInRange('post_likes', 'user_id', prevFrom, prevTo);
+      if (plc === 0) plc = await countInRange('likes', 'user_id', prevFrom, prevTo);
+      let pcc = await countInRange('comments', 'user_id', prevFrom, prevTo);
+      if (pcc === 0) pcc = await countInRange('post_comments', 'user_id', prevFrom, prevTo);
+      const pfc = await countInRange('followers', 'follower_id', prevFrom, prevTo);
+
       setLikeCount(lc);
       setCommentCount(cc);
       setFollowCount(fc);
@@ -356,11 +348,44 @@ const CreatorDashboard = () => {
     }
   }, [user?.id]);
 
+
   useEffect(() => {
     if (!user?.id) return;
     if (roleTab === 'viewer') loadViewerStats();
     else loadCreatorStats();
   }, [user?.id, roleTab, period, customFrom, customTo, loadViewerStats, loadCreatorStats]);
+
+  // Keep Reward Wallet in sync with Wallet page (same user_profiles columns)
+  useEffect(() => {
+    if (!user?.id) return;
+    const channel = supabase
+      .channel(`wallet-dashboard-sync-${user.id}`)
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'user_profiles', filter: `id=eq.${user.id}` },
+        (payload: any) => {
+          const row = payload.new;
+          if (!row) return;
+          setAvailable(Number(row.wallet_balance || 0));
+          setPendingCashback(Number(row.pending_tip_earnings || 0));
+          setLifetimeRewards(Number(row.total_earned || 0));
+          const lvl = Number(row.verification_level ?? 0);
+          setVerifyLevel(Number.isFinite(lvl) ? lvl : 0);
+        }
+      )
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'tip_ledger', filter: `from_user_id=eq.${user.id}` },
+        () => { if (roleTab === 'viewer') loadViewerStats(); }
+      )
+      .on(
+        'postgres_changes',
+        { event: 'INSERT', schema: 'public', table: 'post_views', filter: `user_id=eq.${user.id}` },
+        () => { if (roleTab === 'viewer') loadViewerStats(); }
+      )
+      .subscribe();
+    return () => { supabase.removeChannel(channel); };
+  }, [user?.id, roleTab, loadViewerStats]);
 
   const openDetail = (pane: DetailPane) => {
     setDetailPane(pane);
