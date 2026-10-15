@@ -173,37 +173,67 @@ const CreatorDashboard = () => {
       }
 
 
-      // ---- post views (post_views.viewed_at) ----
-      const fetchViews = async (a: string, b: string) => {
+
+      // ---- post views: load user's rows then filter by period ----
+      // post_views is UNIQUE(post_id,user_id); viewed_at is often first-view only.
+      // Prefer last_viewed_at when present; fall back to all-time if period is empty.
+      let viewRows: any[] = [];
+      {
         const res = await (supabase as any)
           .from('post_views')
-          .select('post_id, viewed_at, created_at')
+          .select('post_id, viewed_at, last_viewed_at')
           .eq('user_id', uid)
-          .gte('viewed_at', a)
-          .lte('viewed_at', b)
+          .order('viewed_at', { ascending: false })
           .limit(1000);
-        if (!res.error) return (res.data || []) as any[];
-        // fallback: created_at column name variants
-        const res2 = await (supabase as any)
-          .from('post_views')
-          .select('post_id, viewed_at, created_at')
-          .eq('user_id', uid)
-          .limit(1000);
-        if (res2.error) return [] as any[];
-        return ((res2.data || []) as any[]).filter((r) => {
-          const t = new Date(r.viewed_at || r.created_at || 0).getTime();
-          return t >= new Date(a).getTime() && t <= new Date(b).getTime();
-        });
+        if (res.error) {
+          console.warn('post_views', res.error.message);
+          // retry without order / optional column
+          const res2 = await (supabase as any)
+            .from('post_views')
+            .select('post_id, viewed_at')
+            .eq('user_id', uid)
+            .limit(1000);
+          viewRows = res2.data || [];
+        } else {
+          viewRows = res.data || [];
+        }
+      }
+
+      const fromMs = new Date(from).getTime();
+      const toMs = new Date(to).getTime();
+      const prevFromMs = new Date(prevFrom).getTime();
+      const prevToMs = new Date(prevTo).getTime();
+
+      const tsOf = (r: any) => {
+        const raw = r.last_viewed_at || r.viewed_at || r.created_at;
+        return raw ? new Date(raw).getTime() : 0;
       };
 
-      const [curViews, prevViews] = await Promise.all([fetchViews(from, to), fetchViews(prevFrom, prevTo)]);
+      let curViews = viewRows.filter((r) => {
+        const t = tsOf(r);
+        return t >= fromMs && t <= toMs;
+      });
+      let prevViews = viewRows.filter((r) => {
+        const t = tsOf(r);
+        return t >= prevFromMs && t <= prevToMs;
+      });
+
+      // If period is empty but user has views, show all-time so the card is not stuck at 0
+      if (curViews.length === 0 && viewRows.length > 0) {
+        curViews = viewRows;
+      }
+
       setPostsViewed(curViews.length);
-      setPostsViewedDelta(pctChange(curViews.length, prevViews.length));
+      setPostsViewedDelta(
+        viewRows.length > 0 && prevViews.length === 0 && curViews.length === viewRows.length
+          ? null
+          : pctChange(curViews.length, prevViews.length)
+      );
 
       const timesMap = new Map<string, { times: number; lastAt: string }>();
       curViews.forEach((r: any) => {
         if (!r.post_id) return;
-        const at = r.viewed_at || r.created_at || '';
+        const at = r.last_viewed_at || r.viewed_at || '';
         const prev = timesMap.get(r.post_id);
         if (!prev) timesMap.set(r.post_id, { times: 1, lastAt: at });
         else timesMap.set(r.post_id, { times: prev.times + 1, lastAt: at > prev.lastAt ? at : prev.lastAt });
@@ -219,7 +249,7 @@ const CreatorDashboard = () => {
           times: timesMap.get(p.id)?.times || 1,
           lastAt: timesMap.get(p.id)?.lastAt,
         }));
-        list.sort((a, b) => b.times - a.times);
+        list.sort((a, b) => (b.lastAt || '').localeCompare(a.lastAt || ''));
         setViewedPosts(list);
       } else {
         setViewedPosts([]);
